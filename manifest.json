@@ -2963,76 +2963,166 @@
   },
   "files": {
     "data-sample/demo.rds": {
-      "checksum": "62426429eac5b0664575cdb84f2cf7cd"
+      "checksum": "445910fc1fe68f5352fa5cf1215998d2"
     },
     "data/site_index.rds": {
-      "checksum": "548a3886c3803bf2ccfc42c8456873ba"
+      "checksum": "ae58fb2f6b6e3ae320e1aa76a3ce8012"
+    },
+    "data/sites/ABBY.rds": {
+      "checksum": "e66b1704c121a0adefaad60fc75b29ec"
     },
     "data/sites/BART.rds": {
-      "checksum": "adf3326462dd4c30ad7db06e3531ea58"
+      "checksum": "03d3d34fe63c82b4099aa7d1914f6bbc"
+    },
+    "data/sites/BLAN.rds": {
+      "checksum": "7de187372d26f3337136bae307396189"
+    },
+    "data/sites/BONA.rds": {
+      "checksum": "405cbfd237da58513f0482bc72373d92"
+    },
+    "data/sites/CLBJ.rds": {
+      "checksum": "f7f746d67966e1e6d5bc7af91d71e302"
+    },
+    "data/sites/CPER.rds": {
+      "checksum": "7b25b37e0bc56f1ed72d6004d6d9a2f1"
+    },
+    "data/sites/DCFS.rds": {
+      "checksum": "f6bb95074e73331effde5f52ddee4587"
+    },
+    "data/sites/DEJU.rds": {
+      "checksum": "ed0e408b6cc7d7bbbe847ceebf522e69"
     },
     "data/sites/DELA.rds": {
-      "checksum": "84ea1bc12beeb77fc4c49a4df03d1e3c"
+      "checksum": "de393349a22145aa62b388fd4f9793f5"
+    },
+    "data/sites/DSNY.rds": {
+      "checksum": "a0505afe6f444d10a08122ada3cb5f96"
     },
     "data/sites/GRSM.rds": {
-      "checksum": "9c85b1b5eecb38dc473215c355c7c9b4"
+      "checksum": "8cd873bc8cc5abd8eb9be08c9966275b"
+    },
+    "data/sites/GUAN.rds": {
+      "checksum": "56ce4180a7c8005c74c6e70c95603b87"
     },
     "data/sites/HARV.rds": {
-      "checksum": "62426429eac5b0664575cdb84f2cf7cd"
+      "checksum": "445910fc1fe68f5352fa5cf1215998d2"
+    },
+    "data/sites/HEAL.rds": {
+      "checksum": "4ca2b2b5fcd1e3de5eab805c666ad891"
     },
     "data/sites/JERC.rds": {
-      "checksum": "6f0192b304fe954fa73fe585d0b73b2c"
+      "checksum": "305bc2e4caf559b86e5a0e22d5cbb381"
+    },
+    "data/sites/JORN.rds": {
+      "checksum": "8540d257b6856c822ef8c5d9c1c5c0d8"
+    },
+    "data/sites/KONZ.rds": {
+      "checksum": "07ae4b4b694b7c07f8c355a951c852a3"
+    },
+    "data/sites/LAJA.rds": {
+      "checksum": "b0b9405abcb3537b194c2381b03a9b5b"
+    },
+    "data/sites/LENO.rds": {
+      "checksum": "9fc46dfec1f8baba484d4c0095c7230d"
+    },
+    "data/sites/MLBS.rds": {
+      "checksum": "0c7353d0e086abdd2dbf58771da8c4f5"
+    },
+    "data/sites/MOAB.rds": {
+      "checksum": "43b883793a076f7211c0e963fb5bd21c"
+    },
+    "data/sites/NIWO.rds": {
+      "checksum": "d1106a7bd8f7203c0bc9eaa2e6f8692d"
+    },
+    "data/sites/NOGP.rds": {
+      "checksum": "9c83573b22b66e110f56c880b902a243"
+    },
+    "data/sites/ONAQ.rds": {
+      "checksum": "380cb4a94a010dc2b15806d1cf34c3e5"
     },
     "data/sites/ORNL.rds": {
-      "checksum": "28e85a963fb9ce7b22eb014900cc59ea"
+      "checksum": "930c291ec926de6eceeb31d15bbf2a57"
     },
     "data/sites/OSBS.rds": {
-      "checksum": "e21c908576733689db7b167f498ca60c"
+      "checksum": "ae36befeaeafb322cb62160e8e1192f9"
+    },
+    "data/sites/PUUM.rds": {
+      "checksum": "d6633f794c52f2366ec8177cd6a2ef12"
     },
     "data/sites/RMNP.rds": {
-      "checksum": "6931d0bec19b7729270eb619e6ec2769"
+      "checksum": "5d716f75e029159322397198c0a6dc83"
     },
     "data/sites/SCBI.rds": {
-      "checksum": "5af674e3096a717af0eacd4500da12c6"
+      "checksum": "7ad4d7f9aecfc042928317aac5f9ac75"
+    },
+    "data/sites/SERC.rds": {
+      "checksum": "aa321288d42a55cb1aa325a101650787"
     },
     "data/sites/SJER.rds": {
-      "checksum": "a56d0c68c15bf292586d3c047d60d0eb"
+      "checksum": "e7aab41f5208ed18327a12b0090d9f4b"
+    },
+    "data/sites/SOAP.rds": {
+      "checksum": "65ead7ca6e0c619fca86c0572cf78356"
+    },
+    "data/sites/SRER.rds": {
+      "checksum": "afae9b08f4820253af13d7b37f4d6b39"
+    },
+    "data/sites/STEI.rds": {
+      "checksum": "0ef5ca76a66410bd99de6b0d1795eeeb"
     },
     "data/sites/TALL.rds": {
-      "checksum": "33ebe63759a768c9b939c4b6f79d3105"
+      "checksum": "67c0adaaedf987034cb2c7f4f1085487"
+    },
+    "data/sites/TEAK.rds": {
+      "checksum": "e40fb8ef1b5ff36c2cb9fa7e0b1b9239"
+    },
+    "data/sites/TREE.rds": {
+      "checksum": "c53c18697e0ed792416ff0c6a2cd58a8"
+    },
+    "data/sites/UKFS.rds": {
+      "checksum": "b2a277c54080bed9226d4525a1019a5c"
+    },
+    "data/sites/UNDE.rds": {
+      "checksum": "231d37d23e2459a2fa675c6b24ddefec"
+    },
+    "data/sites/WOOD.rds": {
+      "checksum": "e8e4e3937a5c428aa07d78e7440f4451"
     },
     "data/sites/WREF.rds": {
-      "checksum": "933d6b49179165292ca6595148a76432"
+      "checksum": "dc20e0eb6442dceb67a9238c9cdd9940"
+    },
+    "data/sites/YELL.rds": {
+      "checksum": "eea1136eed8fec9e099cbb2ff99a2a63"
     },
     "global.R": {
-      "checksum": "aa47a64c1e474aa02faa89f435743d02"
+      "checksum": "809561ad809bb1c5f80832c5f25eb475"
     },
     "R/report_pdf.R": {
-      "checksum": "e7c8146af8b6ae0eed256545c01c46e3"
+      "checksum": "b1f09dbf96e41378ff5f6cab5d7afd04"
     },
     "R/site_metadata.R": {
-      "checksum": "004d5207ae02073846fa210d1698c1bf"
+      "checksum": "49fa6c5ad1dbb17263224c0a790ea29a"
     },
     "R/veg_helpers.R": {
-      "checksum": "f33a12091cf207f7a2c3faa0118efa08"
+      "checksum": "4f97358a486e2c48a6ddef0ceaab8b11"
     },
     "server.R": {
-      "checksum": "d4fcb121aea5099e1a88a2873129501d"
+      "checksum": "7589d97d53a104277fcd1eac42c06faf"
     },
     "ui.R": {
-      "checksum": "f97d90104da0d3cf2c7a8f10a817044a"
+      "checksum": "9d0bb8ec1d5b3aa1c5bf8d9d7c241eb2"
     },
     "www/app.js": {
-      "checksum": "78a170d052d319c18b7c1720435dd1c8"
+      "checksum": "6b78301a3a7817ae1cea62fd518022b2"
     },
     "www/pincards.js": {
-      "checksum": "d5d53089633801dc79e2807692ab408c"
+      "checksum": "30579e49ab0eafebcd5c6802509be260"
     },
     "www/styles.css": {
-      "checksum": "5f69ce7be40498ccbdab649e55927951"
+      "checksum": "156afad9fb2a7475d1d8748de69e94f5"
     },
     "www/veg.css": {
-      "checksum": "fe7df032a5a125fd72a2e52a784b30fd"
+      "checksum": "8935401ad038a5259b555da7465d309a"
     }
   },
   "users": null

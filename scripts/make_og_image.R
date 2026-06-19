@@ -1,18 +1,18 @@
 #----------------------------------------------------------------------
 # make_og_image.R — draws docs/og-image.png (1200x630), the social card for
-# the landing page. Self-contained base-R graphics in the "Old-Growth Canopy"
-# house palette (warm forest-floor paper + canopy green + bark + sunlit amber),
-# with a canopy band and a faint stand of trees — deliberately distinct from the
-# navy mammal card and the parchment bird card. Regenerate:
+# the landing page. Self-contained base-R graphics in the CROSS-BIOME house
+# palette (sand paper + teal-pine + desert ochre + amber), with a horizon band
+# and both a forest stand AND desert shrubs — signalling the all-biome coverage.
+# Regenerate:
 #   "C:\Program Files\R\R-4.5.2\bin\Rscript.exe" scripts/make_og_image.R
 #----------------------------------------------------------------------
 ROOT <- getwd()
 out  <- file.path(ROOT, "docs", "og-image.png")
 dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
 
-parch <- "#f3f1e9"; paper <- "#fffdf8"; ink <- "#20281f"; ink2 <- "#5f6f63"
-pine  <- "#1f6b3a"; bark <- "#7a5230"; gold <- "#E6A700"
-canopy <- grDevices::colorRampPalette(c("#bfe0c2", "#7fc090", "#3f9f5a", "#1f6b3a", "#14532a"))(1200)
+parch <- "#f1efe6"; paper <- "#fdfcf7"; ink <- "#1d2a24"; ink2 <- "#5c6b62"
+pine  <- "#1f6a63"; bark <- "#8a5a2b"; gold <- "#E0A500"
+canopy <- grDevices::colorRampPalette(c("#cfe6e2", "#7fc0b6", "#3f9a90", "#1f6a63", "#164d48"))(1200)
 
 png(out, width = 1200, height = 630, res = 144)
 op <- par(mar = c(0, 0, 0, 0), bg = parch); on.exit({ par(op); dev.off() })
@@ -33,13 +33,19 @@ tree <- function(x, y, s, col) {
   polygon(x + c(-s * 0.5, 0, s * 0.5), y + c(s * 0.5, s * 1.5, s * 0.5),     # canopy
           col = col, border = NA)
 }
+# a faint low desert shrub (rounded mound) for texture
+shrub <- function(x, y, s, col) {
+  for (a in seq(0, pi, length.out = 7)) segments(x, y, x + cos(a) * s, y + sin(a) * s * 0.7, col = col, lwd = max(1.2, s / 7))
+}
 set.seed(7)
-for (k in 1:13) tree(runif(1, 90, 1120), runif(1, 90, 455), runif(1, 14, 30),
+for (k in 1:9)  tree(runif(1, 90, 760),  runif(1, 110, 455), runif(1, 14, 30),
                      grDevices::adjustcolor(pine, runif(1, .05, .11)))
+for (k in 1:7)  shrub(runif(1, 770, 1130), runif(1, 100, 430), runif(1, 12, 22),
+                      grDevices::adjustcolor(bark, runif(1, .06, .12)))
 
 # badge
 text(70, 556, "NEON · VEGETATION STRUCTURE · DP1.10098.001",
-     col = "#2c5a3a", cex = .9, font = 2, adj = 0)
+     col = "#1f4a45", cex = .9, font = 2, adj = 0)
 
 # title
 text(68, 470, "NEON Vegetation",   col = ink, cex = 3.5, font = 2, adj = 0)
@@ -48,13 +54,13 @@ text(68, 394, "Structure Explorer", col = ink, cex = 3.5, font = 2, adj = 0)
 tree(640, 404, 30, gold)
 
 # subtitle
-text(70, 322, "Every tagged tree's diameter and height, the stand's size structure, and",
+text(70, 322, "Every tagged tree and desert shrub's diameter and height, the stand's size",
      col = ink2, cex = 1.12, adj = 0)
-text(70, 292, "how individual trees grow over the years — on real NEON woody-survey data.",
+text(70, 292, "structure, and how plants grow over the years — 42 NEON sites, every biome.",
      col = ink2, cex = 1.12, adj = 0)
 
 # stat chips
-chips <- list(c("trees", "tagged & mapped"), c("DBH × ht", "every tree"),
+chips <- list(c("42 sites", "every biome"), c("DBH + ø", "trees & shrubs"),
               c("growth", "careers"), c("instant", "no API waits"))
 x0 <- 70; gap <- 14; w <- 250; h <- 96; y1 <- 64
 for (i in seq_along(chips)) {

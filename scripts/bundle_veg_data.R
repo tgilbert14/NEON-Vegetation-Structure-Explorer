@@ -39,6 +39,11 @@ build_site <- function(site) {
   a <- tibble::as_tibble(r$vst_apparentindividual)
   pp <- tibble::as_tibble(r$vst_perplotperyear)
   num <- function(x) suppressWarnings(as.numeric(x))
+  # ensure optional columns exist so transmute never errors on a site that lacks one
+  for (cc in c("maxCrownDiameter", "basalStemDiameter", "measurementHeight"))
+    if (!cc %in% names(a)) a[[cc]] <- NA
+  for (cc in c("totalSampledAreaTrees", "totalSampledAreaShrubSapling"))
+    if (!cc %in% names(pp)) pp[[cc]] <- NA
 
   ident <- m %>% dplyr::distinct(.data$individualID, .keep_all = TRUE) %>%
     dplyr::transmute(individualID, scientificName, genus, family, taxonRank)
@@ -50,7 +55,7 @@ build_site <- function(site) {
       growthForm, plantStatus,
       live = grepl("^Live", plantStatus),
       stemDiameter = num(stemDiameter), basalStemDiameter = num(basalStemDiameter),
-      height = num(height), canopyPosition,
+      height = num(height), maxCrownDiameter = num(maxCrownDiameter), canopyPosition,
       measurementHeight = num(measurementHeight),
       changedMeasurementLocation = changedMeasurementLocation,
       permanent = grepl("^NEON", individualID)) %>%   # TEMP.PLA ids aren't stable across years
@@ -62,14 +67,29 @@ build_site <- function(site) {
     dplyr::transmute(plotID, year = as.integer(substr(as.character(date), 1, 4)),
                      plotType, nlcdClass,
                      lat = num(decimalLatitude), lng = num(decimalLongitude),
-                     area_trees = num(totalSampledAreaTrees)) %>%
+                     area_trees = num(totalSampledAreaTrees),
+                     area_shrub = num(totalSampledAreaShrubSapling)) %>%
     dplyr::filter(!is.na(.data$year)) %>%
     dplyr::group_by(.data$plotID) %>%
     dplyr::summarise(plotType = mode_chr(.data$plotType), nlcdClass = mode_chr(.data$nlcdClass),
                      lat = stats::median(.data$lat, na.rm = TRUE), lng = stats::median(.data$lng, na.rm = TRUE),
-                     area_trees = stats::median(.data$area_trees, na.rm = TRUE), .groups = "drop")
+                     area_trees = stats::median(.data$area_trees, na.rm = TRUE),
+                     area_shrub = stats::median(.data$area_shrub, na.rm = TRUE), .groups = "drop")
 
-  meta <- list(site = site,
+  # classify the site by BASAL AREA — which growth form occupies more cross-sectional
+  # area (so a forest with a dense shrub understory stays a forest). Trees use DBH
+  # (>=10 cm), shrubs use basal stem diameter. Drives the app's adaptive paradigm.
+  TREE_F  <- c("single bole tree", "multi-bole tree", "small tree")
+  snap0 <- trees %>% dplyr::group_by(.data$individualID) %>%
+    dplyr::filter(.data$date == max(.data$date, na.rm = TRUE)) %>% dplyr::ungroup()
+  lv <- snap0[snap0$live %in% TRUE & !is.na(snap0$growthForm), ]
+  is_tree  <- lv$growthForm %in% TREE_F & is.finite(lv$stemDiameter) & lv$stemDiameter >= 10
+  is_shrub <- lv$growthForm %in% c("single shrub", "small shrub") & is.finite(lv$basalStemDiameter) & lv$basalStemDiameter > 0
+  tree_ba  <- sum(pi * (lv$stemDiameter[is_tree] / 200)^2, na.rm = TRUE)
+  shrub_ba <- sum(pi * (lv$basalStemDiameter[is_shrub] / 200)^2, na.rm = TRUE)
+  stype <- if (tree_ba == 0 && shrub_ba == 0) "forest" else if (tree_ba >= shrub_ba) "forest" else "shrubland"
+
+  meta <- list(site = site, structure_type = stype,
                lat = stats::median(plots$lat, na.rm = TRUE), lng = stats::median(plots$lng, na.rm = TRUE),
                years = sort(unique(trees$year)))
   list(trees = trees, plots = plots, meta = meta)

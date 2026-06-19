@@ -39,8 +39,12 @@ SITE_INDEX <- tryCatch(readRDS("data/site_index.rds"), error = function(e) NULL)
 BUNDLED <- if (!is.null(SITE_INDEX)) SITE_INDEX$site else character(0)
 site_table <- if (length(BUNDLED)) {
   m <- neon_sites[match(BUNDLED, neon_sites$site), ]
-  cbind(m, SITE_INDEX[match(m$site, SITE_INDEX$site),
-                      c("n_trees", "n_species", "tallest_m", "biggest_dbh_cm")])
+  idx_cols <- intersect(c("structure_type", "size_metric", "n_trees", "n_species",
+                          "tallest_m", "biggest_dbh_cm"), names(SITE_INDEX))
+  out <- cbind(m, SITE_INDEX[match(m$site, SITE_INDEX$site), idx_cols])
+  if (!"structure_type" %in% names(out)) out$structure_type <- "forest"
+  if (!"size_metric" %in% names(out)) out$size_metric <- "DBH"
+  out
 } else neon_sites[0, ]
 
 veg_state_choices <- function() {
@@ -53,22 +57,21 @@ veg_sites_in_state <- function(stt) {
   setNames(rows$site, sprintf("%s — %s", rows$site, rows$name))
 }
 
-# ---- theme: "Old-Growth Canopy" forest identity ---------------------------
-# This app's OWN palette (deliberately NOT the shared navy/cardinal/gold house
-# triad of the mammal/plant siblings): canopy-green primary, bark-brown accent,
-# sunlit-canopy amber highlight, on warm forest-floor paper. Color maps to the
-# data — green=canopy, bark=trunk/diameter, amber=height/sunlight, rust=dead wood.
-# Keys 'navy'/'cardinal' are KEPT for low churn but now hold forest values
-# (a follow-up commit can rename navy->canopy, cardinal->bark across server.R).
+# ---- theme: cross-biome identity ------------------------------------------
+# "Sun-warmed earth meets high-country water" — a biome-neutral palette so the
+# app reads as forest AND desert AND tundra AND tropical, not forest-only:
+# a deep teal-pine primary (forest + alpine water), desert-ochre accent, amber
+# highlight, on a sun-bleached sand canvas. No single biome owns the identity.
+# Key names 'navy'/'cardinal' are KEPT for low churn but hold cross-biome values.
 DDL <- list(
-  navy = "#1f6b3a", navy2 = "#14532a", cardinal = "#7a5230", gold = "#E6A700",
-  gold2 = "#9a6b12", sky = "#3f7d8c", green = "#1f6b3a", green2 = "#0f3d20",
-  bark = "#7a5230", ink = "#20281f", muted = "#5f6f63", bg = "#f3f1e9",
-  paper = "#fffdf8", line = "#e0ddd0",
-  live = "#1f6b3a", dead = "#9a5a3a", rust = "#b5471f")   # rust = reserved true-error red
+  navy = "#1f6a63", navy2 = "#164d48", cardinal = "#8a5a2b", gold = "#E0A500",
+  gold2 = "#8a6310", sky = "#356f80", green = "#2f7d46", green2 = "#1c4d2c",
+  bark = "#8a5a2b", ink = "#1d2a24", muted = "#5c6b62", bg = "#f1efe6",
+  paper = "#fdfcf7", line = "#e1ddcf",
+  live = "#2f7d46", dead = "#9a5a3a", rust = "#b5471f")   # rust = reserved true-error red
 
 app_theme <- bs_theme(
-  version = 5, bg = "#fffdf8", fg = DDL$ink,
+  version = 5, bg = "#fdfcf7", fg = DDL$ink,
   primary = DDL$navy, secondary = DDL$bark,
   success = DDL$green, info = DDL$sky, warning = DDL$gold, danger = DDL$rust,
   base_font = font_google("Rubik"), heading_font = font_google("Rubik"), "border-radius" = "10px")

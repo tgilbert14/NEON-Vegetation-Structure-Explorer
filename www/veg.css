@@ -35,6 +35,9 @@
   border-radius: 12px; padding: 14px 16px; text-decoration: none; color: inherit; box-shadow: 0 4px 14px var(--shadow);
   border-left: 4px solid var(--green); transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
 .site-card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px var(--shadow); border-color: var(--pine); }
+/* shrubland (desert/grassland) sites get an ochre spine so the two biomes read apart at a glance */
+.site-card-shrub { border-left-color: var(--terra); }
+.site-card-shrub:hover { border-color: var(--terra); }
 .sc-emoji { font-size: 30px; }
 .sc-name { font-weight: 600; color: var(--ink); }
 .sc-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
@@ -77,10 +80,13 @@
   display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 20px;
   padding: 5px 14px; cursor: pointer; font-size: 13px; background: var(--paper); color: var(--ink);
   transition: .15s; }
-.leader-cats .form-check-label:hover { background: #eef4ea; color: var(--pine); }
+.leader-cats .form-check-label:hover { background: #eef2ec; color: var(--pine); }
 .leader-cats .form-check-input:checked + .form-check-label,
 .leader-cats .radio-inline:has(input:checked) > span {
   background: var(--pine); border-color: var(--pine); color: #fff; font-weight: 700; }
+[data-bs-theme="dark"] .leader-cats .form-check-input:checked + .form-check-label,
+[data-bs-theme="dark"] .leader-cats .radio-inline:has(input:checked) > span { color: #10211f; }
+[data-bs-theme="dark"] .leader-cats .form-check-label:hover { background: #1f302d; }
 
 /* hero count-up uses the shared .count-up engine from app.js */
 [data-bs-theme="dark"] .hero-stat,

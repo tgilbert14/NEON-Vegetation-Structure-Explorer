@@ -22,13 +22,13 @@
   var NS = "http://www.w3.org/2000/svg";
 
   function boxOf(node) { return node ? node.closest(".smt-pinnable") : null; }
-  var LEADER = "#E6A700";   // canopy-amber leader line + anchor dot (forest theme)
-  var ANCHOR_STROKE = "#163b23";
+  var LEADER = "#E0A500";   // amber leader line + anchor dot (cross-biome theme)
+  var ANCHOR_STROKE = "#143b37";
   function isDark() {
     return document.documentElement.getAttribute("data-bs-theme") === "dark" ||
            document.body.getAttribute("data-bs-theme") === "dark";
   }
-  function bgColor() { return isDark() ? "#19241a" : "#fffdf8"; }
+  function bgColor() { return isDark() ? "#161c1a" : "#fdfcf7"; }
 
   /* map a data point (dx, dy) to box-relative pixels via plotly's live axes, so
      a pin's leader line follows the dot through any resize/relayout. */

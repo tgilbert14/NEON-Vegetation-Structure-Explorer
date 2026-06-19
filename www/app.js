@@ -52,8 +52,8 @@ document.addEventListener("DOMContentLoaded", function () {
 // ---- confetti on standout trees (biggest / tallest / record grower) ------
 function forestConfetti(big) {
   if (typeof confetti !== "function") return;
-  // Old-Growth Canopy palette: canopy green, bark brown, sunlit amber, moss, leaf.
-  const colors = ["#1f6b3a", "#7a5230", "#E6A700", "#9a6b12", "#3f9f5a"];
+  // Cross-biome palette: teal-pine, desert ochre, amber, tundra slate, leaf green.
+  const colors = ["#1f6a63", "#8a5a2b", "#E0A500", "#356f80", "#5aa46a"];
   const burst = (opts) => confetti(Object.assign({ colors, disableForReducedMotion: true }, opts));
   burst({ particleCount: big ? 140 : 70, spread: big ? 100 : 70, origin: { y: 0.3 }, startVelocity: 42 });
   if (big) {

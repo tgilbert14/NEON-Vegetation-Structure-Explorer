@@ -6,11 +6,13 @@
 # it can never break the downloadHandler.
 # ===========================================================================
 
-build_stand_report <- function(file, snap, trees, plots, one, label = "site") {
-  P <- list(pine = "#1f6b3a", pine2 = "#14532a", bark = "#7a5230", gold = "#E6A700",
-            goldink = "#9a6b12", ink = "#20281f", muted = "#5f6f63", paper = "#fffdf8",
-            line = "#e0ddd0", dead = "#9a5a3a")
+build_stand_report <- function(file, snap, trees, plots, one, label = "site", spec = SIZE_FOREST) {
+  P <- list(pine = "#1f6a63", pine2 = "#164d48", bark = "#8a5a2b", gold = "#E0A500",
+            goldink = "#8a6310", ink = "#1d2a24", muted = "#5c6b62", paper = "#fdfcf7",
+            line = "#e1ddcf", dead = "#9a5a3a")
   ok <- function(expr) tryCatch(expr, error = function(e) NULL)
+  shrub <- identical(spec$type, "shrubland")
+  SL <- spec$size_lab
 
   grDevices::cairo_pdf(file, width = 8.5, height = 11, bg = P$paper)
   on.exit(grDevices::dev.off(), add = TRUE)
@@ -27,10 +29,10 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site") {
   graphics::text(97, 93.6, format(Sys.Date(), "%Y-%m-%d  ·  DP1.10098.001"),
                  col = "#dfeee4", cex = 0.7, adj = 1)
 
-  st <- ok(stand_site(snap, plots))
-  ss <- ok(species_structure(snap, plots))
-  sc <- ok(size_class(snap))
-  g  <- ok(tree_growth(trees))
+  st <- ok(stand_site(snap, plots, spec))
+  ss <- ok(species_structure(snap, plots, spec))
+  sc <- ok(size_class(snap, NULL, spec))
+  g  <- ok(tree_growth(trees, spec))
 
   # ---- stand summary strip ----------------------------------------------
   yb <- 84
@@ -67,7 +69,7 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site") {
   } else graphics::text(50, 67, "—", col = P$muted)
 
   # ---- section: diameter size-class distribution (reverse-J) -------------
-  graphics::text(3, 52, "Diameter size-class distribution (live trees ≥ 10 cm DBH)", col = P$pine2, cex = 1.0, font = 2, adj = 0)
+  graphics::text(3, 52, if (shrub) "Basal-diameter size-class distribution (live shrubs)" else "Diameter size-class distribution (live trees ≥ 10 cm DBH)", col = P$pine2, cex = 1.0, font = 2, adj = 0)
   if (!is.null(sc) && nrow(sc)) {
     x0 <- 8; x1 <- 92; ybot <- 30; ytop <- 49
     mx <- max(sc$stems, na.rm = TRUE); n <- nrow(sc)
@@ -79,23 +81,23 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site") {
       graphics::text(x0 + (i - 0.5) * bw, ybot - 1.6, as.character(sc$cls[i]), col = P$muted, cex = 0.55)
       graphics::text(x0 + (i - 0.5) * bw, ybot + h + 1.2, sc$stems[i], col = P$ink, cex = 0.55)
     }
-    graphics::text(3, ytop + 1.5, "cm DBH class", col = P$muted, cex = 0.55, adj = 0)
+    graphics::text(3, ytop + 1.5, paste0("cm ", SL, " class"), col = P$muted, cex = 0.55, adj = 0)
   } else graphics::text(50, 40, "—", col = P$muted)
 
-  # ---- section: champion trees -------------------------------------------
-  graphics::text(3, 26, "Champion trees", col = P$pine2, cex = 1.0, font = 2, adj = 0)
+  # ---- section: champion plants ------------------------------------------
+  graphics::text(3, 26, if (shrub) "Champion shrubs" else "Champion trees", col = P$pine2, cex = 1.0, font = 2, adj = 0)
   champs <- ok({
-    o <- one[is.finite(one$stemDiameter), ]
-    o <- trees_only(o); o[order(-o$stemDiameter), ][seq_len(min(5, nrow(o))), ]
+    o <- one[is.finite(one[[spec$col]]), ]
+    o <- woody_only(o, spec); o[order(-o[[spec$col]]), ][seq_len(min(5, nrow(o))), ]
   })
   yL <- 23
   if (!is.null(champs) && nrow(champs)) {
-    graphics::text(3, yL, "Biggest by DBH:", col = P$bark, cex = 0.7, font = 2, adj = 0)
+    graphics::text(3, yL, paste0("Biggest by ", SL, ":"), col = P$bark, cex = 0.7, font = 2, adj = 0)
     for (i in seq_len(nrow(champs))) {
       graphics::text(3, yL - 1.8 * i,
-        sprintf("%d.  %s  ·  %s  ·  %.1f cm DBH%s", i, short_tree(champs$individualID[i]),
+        sprintf("%d.  %s  ·  %s  ·  %.1f cm %s%s", i, short_tree(champs$individualID[i]),
                 ifelse(is.na(champs$scientificName[i]), "—", champs$scientificName[i]),
-                champs$stemDiameter[i],
+                champs[[spec$col]][i], SL,
                 if (is.finite(champs$height[i])) sprintf("  ·  %.1f m", champs$height[i]) else ""),
         col = P$ink, cex = 0.62, adj = 0)
     }

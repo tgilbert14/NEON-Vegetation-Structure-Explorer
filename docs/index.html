@@ -6,21 +6,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NEON Vegetation Structure Explorer</title>
   <meta name="description"
-    content="Explore real NEON woody-vegetation survey data — every tagged tree's diameter and height, the stand's size-class structure and basal area, how individual trees grow over the years, and a tap-to-pin Forest Size Lab. Honest statistics, instant loads." />
+    content="Explore real NEON woody-vegetation survey data across 42 sites and every biome — every tagged tree and desert shrub's diameter and height, the stand's size structure and basal area, how plants grow over the years, and a tap-to-pin Size Lab. Honest statistics, instant loads." />
 
-  <meta name="theme-color" content="#1f6b3a" />
+  <meta name="theme-color" content="#1f6a63" />
 
   <!-- Open Graph / social card. Absolute URLs = the GitHub Pages domain for this repo. -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/" />
   <meta property="og:title" content="NEON Vegetation Structure Explorer" />
   <meta property="og:description"
-    content="Real NEON woody-vegetation data — every tagged tree's diameter, height, and growth career; the stand's size structure and basal area. Honest stats, instant loads." />
+    content="Real NEON woody-vegetation data across 42 sites — every tagged tree and desert shrub's diameter, height, and growth career; the stand's size structure and basal area. Honest stats, instant loads." />
   <meta property="og:image" content="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="NEON Vegetation Structure Explorer" />
   <meta name="twitter:description"
-    content="Real NEON tree data — diameter, height, growth careers, and stand structure across forests. Honest stats, instant loads." />
+    content="Real NEON tree &amp; shrub data — diameter, height, growth careers, and stand structure across forests, deserts &amp; tundra. Honest stats, instant loads." />
   <meta name="twitter:image" content="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/og-image.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,17 +29,17 @@
     rel="stylesheet" />
   <style>
     :root {
-      --parch: #f3f1e9;
-      --paper: #fffdf8;
-      --ink: #20281f;
-      --ink2: #3a4a3a;
-      --muted: #5f6f63;
-      --pine: #1f6b3a;
-      --pine2: #14532a;
-      --bark: #7a5230;
-      --gold: #e6a700;
-      --gold-ink: #9a6b12;
-      --line: #e0ddd0;
+      --parch: #f1efe6;
+      --paper: #fdfcf7;
+      --ink: #1d2a24;
+      --ink2: #38473e;
+      --muted: #5c6b62;
+      --pine: #1f6a63;
+      --pine2: #164d48;
+      --bark: #8a5a2b;
+      --gold: #e0a500;
+      --gold-ink: #8a6310;
+      --line: #e1ddcf;
     }
 
     * { box-sizing: border-box }
@@ -62,7 +62,7 @@
       position: relative;
       overflow: hidden;
       color: var(--ink);
-      background: linear-gradient(116deg, #cfe6cf 0%, #9fce9f 28%, #cdc587 52%, #c2a468 72%, #9fc09c 100%)
+      background: linear-gradient(116deg, #cfe6e2 0%, #9fcec6 26%, #cdc59a 52%, #c2a468 74%, #9fc0b6 100%)
     }
     .hero::after {
       content: "";
@@ -134,12 +134,12 @@
 
   <header class="hero">
     <div class="wrap">
-      <span class="badge"><span aria-hidden="true">🌲</span> NEON · Vegetation Structure · DP1.10098.001</span>
+      <span class="badge"><span aria-hidden="true">🌳</span> NEON · Vegetation Structure · DP1.10098.001</span>
       <h1>NEON Vegetation Structure Explorer <span class="tag">unofficial</span></h1>
-      <p class="lead">How a forest is built. NEON tags individual woody stems, maps them, and remeasures their
-        diameter, height, and status over the years — so every tree has a <b>growth career</b>. Explore the
-        stand's size-class structure and basal area, how trees grow between visits, and a tap-to-pin
-        <b>Forest Size Lab</b> of every tree in diameter × height space.</p>
+      <p class="lead">How woody plants are built across a continent. NEON tags individual trees and desert
+        shrubs, maps them, and remeasures their diameter, height, and status over the years — so each has a
+        <b>growth career</b>. Explore the stand's size structure, how plants grow between visits, and a
+        tap-to-pin <b>Size Lab</b> — across <b>42 sites and every biome</b>, forests to deserts.</p>
       <div class="cta-row">
         <a id="launch" class="btn btn-primary" href="#">Launch the app&nbsp;→</a>
         <a class="btn btn-ghost" href="https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer"
@@ -151,8 +151,8 @@
 
   <div class="wrap">
     <div class="stats">
-      <div class="stat"><div class="n">every tree</div><div class="l">tagged &amp; remeasured</div></div>
-      <div class="stat"><div class="n">basal area</div><div class="l">honest stand measure</div></div>
+      <div class="stat"><div class="n">42 sites</div><div class="l">every biome</div></div>
+      <div class="stat"><div class="n">trees &amp; shrubs</div><div class="l">tagged &amp; remeasured</div></div>
       <div class="stat"><div class="n">growth</div><div class="l">careers over years</div></div>
       <div class="stat"><div class="n">instant</div><div class="l">no live API waits</div></div>
     </div>
@@ -163,15 +163,15 @@
       <span class="sub">What you can do</span>
       <div class="grid">
         <div class="feat feat-star">
-          <h3>The Forest Size Lab</h3>
-          <p>The flagship: every tree as a dot in <b>diameter × height</b> space, split into Giants / Spires /
-            Stout / Saplings. <b>Tap a dot</b> to pin its card, drag &amp; resize, then download the chart with
-            the cards baked in.</p>
+          <h3>The Size Lab</h3>
+          <p>The flagship: every plant as a dot in <b>size × height</b> space (DBH for trees, basal diameter
+            for shrubs), split into four size-shapes. <b>Tap a dot</b> to pin its card, drag &amp; resize, then
+            download the chart with the cards baked in.</p>
         </div>
         <div class="feat feat-star">
           <h3>Stand structure</h3>
-          <p>The diameter <b>size-class distribution</b> (the forester's reverse-J), the height profile, and
-            per-hectare <b>basal area, stem density, and QMD</b> — reported as mean ± SE across plots.</p>
+          <p>The <b>size-class distribution</b> (the forester's reverse-J for trees, basal classes for shrubs),
+            the height profile, and per-hectare <b>basal area, stem density, and QMD</b> — mean ± SE across plots.</p>
         </div>
         <div class="feat">
           <h3>Growth &amp; mortality</h3>
@@ -179,14 +179,14 @@
             standing-dead / lost-track split — decreases kept and flagged, not deleted.</p>
         </div>
         <div class="feat">
-          <h3>Champion Trees</h3>
-          <p>The record-holders — biggest DBH, tallest, fastest-growing, longest-tracked — on a re-sortable
+          <h3>Champions</h3>
+          <p>The record-holders — biggest, tallest, fastest-growing, longest-tracked — on a re-sortable
             leaderboard and podium. Tap one to open its career.</p>
         </div>
         <div class="feat">
-          <h3>Tree Career</h3>
-          <p>Open any tree for its growth trajectory, size-for-species percentile, QC flags, a shareable
-            <b>Tree Card</b> (PNG), and the raw per-bout data (CSV).</p>
+          <h3>Plant Career</h3>
+          <p>Open any tree or shrub for its growth trajectory, size-for-species percentile, QC flags, a shareable
+            <b>plant card</b> (PNG), and the raw per-bout data (CSV).</p>
         </div>
         <div class="feat feat-star">
           <h3>Compare, export, report</h3>
@@ -199,9 +199,12 @@
         <h2>Honest statistics</h2>
         <p>Every view states its method, on the chart:</p>
         <ul>
-          <li><b>Snapshot, not pooled</b> — stand metrics use each tree's <i>latest</i> measurement; a tree
+          <li><b>Snapshot, not pooled</b> — stand metrics use each plant's <i>latest</i> measurement; one
             remeasured five times is counted once. Growth is the explicit multi-bout metric, annualised
             between visits.</li>
+          <li><b>The right size measure per biome</b> — forests are sized by tree DBH; desert shrubs are too
+            short for a breast-height diameter, so they're sized by basal stem diameter (what NEON records for
+            ~96–99% of desert stems). The app classifies each site by basal-area dominance and adapts.</li>
           <li><b>Basal area, not biomass</b> — above-ground biomass needs an allometric model whose error
             compounds, so it is deliberately omitted; directly-measured basal area is the honest stand measure.</li>
           <li><b>Indices, not an inventory</b> — per-hectare basal area and density are scaled from the sampled
@@ -215,9 +218,9 @@
   </section>
 
   <style>
-    .series { background: #14231a; color: #eaf1e6; padding: 56px 0; }
-    .series h2 { color: #eaf1e6; margin: 0; font-size: 1.6rem; }
-    .series-sub { color: #b8c8b4; margin: 8px 0 26px; max-width: 640px; }
+    .series { background: #14201e; color: #eaf1ee; padding: 56px 0; }
+    .series h2 { color: #eaf1ee; margin: 0; font-size: 1.6rem; }
+    .series-sub { color: #b4c8c2; margin: 8px 0 26px; max-width: 640px; }
     .series-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
     .series-card { display: flex; flex-direction: column; gap: 5px; padding: 22px; border-radius: 16px;
       background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: #eaf1e6;
