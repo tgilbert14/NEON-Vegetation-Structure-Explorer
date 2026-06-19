@@ -67,7 +67,7 @@ jobs:
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: >
-            neonUtilities, dplyr, tibble, tidyr, stringr
+            neonUtilities, dplyr, tibble, tidyr, stringr, jsonlite
 
       - name: Rebuild the per-site bundles (full NEON re-pull)
         if: ${{ github.event.inputs.skip_download != 'true' }}
