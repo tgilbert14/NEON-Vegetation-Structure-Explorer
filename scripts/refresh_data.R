@@ -15,7 +15,20 @@
 # ===========================================================================
 suppressWarnings(suppressMessages({ library(dplyr) }))
 
-SITES <- c("HARV", "WREF", "SCBI")
+SITES <- c(
+  "HARV",   # Harvard Forest, MA          — NE mixed hardwood
+  "BART",   # Bartlett Experimental, NH   — northern hardwood-spruce
+  "SCBI",   # Smithsonian CBI, VA         — mid-Atlantic deciduous (ForestGEO)
+  "GRSM",   # Great Smoky Mountains, TN   — most biodiverse temperate forest in NA
+  "ORNL",   # Oak Ridge NL, TN            — southeastern mixed forest
+  "TALL",   # Talladega NF, AL            — longleaf pine restoration
+  "JERC",   # Jones Ecological RC, GA     — longleaf pine-wiregrass
+  "OSBS",   # Ordway-Swisher BS, FL       — FL sand scrub / longleaf
+  "DELA",   # Dead Lake, AL               — bottomland hardwood / baldcypress
+  "RMNP",   # Rocky Mountain NP, CO       — subalpine Engelmann spruce-fir
+  "WREF",   # Wind River, WA              — old-growth Douglas-fir
+  "SJER"    # San Joaquin ER, CA          — California blue-oak woodland
+)
 DPID  <- "DP1.10098.001"
 RAW   <- file.path("..", "veg-data-fetch")
 dir.create(RAW, showWarnings = FALSE, recursive = TRUE)

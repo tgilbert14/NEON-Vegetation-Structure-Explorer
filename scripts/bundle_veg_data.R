@@ -19,8 +19,11 @@ suppressWarnings(suppressMessages({ library(dplyr) }))
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a) == 1 && is.na(a))) b else a
 
 RAW <- "../veg-data-fetch"
-SITES <- c("HARV", "WREF", "SCBI")
-DEMO  <- "HARV"   # Harvard Forest — NEON's flagship mixed-hardwood forest
+# Auto-detect all <SITE>_raw.rds files present — add sites by fetching more.
+SITES <- sort(sub("_raw\\.rds$", "", basename(list.files(RAW, pattern = "_raw\\.rds$"))))
+if (length(SITES) == 0) stop("No *_raw.rds files found in ", RAW, " — run scripts/fetch_veg_data.R first.")
+cat("Sites found in veg-data-fetch:", paste(SITES, collapse = ", "), "\n")
+DEMO  <- if ("HARV" %in% SITES) "HARV" else SITES[1]  # Harvard Forest preferred demo
 
 is_species_rank <- function(rank, sci) {
   ok <- is.na(rank) | rank %in% c("species", "subspecies", "variety", "speciesGroup")
