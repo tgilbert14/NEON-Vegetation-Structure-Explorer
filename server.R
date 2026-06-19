@@ -268,13 +268,13 @@ server <- function(input, output, session) {
         if (trunc_n > 0) sprintf(" %s with >5 or <−2 cm/yr (likely measurement issues) are off-chart but kept in the data.", format(trunc_n, big.mark = ",")) else "")))
   })
   output$statusPlot <- renderPlotly({
-    ss <- status_summary(rv$snap, SP()); if (is.null(ss) || !nrow(ss)) return(note_plot("No status data"))
+    sp <- SP(); ss <- status_summary(rv$snap, sp); if (is.null(ss) || !nrow(ss)) return(note_plot("No status data"))
     cols <- c("Live" = DDL$live, "Dead / standing dead" = DDL$dead,
               "Lost track / removed" = "#c2b280", "Other / unknown" = DDL$muted)
     ss$lab <- as.character(ss$cls)
     plot_ly(ss, labels = ~lab, values = ~n, type = "pie", hole = 0.55, sort = FALSE,
       marker = list(colors = unname(cols[ss$lab])), textinfo = "label+percent",
-      hovertemplate = "%{label}<br>%{value} trees<extra></extra>") %>%
+      hovertemplate = paste0("%{label}<br>%{value} ", sp$nouns, "<extra></extra>")) %>%
       plotly_theme(legend = FALSE) %>% plotly::layout(showlegend = FALSE)
   })
   output$fastTable <- DT::renderDT({

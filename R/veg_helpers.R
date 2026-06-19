@@ -43,12 +43,14 @@ TREE_DBH_MIN <- 10
 # ---------------------------------------------------------------------------
 SIZE_FOREST <- list(
   type = "forest", col = "stemDiameter", min = TREE_DBH_MIN, area = "area_trees",
+  forms = TREE_FORMS,
   noun = "tree", nouns = "trees", Noun = "Tree", Nouns = "Trees",
   size_lab = "DBH", size_full = "diameter at breast height (DBH)", emoji = "\U0001F333",
   unit = "cm", lab_title = "Size Lab",
   quad = c(bigtall = "GIANTS \U0001F3C6", smalltall = "SPIRES", bigshort = "STOUT", smallshort = "SAPLINGS"))
 SIZE_SHRUB <- list(
   type = "shrubland", col = "basalStemDiameter", min = 0, area = "area_shrub",
+  forms = SHRUB_FORMS,
   noun = "shrub", nouns = "shrubs", Noun = "Shrub", Nouns = "Shrubs",
   size_lab = "basal ø", size_full = "basal stem diameter", emoji = "\U0001F33F",
   unit = "cm", lab_title = "Size Lab",
@@ -395,7 +397,8 @@ veg_codebook <- function() {
 # biological mortality. Scoped to the paradigm's growth forms.
 status_summary <- function(snap, spec = SIZE_FOREST) {
   if (is.null(snap) || !nrow(snap)) return(NULL)
-  s <- snap[snap$growthForm %in% spec$forms | is.na(snap$growthForm), , drop = FALSE]
+  forms <- spec$forms %||% TREE_FORMS                 # guard: never let %in% NULL silently drop all
+  s <- snap[snap$growthForm %in% forms | is.na(snap$growthForm), , drop = FALSE]
   if (!nrow(s)) s <- snap
   per <- s %>% dplyr::group_by(.data$individualID) %>%
     dplyr::summarise(

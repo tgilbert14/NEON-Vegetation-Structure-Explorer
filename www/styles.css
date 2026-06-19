@@ -44,9 +44,17 @@
   color: var(--ink);
 }
 [data-bs-theme="dark"] .control-deck { background: #131a18; }
-/* dark-mode filled controls: brightened teal fails white-text AA, so use dark ink */
+/* dark-mode filled controls: brightened teal (#2f9189) fails white-text AA, so use
+   dark ink (#10211f, ~4.4:1) on every teal-background control. */
 [data-bs-theme="dark"] .btn-primary,
 [data-bs-theme="dark"] .btn-secondary { color: #10211f !important; }
+[data-bs-theme="dark"] .picker-mode input:checked + span,
+[data-bs-theme="dark"] .picker-mode .form-check-input:checked + .form-check-label,
+[data-bs-theme="dark"] .sp-go,
+[data-bs-theme="dark"] .sp-go:hover,
+[data-bs-theme="dark"] .tc-save-btn,
+[data-bs-theme="dark"] .tc-save-btn:hover { color: #10211f !important; }
+[data-bs-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_button.current { color: #10211f !important; }
 /* the --pine token used as TEXT goes dim on dark -> brighter teal */
 [data-bs-theme="dark"] .brand-title,
 [data-bs-theme="dark"] .bio-links-title,
