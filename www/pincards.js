@@ -22,11 +22,13 @@
   var NS = "http://www.w3.org/2000/svg";
 
   function boxOf(node) { return node ? node.closest(".smt-pinnable") : null; }
-  function bgColor() {
-    var dark = document.documentElement.getAttribute("data-bs-theme") === "dark" ||
-               document.body.getAttribute("data-bs-theme") === "dark";
-    return dark ? "#16213a" : "#ffffff";
+  var LEADER = "#E6A700";   // canopy-amber leader line + anchor dot (forest theme)
+  var ANCHOR_STROKE = "#163b23";
+  function isDark() {
+    return document.documentElement.getAttribute("data-bs-theme") === "dark" ||
+           document.body.getAttribute("data-bs-theme") === "dark";
   }
+  function bgColor() { return isDark() ? "#19241a" : "#fffdf8"; }
 
   /* map a data point (dx, dy) to box-relative pixels via plotly's live axes, so
      a pin's leader line follows the dot through any resize/relayout. */
@@ -100,12 +102,12 @@
     var layer = linesLayer(box);
     var ln = document.createElementNS(NS, "line");
     ln.setAttribute("x1", a.ax); ln.setAttribute("y1", a.ay);
-    ln.setAttribute("stroke", "#FFD200"); ln.setAttribute("stroke-width", "2.5");
+    ln.setAttribute("stroke", LEADER); ln.setAttribute("stroke-width", "2.5");
     ln.setAttribute("stroke-linecap", "round");
     layer.appendChild(ln);
     var dot = document.createElementNS(NS, "circle");
     dot.setAttribute("cx", a.ax); dot.setAttribute("cy", a.ay); dot.setAttribute("r", "4.5");
-    dot.setAttribute("fill", "#FFD200"); dot.setAttribute("stroke", "#0C234B");
+    dot.setAttribute("fill", LEADER); dot.setAttribute("stroke", ANCHOR_STROKE);
     dot.setAttribute("stroke-width", "1.5");
     layer.appendChild(dot);
     pin.__line = ln; pin.__dot = dot;
@@ -264,12 +266,26 @@
         .then(function () { saving = false; });
     }, 90);
   }
-  window.smtSaveScatter = function () { snap(document.querySelector(".smt-pinnable"), "neon-bodysize-lab.png"); };
+  function stamp() {
+    var d = new Date();
+    return d.getFullYear() + ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2);
+  }
+  function siteTag() { return (window.__vegSite || "site").replace(/[^A-Za-z0-9]+/g, ""); }
+  window.smtSaveScatter = function () {
+    snap(document.querySelector(".smt-pinnable"), "NEON-VegStructure_" + siteTag() + "_size-lab_" + stamp() + ".png");
+  };
   window.smtSaveQcCard = function () {
     var node = document.getElementById("qcCardNode");
     if (!node) return;
-    var short = node.getAttribute("data-short") || "qc";
-    snap(node, "neon-qc-" + short.replace(/[^A-Za-z0-9]+/g, "") + ".png");
+    var short = node.getAttribute("data-short") || "tree";
+    snap(node, "NEON-VegStructure_" + siteTag() + "_tree-" + short.replace(/[^A-Za-z0-9]+/g, "") + "_" + stamp() + ".png");
+  };
+  /* the shareable Tree Card (holographic) on the Tree Career tab */
+  window.smtSaveTreeCard = function () {
+    var node = document.getElementById("treeCardNode");
+    if (!node) return;
+    var short = node.getAttribute("data-short") || "tree";
+    snap(node, "NEON-VegStructure_" + siteTag() + "_treecard-" + short.replace(/[^A-Za-z0-9]+/g, "") + "_" + stamp() + ".png");
   };
 
   /* tap (or keyboard-activate) a highlighted "Open QC history card" chip inside a

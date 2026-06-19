@@ -16,9 +16,12 @@ An (unofficial) R/Shiny explorer for NEON's **Vegetation structure** product
 | **Stand Structure** | The diameter **size-class distribution** (the forester's reverse-J), the height profile, and per-hectare **basal area + stem density + QMD**. |
 | **Growth & Mortality** | Diameter **growth rates** between remeasurements, the fastest-growing trees, and the live / standing-dead split. |
 | **Forest Size Lab** | The flagship: every tree as a dot in **diameter × height** space, **tap-to-pin** tree cards, named quadrants (Giants / Spires / Stout / Saplings), export-with-pins. |
-| **Tree Career** | The drill-down: a downloadable tree card (PNG + CSV) — diameter/height/status, the **growth trajectory** over its remeasurements, size-for-species percentile, and QC flags. |
+| **Champion Trees** | The record-holders — biggest DBH, tallest, fastest-growing, longest-tracked — a re-sortable leaderboard + podium; tap a row to open its career. |
+| **Tree Career** | The drill-down: a shareable holographic **Tree Card** (PNG) + a QC record (PNG) + raw per-bout data (CSV) — diameter/height/status, the **growth trajectory**, size-for-species percentile, and QC flags. |
 | **Map** | Plot markers sized by basal area, coloured by your chosen metric. |
 | **About** | Methods + caveats. |
+
+Plus: a clickable hero band (→ ranked modals), **Compare two stands** head-to-head, a full-dataset **CSV/zip export + codebook**, and a one-page **stand report PDF**.
 
 ## Run it
 
@@ -58,6 +61,13 @@ NEON pulls need **R-4.1.1** (neonUtilities; R-4.5.2 crashes on `loadByProduct`) 
   changed measurement height) — kept and flagged, not deleted. Live/dead is a snapshot ratio,
   not an annual mortality rate. Size-Lab dots need both diameter and height; diameter-only stems
   are counted and noted, not silently dropped.
+
+## Deploy & live
+
+Hosted on **Posit Connect Cloud** (deployed from this repo via `manifest.json`), with a
+**GitHub Pages** landing page + og card + cold-start pre-warm at
+<https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/>, and an automatic monthly
+data-refresh GitHub Action. Full steps in [`DEPLOY.md`](DEPLOY.md).
 
 Built by Desert Data Labs · desertdatalabs@gmail.com. Not affiliated with NEON, Battelle, or the
 NSF. An educational data-exploration tool. See [`docs/neonize-playbook.md`](docs/neonize-playbook.md).

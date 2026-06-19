@@ -1,10 +1,11 @@
 /* =========================================================================
-   plant.css — NEON Plant Diversity Explorer additions on top of the ported
-   styles.css (Desert Data Labs house style). Only the plant-specific bits live
-   here: the hero band, splash site cards, native/introduced bar, insight list.
+   veg.css — NEON Vegetation Structure Explorer additions on top of styles.css
+   (the "Old-Growth Canopy" forest theme). Only the veg-specific bits live here:
+   the hero stat band, splash site cards, the Overview insight list, and the
+   Forest Size Lab selected-tree strip.
    ========================================================================= */
 
-/* greened brand mark */
+/* evergreen brand mark */
 .brand-mark { font-size: 26px; }
 
 /* ---- hero stat band ---------------------------------------------------- */
@@ -13,13 +14,18 @@
 .hero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .hero-stat { display: flex; gap: 12px; align-items: center; background: var(--paper); border: 1px solid var(--line);
   border-radius: 12px; padding: 12px 16px; box-shadow: 0 4px 14px var(--shadow); border-top: 3px solid var(--pine); }
+/* forest quartet: canopy / spruce-teal / amber / bark — one accent per stat */
 .hero-stat.hero-pine  { border-top-color: var(--green); }
-.hero-stat.hero-terra { border-top-color: var(--terra); }
+.hero-stat.hero-sky   { border-top-color: var(--sky); }
 .hero-stat.hero-gold  { border-top-color: var(--gold); }
-.hs-icon { font-size: 24px; color: var(--pine); opacity: .85; }
-.hero-pine  .hs-icon { color: var(--green); }
-.hero-terra .hs-icon { color: var(--terra); }
-.hero-gold  .hs-icon { color: var(--gold-ink); }
+.hero-stat.hero-bark  { border-top-color: var(--terra); }
+.hero-stat.hero-terra { border-top-color: var(--rust); }
+.hs-icon { font-size: 24px; color: var(--pine); opacity: .9; }
+.hero-pine .hs-icon { color: var(--green); }
+.hero-sky  .hs-icon { color: var(--sky); }
+.hero-gold .hs-icon { color: var(--gold-ink); }
+.hero-bark .hs-icon { color: var(--terra); }
+.hero-terra .hs-icon { color: var(--rust); }
 .hs-v { font-size: 28px; font-weight: 800; color: var(--ink); line-height: 1; }
 .hs-l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 3px; }
 
@@ -27,8 +33,8 @@
 .site-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 18px 0; }
 .site-card { display: flex; gap: 14px; align-items: center; background: var(--paper); border: 1px solid var(--line);
   border-radius: 12px; padding: 14px 16px; text-decoration: none; color: inherit; box-shadow: 0 4px 14px var(--shadow);
-  border-left: 4px solid var(--green); transition: transform .12s ease, box-shadow .12s ease; }
-.site-card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px var(--shadow); }
+  border-left: 4px solid var(--green); transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+.site-card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px var(--shadow); border-color: var(--pine); }
 .sc-emoji { font-size: 30px; }
 .sc-name { font-weight: 600; color: var(--ink); }
 .sc-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
@@ -37,19 +43,44 @@
 .insight-list { display: flex; flex-direction: column; gap: 6px; }
 .il-item { display: flex; gap: 8px; align-items: baseline; color: var(--ink); font-size: 14px; line-height: 1.5; }
 .il-item .ci-hero { color: var(--green); font-weight: 800; }
+.il-item > .bi { color: var(--pine); flex: none; }
 
-/* ---- native vs introduced cover bar (plot card) ----------------------- */
-.piv-bar { display: flex; height: 24px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); font-size: 11px; font-weight: 600; }
-.piv-native { background: #1a7f37; color: #fff; display: flex; align-items: center; justify-content: center; }
-.piv-intro  { background: #c1502e; color: #fff; display: flex; align-items: center; justify-content: center; }
-
-/* ---- Diversity Lab selected-plot strip -------------------------------- */
+/* ---- Forest Size Lab selected-tree strip ------------------------------ */
 .lab-sel { display: flex; gap: 14px; align-items: center; background: var(--bg); border: 1px solid var(--line);
-  border-radius: 10px; padding: 10px 14px; margin-top: 12px; }
+  border-left: 4px solid var(--green); border-radius: 10px; padding: 10px 14px; margin-top: 12px; }
 .ls-emoji { font-size: 26px; }
 .ls-id { font-weight: 600; color: var(--ink); }
 .ls-dom { font-size: 12.5px; color: var(--muted); }
 .lab-sel .btn { margin-left: auto; }
+
+/* clickable hero stats (species / biggest DBH -> ranked modal) */
+.hero-stat.hero-click { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.hero-stat.hero-click:hover { transform: translateY(-2px); box-shadow: 0 10px 22px -10px var(--shadow); }
+.hero-stat .stat-q { font-size: 10px; margin-left: 4px; opacity: .5; color: var(--gold-ink); }
+.hero-stat.hero-click:hover .stat-q { opacity: 1; }
+
+/* ---- sidebar quick-pick chips (Biggest / Tallest / Fastest) ----------- */
+.pick-chips { display: flex; gap: 6px; margin: 8px 0 8px; }
+.pick-chip { flex: 1 1 0; min-width: 0; font-size: 12px !important; padding: 5px 4px !important; }
+
+/* ---- Overview tools strip (compare / data / report) ------------------- */
+.tools-strip { display: flex; flex-wrap: wrap; gap: 10px; margin: 2px 2px 16px; }
+.tools-strip .btn { font-weight: 600; }
+
+/* ---- Champion Trees leaderboard category pills (BS5-compatible) ------- */
+.leader-cats { margin: 2px 2px 10px; }
+.leader-cats .shiny-options-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.leader-cats .form-check.form-check-inline,
+.leader-cats .radio-inline { margin: 0 !important; padding: 0; min-height: 0; position: relative; }
+.leader-cats .form-check-input { position: absolute; opacity: 0; pointer-events: none; }
+.leader-cats .form-check-label, .leader-cats .radio-inline > span {
+  display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 20px;
+  padding: 5px 14px; cursor: pointer; font-size: 13px; background: var(--paper); color: var(--ink);
+  transition: .15s; }
+.leader-cats .form-check-label:hover { background: #eef4ea; color: var(--pine); }
+.leader-cats .form-check-input:checked + .form-check-label,
+.leader-cats .radio-inline:has(input:checked) > span {
+  background: var(--pine); border-color: var(--pine); color: #fff; font-weight: 700; }
 
 /* hero count-up uses the shared .count-up engine from app.js */
 [data-bs-theme="dark"] .hero-stat,

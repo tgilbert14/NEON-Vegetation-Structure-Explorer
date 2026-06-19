@@ -14,6 +14,7 @@ suppressPackageStartupMessages({
 
 source("R/site_metadata.R", local = FALSE)
 source("R/veg_helpers.R", local = FALSE)
+source("R/report_pdf.R", local = FALSE)
 
 NEON_DPID <- "DP1.10098.001"   # Vegetation structure
 .NEON_PKG <- paste0("neon", "Utilities")
@@ -52,18 +53,24 @@ veg_sites_in_state <- function(stt) {
   setNames(rows$site, sprintf("%s — %s", rows$site, rows$name))
 }
 
-# ---- theme (DDL house style; forest-green lead) ---------------------------
+# ---- theme: "Old-Growth Canopy" forest identity ---------------------------
+# This app's OWN palette (deliberately NOT the shared navy/cardinal/gold house
+# triad of the mammal/plant siblings): canopy-green primary, bark-brown accent,
+# sunlit-canopy amber highlight, on warm forest-floor paper. Color maps to the
+# data — green=canopy, bark=trunk/diameter, amber=height/sunlight, rust=dead wood.
+# Keys 'navy'/'cardinal' are KEPT for low churn but now hold forest values
+# (a follow-up commit can rename navy->canopy, cardinal->bark across server.R).
 DDL <- list(
-  navy = "#0C234B", navy2 = "#16386e", cardinal = "#AB0520", gold = "#FFD200",
-  gold2 = "#c9a300", sky = "#2f7fb5", green = "#1a7f37", green2 = "#12612a",
-  bark = "#6b4f3a", ink = "#1c2733", muted = "#6b7a89", bg = "#eef2f8",
-  paper = "#ffffff", line = "#dbe2ec",
-  live = "#1a7f37", dead = "#9a4a3a")
+  navy = "#1f6b3a", navy2 = "#14532a", cardinal = "#7a5230", gold = "#E6A700",
+  gold2 = "#9a6b12", sky = "#3f7d8c", green = "#1f6b3a", green2 = "#0f3d20",
+  bark = "#7a5230", ink = "#20281f", muted = "#5f6f63", bg = "#f3f1e9",
+  paper = "#fffdf8", line = "#e0ddd0",
+  live = "#1f6b3a", dead = "#9a5a3a", rust = "#b5471f")   # rust = reserved true-error red
 
 app_theme <- bs_theme(
-  version = 5, bg = "#ffffff", fg = DDL$ink,
-  primary = DDL$navy, secondary = DDL$cardinal,
-  success = DDL$green, info = DDL$sky, warning = DDL$gold, danger = DDL$cardinal,
+  version = 5, bg = "#fffdf8", fg = DDL$ink,
+  primary = DDL$navy, secondary = DDL$bark,
+  success = DDL$green, info = DDL$sky, warning = DDL$gold, danger = DDL$rust,
   base_font = font_google("Rubik"), heading_font = font_google("Rubik"), "border-radius" = "10px")
 
 asset_url <- function(path) {
