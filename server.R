@@ -66,9 +66,11 @@ server <- function(input, output, session) {
     yrs <- range(b$trees$year, na.rm = TRUE)
     rv$ctx <- paste0(b$meta$site, " · ", if (yrs[1] == yrs[2]) yrs[1] else paste0(yrs[1], "–", yrs[2]))
     shinyjs::show("mainTabsWrap"); shinyjs::show("treePickerWrap"); shinyjs::hide("splash")
-    one <- rv$one[is.finite(rv$one$stemDiameter), ]
-    ch <- setNames(one$individualID, sprintf("%s · %s · %scm",
-            short_tree(one$individualID), ifelse(is.na(one$scientificName), "—", one$scientificName), round(one$stemDiameter)))
+    one <- rv$one
+    lab_meas <- ifelse(is.finite(one$stemDiameter), paste0(round(one$stemDiameter), "cm"),
+                       ifelse(is.finite(one$height), paste0(round(one$height), "m tall"), "—"))
+    ch <- setNames(one$individualID, sprintf("%s · %s · %s",
+            short_tree(one$individualID), ifelse(is.na(one$scientificName), "—", one$scientificName), lab_meas))
     updateSelectizeInput(session, "treeSel", choices = c("Pick a tree…" = "", ch), selected = "", server = TRUE)
     nav_select("tabs", "overview"); session$sendCustomMessage("countUp", list()); session$sendCustomMessage("loadDone", list())
     invisible(TRUE)
@@ -99,7 +101,7 @@ server <- function(input, output, session) {
   observeEvent(input$goStand,  nav_select("tabs", "stand"))
   observeEvent(input$goGrowth, nav_select("tabs", "growth"))
   observeEvent(input$goLab,    nav_select("tabs", "lab"))
-  observeEvent(input$goTree,   { if (is.null(rv$tree) && !is.null(rv$one)) rv$tree <- rv$one$individualID[which.max(rv$one$stemDiameter)]; nav_select("tabs", "tree") })
+  observeEvent(input$goTree,   { if (is.null(rv$tree) && !is.null(rv$one) && nrow(rv$one)) { i <- which.max(rv$one$stemDiameter); if (length(i)) rv$tree <- rv$one$individualID[i] }; nav_select("tabs", "tree") })
   observeEvent(input$goMap,    nav_select("tabs", "map"))
 
   # ---- hero ---------------------------------------------------------------
@@ -112,10 +114,11 @@ server <- function(input, output, session) {
     div(class = "hero-band",
       div(class = "hero-title", bs_icon("broadcast"), tags$b(rv$label)),
       div(class = "hero-grid",
-        hero(nrow(one[one$growthForm %in% TREE_FORMS, ]), "live trees", icon = "tree", tone = "pine"),
+        hero(nrow(trees_only(one)), "live stems", icon = "tree", tone = "pine",
+             ttl = "Live tagged stems ≥ 10 cm diameter (the protocol tree threshold). A multi-stem tree counts each bole."),
         hero(dplyr::n_distinct(sp$scientificName), "species", icon = "diagram-3", tone = "navy"),
-        hero(round(max(snap$height, na.rm = TRUE), 1), "m tallest", icon = "arrows-vertical", tone = "gold"),
-        hero(round(max(snap$stemDiameter, na.rm = TRUE), 1), "cm biggest DBH", icon = "circle", tone = "terra")))
+        hero(ifelse(is.finite(smax(snap$height)), round(smax(snap$height), 1), 0), "m tallest", icon = "arrows-vertical", tone = "gold"),
+        hero(ifelse(is.finite(smax(snap$stemDiameter)), round(smax(snap$stemDiameter), 1), 0), "cm biggest DBH", icon = "circle", tone = "terra")))
   })
 
   # ---- OVERVIEW -----------------------------------------------------------
@@ -159,9 +162,15 @@ server <- function(input, output, session) {
   })
   output$sizeInsight <- renderUI({
     sc <- size_class(rv$snap); req(!is.null(sc))
-    small <- sum(sc$stems[sc$cls %in% c("0–10","10–20")]); big <- sum(sc$stems[sc$cls %in% c("50–70","70+")])
-    shape <- if (small > 3 * big) "a descending reverse-J — a regenerating, uneven-aged stand with plenty of young stems" else "flatter than a classic reverse-J — fewer small stems than an actively regenerating stand"
-    insight_banner("bar-chart-fill", tone = "pine", HTML(sprintf("The size distribution is <b>%s</b>.", shape)))
+    small <- sum(sc$stems[sc$cls %in% c("10–20","20–30")]); big <- sum(sc$stems[sc$cls %in% c("50–70","70+")])
+    ratio <- if (big > 0) round(small / big, 1) else NA
+    shape <- if (is.na(ratio)) "concentrated in the smaller classes" else
+             if (ratio >= 3) "a strong descending reverse-J — a regenerating, uneven-aged stand" else
+             if (ratio >= 1.2) "a moderate reverse-J" else
+             "top-heavy — relatively few small trees, hinting at an aging or even-aged stand"
+    insight_banner("bar-chart-fill", tone = "pine",
+      HTML(sprintf("Among trees ≥10 cm DBH, the size distribution is <b>%s</b>%s. Smaller saplings are sampled in separate nested subplots and aren't shown here.",
+        shape, if (!is.na(ratio)) sprintf(" (%.1f small per large stem)", ratio) else "")))
   })
   output$htPlot <- renderPlotly({
     s <- live_only(rv$snap); h <- s$height[is.finite(s$height) & s$height > 0]; if (!length(h)) return(note_plot("No height data"))
@@ -173,14 +182,14 @@ server <- function(input, output, session) {
   output$densityBanner <- renderUI({
     st <- stand_site(rv$snap, rv$plots); req(!is.null(st))
     insight_banner("calculator", tone = "gold",
-      HTML(sprintf("Across <b>%d</b> sampled plots: <span class='ci-hero'>%s m²/ha</span> basal area, <b>%s stems/ha</b>, quadratic mean diameter <b>%s cm</b>.",
+      HTML(sprintf("Across <b>%d</b> sampled plots (trees ≥10 cm DBH): <span class='ci-hero'>%s m²/ha</span> basal area, <b>%s stems/ha</b>, quadratic mean diameter <b>%s cm</b>.",
         st$n_plots, st$ba_ha, format(st$density_ha, big.mark = ","), st$qmd)))
   })
 
   # ---- GROWTH & MORTALITY -------------------------------------------------
   output$growthPlot <- renderPlotly({
     g <- tree_growth(rv$trees); if (is.null(g) || !nrow(g)) return(note_plot("No remeasured trees yet for a growth estimate"))
-    gg <- g$growth_cm_yr[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2]
+    gg <- g$growth_cm_yr[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2 & !g$mh_change]
     plot_ly(x = gg, type = "histogram", nbinsx = 30, marker = list(color = DDL$green),
       hovertemplate = "%{x} cm/yr<br>%{y} trees<extra></extra>") %>%
       plotly_theme(legend = FALSE) %>%
@@ -189,11 +198,13 @@ server <- function(input, output, session) {
   })
   output$growthInsight <- renderUI({
     g <- tree_growth(rv$trees); req(!is.null(g), nrow(g) > 0)
-    gg <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5, ]
-    neg <- round(100 * mean(g$growth_cm_yr < -0.1, na.rm = TRUE))
+    nmh <- sum(g$mh_change, na.rm = TRUE)
+    gv <- g[!g$mh_change, ]; gg <- gv[is.finite(gv$growth_cm_yr) & gv$growth_cm_yr <= 5, ]
+    neg <- round(100 * mean(gv$growth_cm_yr < -0.1, na.rm = TRUE))
     insight_banner("graph-up", tone = "pine",
-      HTML(sprintf("Of <b>%s</b> remeasured trees, diameter grows a median of <span class='ci-hero'>%.2f cm/yr</span>. About <b>%d%%</b> show a decrease between visits — usually real (bark, drought, a changed measurement height), kept and flagged, not deleted.",
-        format(nrow(gg), big.mark=","), stats::median(gg$growth_cm_yr, na.rm=TRUE), neg)))
+      HTML(sprintf("Of <b>%s</b> remeasured trees, diameter grows a median of <span class='ci-hero'>%.2f cm/yr</span>. About <b>%d%%</b> show a decrease between visits — usually real (bark, drought), kept and flagged.%s",
+        format(nrow(gg), big.mark=","), stats::median(gg$growth_cm_yr, na.rm=TRUE), neg,
+        if (nmh > 0) sprintf(" %s trees whose measurement height moved between visits are excluded here.", format(nmh, big.mark=",")) else "")))
   })
   output$statusPlot <- renderPlotly({
     ss <- status_summary(rv$snap); if (is.null(ss)) return(note_plot("No status data"))
@@ -206,7 +217,8 @@ server <- function(input, output, session) {
   output$fastTable <- DT::renderDT({
     g <- tree_growth(rv$trees)
     if (is.null(g) || !nrow(g)) return(DT::datatable(data.frame(Message = "No remeasured trees yet."), rownames = FALSE, options = list(dom = "t")))
-    g <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 0 & g$growth_cm_yr <= 5, ]
+    g <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 0 & g$growth_cm_yr <= 5 & !g$mh_change, ]
+    if (!nrow(g)) return(DT::datatable(data.frame(Message = "No clean remeasurement growth yet."), rownames = FALSE, options = list(dom = "t")))
     g <- g[order(-g$growth_cm_yr), ][seq_len(min(20, nrow(g))), ]
     df <- data.frame(Tree = short_tree(g$individualID), Species = g$scientificName,
                      `DBH start (cm)` = round(g$d0,1), `DBH now (cm)` = round(g$d1,1),
@@ -330,7 +342,7 @@ server <- function(input, output, session) {
         tile(if (is.null(hist)) "—" else nrow(hist), "visits"),
         tile(ifelse(is.na(row$canopyPosition), "—", gsub(" .*","",row$canopyPosition)), "canopy")),
       div(class = "qc-section-h", bs_icon("graph-up"), " Growth trajectory (diameter over time)"),
-      if (!is.null(hist) && sum(is.finite(hist$stemDiameter)) >= 2) plotlyOutput(sparkid, height = "170px") else p(class = "qc-cap-note", "Single visit — no trajectory yet."),
+      if (!is.null(hist) && sum(is.finite(hist$stemDiameter)) >= 2) plotlyOutput("treeSpark", height = "170px") else p(class = "qc-cap-note", "Single visit — no trajectory yet."),
       div(class = "qc-section-h", bs_icon("clipboard-check"), " Data-quality check"), flags_ui,
       cap_tbl,
       p(class = "qc-cap-note", style = "margin-top:8px", bs_icon("info-circle"),
@@ -339,17 +351,16 @@ server <- function(input, output, session) {
       tags$button(class = "smt-snap-btn", type = "button", onclick = "smtSaveQcCard()", bsicons::bs_icon("download"), " Save tree card (PNG)"),
       downloadButton("treeCsv", "Download tree data (CSV)", class = "smt-clear-btn")))
   }
-  observe({
+  # ONE fixed output (not a per-tree id) — avoids accumulating a new binding for
+  # every tree the user opens; recomputed on rv$tree change.
+  output$treeSpark <- renderPlotly({
     id <- rv$tree; req(id)
-    sparkid <- paste0("spark_", gsub("[^A-Za-z0-9]", "", id))
-    output[[sparkid]] <- renderPlotly({
-      h <- tree_history(rv$trees, id); h <- h[is.finite(h$stemDiameter), ]; if (is.null(h) || nrow(h) < 2) return(note_plot("—"))
-      plot_ly(h, x = ~date, y = ~stemDiameter, type = "scatter", mode = "lines+markers",
-        line = list(color = DDL$green, width = 2.5), marker = list(color = DDL$green2, size = 7),
-        hovertemplate = "%{x|%Y}<br>%{y:.1f} cm<extra></extra>") %>%
-        plotly_theme(legend = FALSE) %>%
-        plotly::layout(xaxis = list(title = ""), yaxis = list(title = "DBH (cm)"), margin = list(l = 45, r = 10, t = 10, b = 30))
-    })
+    h <- tree_history(rv$trees, id); h <- h[is.finite(h$stemDiameter), ]; if (is.null(h) || nrow(h) < 2) return(note_plot("—"))
+    plot_ly(h, x = ~date, y = ~stemDiameter, type = "scatter", mode = "lines+markers",
+      line = list(color = DDL$green, width = 2.5), marker = list(color = DDL$green2, size = 7),
+      hovertemplate = "%{x|%Y}<br>%{y:.1f} cm<extra></extra>") %>%
+      plotly_theme(legend = FALSE) %>%
+      plotly::layout(xaxis = list(title = ""), yaxis = list(title = "DBH (cm)"), margin = list(l = 45, r = 10, t = 10, b = 30))
   })
   output$treeProfile <- renderUI({
     if (is.null(rv$tree)) return(div(class = "qc-empty",

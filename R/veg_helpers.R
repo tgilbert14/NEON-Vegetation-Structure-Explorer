@@ -16,7 +16,15 @@ smean <- function(x) { x <- x[is.finite(x)]; if (!length(x)) NA_real_ else mean(
 short_tree <- function(id) sub("^NEON\\.PLA\\.D[0-9]{2}\\.", "", as.character(id))   # NEON.PLA.D01.000123 -> 000123
 short_plot <- function(p) sub("^[A-Z]{4}_", "", as.character(p))
 
-TREE_FORMS <- c("single bole tree", "multi-bole tree", "small tree")  # what counts as a "tree" for density
+TREE_FORMS <- c("single bole tree", "multi-bole tree", "small tree")
+# The protocol tree threshold. Stems with DBH >= this are tallied over the full
+# plot tree area (totalSampledAreaTrees); SMALLER stems are sampled only in a
+# smaller nested subplot, so dividing them by the tree area under-counts them.
+# All STAND metrics (basal area, density, size-class, QMD, composition) are
+# therefore scoped to trees >= 10 cm DBH for an area-consistent, honest estimate.
+TREE_DBH_MIN <- 10
+trees_only <- function(d) { if (is.null(d) || !nrow(d)) return(d)
+  d[is.finite(d$stemDiameter) & d$stemDiameter >= TREE_DBH_MIN, , drop = FALSE] }
 
 species_level_only <- function(d) {
   if (is.null(d) || !nrow(d)) return(d)
@@ -55,36 +63,38 @@ live_only <- function(d) { if (is.null(d) || !nrow(d)) return(d); d[d$live %in% 
 # ---------------------------------------------------------------------------
 stand_by_plot <- function(snap, plots) {
   if (is.null(snap) || !nrow(snap)) return(NULL)
-  s <- live_only(snap)
-  s <- s[is.finite(s$stemDiameter) & s$stemDiameter > 0, , drop = FALSE]
-  if (!nrow(s)) return(NULL)
+  s <- trees_only(live_only(snap))                  # live trees >= 10 cm DBH (area-consistent)
+  if (is.null(s) || !nrow(s)) return(NULL)
   s$ba_m2 <- pi * (s$stemDiameter / 200)^2          # cm DBH -> m^2 basal area per stem
   per <- s %>% dplyr::group_by(.data$plotID) %>%
     dplyr::summarise(stems = dplyr::n_distinct(.data$individualID),
-                     ba_m2 = sum(.data$ba_m2),
-                     qmd = sqrt(mean(.data$stemDiameter^2)),
+                     ba_m2 = sum(.data$ba_m2), sumD2 = sum(.data$stemDiameter^2),
                      .groups = "drop")
   per <- dplyr::left_join(per, plots[, c("plotID", "area_trees")], by = "plotID")
   per$area_ha <- per$area_trees / 10000
-  per$ba_ha <- ifelse(per$area_ha > 0, per$ba_m2 / per$area_ha, NA_real_)
-  per$density_ha <- ifelse(per$area_ha > 0, per$stems / per$area_ha, NA_real_)
+  per <- per[is.finite(per$area_ha) & per$area_ha > 0.005, , drop = FALSE]   # drop tiny/partial slivers (<50 m²)
+  if (!nrow(per)) return(NULL)
+  per$ba_ha <- per$ba_m2 / per$area_ha
+  per$density_ha <- per$stems / per$area_ha
   per
 }
 stand_site <- function(snap, plots) {
   per <- stand_by_plot(snap, plots); if (is.null(per)) return(NULL)
-  list(ba_ha = round(mean(per$ba_ha, na.rm = TRUE), 1),
+  list(ba_ha = round(mean(per$ba_ha, na.rm = TRUE), 1),         # plot = sampling unit (equal weight)
        density_ha = round(mean(per$density_ha, na.rm = TRUE)),
-       qmd = round(stats::weighted.mean(per$qmd, per$stems, na.rm = TRUE), 1),
+       qmd = round(sqrt(sum(per$sumD2, na.rm = TRUE) / sum(per$stems, na.rm = TRUE)), 1),  # POOLED RMS, not mean-of-QMDs
        n_plots = nrow(per))
 }
 
-# diameter size-class distribution (live stems) — the classic reverse-J
+# diameter size-class distribution of TREES (>= 10 cm DBH, sampled over the full
+# tree area — smaller stems are nested-sampled over a smaller area, so including
+# them here would under-represent the small classes as a sampling artifact).
 size_class <- function(snap) {
   if (is.null(snap) || !nrow(snap)) return(NULL)
-  s <- live_only(snap); s <- s[is.finite(s$stemDiameter) & s$stemDiameter > 0, , drop = FALSE]
-  if (!nrow(s)) return(NULL)
-  brks <- c(0, 10, 20, 30, 40, 50, 70, Inf)
-  labs <- c("0–10", "10–20", "20–30", "30–40", "40–50", "50–70", "70+")
+  s <- trees_only(live_only(snap))
+  if (is.null(s) || !nrow(s)) return(NULL)
+  brks <- c(10, 20, 30, 40, 50, 70, Inf)
+  labs <- c("10–20", "20–30", "30–40", "40–50", "50–70", "70+")
   s$cls <- cut(s$stemDiameter, breaks = brks, labels = labs, right = FALSE)
   s %>% dplyr::count(.data$cls, name = "stems") %>% tidyr::complete(cls = factor(labs, levels = labs), fill = list(stems = 0))
 }
@@ -96,20 +106,26 @@ size_class <- function(snap) {
 # ---------------------------------------------------------------------------
 tree_growth <- function(trees) {
   if (is.null(trees) || !nrow(trees)) return(NULL)
-  g <- trees[is.finite(trees$stemDiameter) & trees$stemDiameter > 0, , drop = FALSE]
-  # only PERMANENT individualIDs are the same plant year-to-year (TEMP.PLA ids are
-  # re-issued, so a "growth" across them would be two different stems)
+  # LIVE bouts only (a tree dead at its last bout shouldn't contribute a growth
+  # rate spanning into death), with a real DBH...
+  g <- trees[is.finite(trees$stemDiameter) & trees$stemDiameter > 0 & trees$live %in% TRUE, , drop = FALSE]
+  # ...and only PERMANENT individualIDs (TEMP.PLA ids are re-issued = different stems)
   if (!is.null(g) && "permanent" %in% names(g)) g <- g[g$permanent %in% TRUE, , drop = FALSE]
   if (is.null(g) || !nrow(g)) return(NULL)
+  has_mh <- "measurementHeight" %in% names(g)
   g %>% dplyr::group_by(.data$individualID, .data$scientificName) %>%
     dplyr::filter(dplyr::n() >= 2) %>%
     dplyr::summarise(
       d0 = .data$stemDiameter[which.min(.data$date)], d1 = .data$stemDiameter[which.max(.data$date)],
+      mh0 = if (has_mh) .data$measurementHeight[which.min(.data$date)] else NA_real_,
+      mh1 = if (has_mh) .data$measurementHeight[which.max(.data$date)] else NA_real_,
       yrs = as.numeric(max(.data$date) - min(.data$date)) / 365.25,
       .groups = "drop") %>%
     dplyr::filter(.data$yrs > 0) %>%
     dplyr::mutate(growth_cm_yr = round((.data$d1 - .data$d0) / .data$yrs, 2),
-                  shrank = .data$growth_cm_yr < -0.1)
+                  shrank = .data$growth_cm_yr < -0.1,
+                  # a moved measurement point makes the increment apples-to-oranges
+                  mh_change = is.finite(.data$mh0) & is.finite(.data$mh1) & abs(.data$mh0 - .data$mh1) > 0.1)
 }
 
 # one tree's full measurement history (the growth trajectory on the tree card)
@@ -155,7 +171,7 @@ tree_qc_flags <- function(hist) {
 # ---------------------------------------------------------------------------
 species_structure <- function(snap, plots) {
   if (is.null(snap) || !nrow(snap)) return(NULL)
-  s <- live_only(species_level_only(snap))
+  s <- trees_only(live_only(species_level_only(snap)))   # trees >= 10 cm DBH, for area-consistent BA
   one <- one_per_tree(s)
   if (!nrow(one)) return(NULL)
   ba <- s[is.finite(s$stemDiameter) & s$stemDiameter > 0, ]
@@ -181,7 +197,8 @@ plot_summary_veg <- function(snap, plots) {
     dplyr::summarise(n_species = dplyr::n_distinct(.data$scientificName),
                      tallest = round(smax(.data$height), 1),
                      biggest = round(smax(.data$stemDiameter), 1),
-                     dominant = .data$scientificName[which.max(.data$stemDiameter)], .groups = "drop")
+                     dominant = { i <- which.max(.data$stemDiameter); if (length(i)) .data$scientificName[i] else NA_character_ },
+                     .groups = "drop")
   out <- per %>% dplyr::left_join(sp, by = "plotID") %>%
     dplyr::left_join(plots[, c("plotID", "plotType", "nlcdClass", "lat", "lng")], by = "plotID")
   out$ba_ha <- round(out$ba_ha, 1); out$density_ha <- round(out$density_ha)
