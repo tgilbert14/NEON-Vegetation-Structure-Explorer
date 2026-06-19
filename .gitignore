@@ -1,0 +1,16 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# secrets / tokens
+.neon_token
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# transient data-fetch staging (raw NEON pulls live outside the repo)
+/veg-data-fetch/
