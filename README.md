@@ -31,8 +31,11 @@ R 4.5.x, bundle-only (no network):
 shiny::runApp(".", port = 8191)
 ```
 
-The Harvard Forest (**HARV**) demo loads instantly. **WREF** (Wind River old-growth — 60 m
-Douglas-firs, 146 cm trunks) and **SCBI** (Smithsonian mapped forest) are also bundled.
+The Harvard Forest (**HARV**) demo loads instantly. **12 forest sites** are bundled, spanning
+US biomes: HARV & BART (NE hardwood-spruce), SCBI & ORNL (mid-Atlantic/southern deciduous),
+GRSM (most biodiverse temperate forest in NA), TALL, JERC & OSBS (southeastern longleaf pine),
+DELA (bottomland baldcypress), RMNP (subalpine spruce-fir), WREF (Wind River old-growth — 60 m
+Douglas-firs, 146 cm trunks), and SJER (California blue-oak woodland).
 
 ## Data
 
@@ -47,8 +50,9 @@ Per-site bundles in `data/sites/<SITE>.rds` as `list(trees, plots, meta)`:
 
 NEON pulls need **R-4.1.1** (neonUtilities; R-4.5.2 crashes on `loadByProduct`) + a `.neon_token`:
 
-1. Fetch: `Rscript-4.1.1 ../App-NEON-Small-Mammal-Tracker/scripts/fetch_veg_demo.R`
-2. Bundle: `Rscript scripts/bundle_veg_data.R`
+1. Fetch: `Rscript-4.1.1 scripts/fetch_veg_data.R` (pulls every site in its `SITES` list;
+   skips ones already in `../veg-data-fetch/`. Add sites by editing that list.)
+2. Bundle: `Rscript scripts/bundle_veg_data.R` (auto-detects every `*_raw.rds` present)
 
 ## Honesty notes
 
