@@ -3,10 +3,13 @@
 .Rhistory
 .RData
 .Ruserdata
-*.Rproj
+Rplots.pdf
 
 # secrets / tokens
 .neon_token
+
+# rsconnect deploy records (Connect Cloud deploys from manifest.json + git)
+rsconnect/
 
 # OS / editor
 .DS_Store
