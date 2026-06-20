@@ -451,3 +451,71 @@ stand_mortality <- function(trees, spec = SIZE_FOREST) {
        lo = if (is.finite(bt[1])) round(ann(bt[1]), 2) else NA_real_,
        hi = if (is.finite(bt[2])) round(ann(bt[2]), 2) else NA_real_)
 }
+
+# ---------------------------------------------------------------------------
+# SITE-LEVEL data-quality scan (the small-mammal QC signature) — ranked
+# "verify, not wrong" flags across all of a site's remeasured plants, each with
+# the offending individuals so the UI can show an inspector + a downloadable CSV.
+# Returns list(flags = list of {level,key,label,why,n,rows}, n_flag, report).
+# rows = a tidy data.frame per flag (individualID, species, the evidence columns).
+# ---------------------------------------------------------------------------
+tree_qc_site <- function(trees, spec = SIZE_FOREST) {
+  if (is.null(trees) || !nrow(trees)) return(NULL)
+  flags <- list()
+  add <- function(level, key, label, why, rows) {
+    if (is.null(rows) || !nrow(rows)) return(invisible())
+    rows <- cbind(flag = key, rows, stringsAsFactors = FALSE)
+    flags[[length(flags) + 1L]] <<- list(level = level, key = key, label = label, why = why,
+      n = nrow(rows), rows = rows) }
+  short <- function(x) sub("^NEON\\.PLA\\.D[0-9]{2}\\.", "", as.character(x))
+
+  # 1) Recorded Live AFTER Dead — impossible; a tag swap / data-entry issue (HIGH).
+  # Collapse to ONE status per (plant, date) first — a plant is "live" that date if
+  # ANY stem is live, "dead" only if a dead/downed stem AND no live stem — so a
+  # multi-stem individual with a dead stem beside a live one isn't a false positive.
+  d <- trees[!is.na(trees$date) & !is.na(trees$plantStatus), , drop = FALSE]
+  if ("permanent" %in% names(d)) d <- d[d$permanent %in% TRUE, , drop = FALSE]
+  if (nrow(d)) {
+    pd <- d %>% dplyr::group_by(.data$individualID, .data$date) %>%
+      dplyr::summarise(scientificName = dplyr::first(.data$scientificName),
+        live = any(grepl("^Live", .data$plantStatus)),
+        dead = any(grepl("[Dd]ead|Downed", .data$plantStatus)) & !any(grepl("^Live", .data$plantStatus)),
+        .groups = "drop")
+    pd <- pd[order(pd$individualID, pd$date), , drop = FALSE]
+    res <- pd %>% dplyr::group_by(.data$individualID) %>%
+      dplyr::summarise(scientificName = dplyr::first(.data$scientificName),
+        resurrected = any(.data$live & cumsum(.data$dead) > 0), .groups = "drop")
+    rr <- res[res$resurrected %in% TRUE, , drop = FALSE]
+    if (nrow(rr)) add("high", "resurrection", "Recorded Live after Dead",
+      "A plant logged dead at one visit and live at a later one — impossible biologically, so it points to a tag swap or data-entry error.",
+      data.frame(plant = short(rr$individualID), species = rr$scientificName, stringsAsFactors = FALSE))
+  }
+
+  # growth-derived flags (per permanent individual, like-for-like increments)
+  g <- tree_growth(trees, spec)
+  if (!is.null(g) && nrow(g)) {
+    jump <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 5 & !g$mh_change, , drop = FALSE]
+    if (nrow(jump)) add("high", "jump", "Implausible diameter jump (>5 cm/yr)",
+      "A diameter increase faster than ~5 cm/yr (with no measurement-height change) usually means a mis-measure or a tag mix-up, not real growth.",
+      data.frame(plant = short(jump$individualID), species = jump$scientificName,
+        start_cm = round(jump$d0, 1), now_cm = round(jump$d1, 1), cm_per_yr = jump$growth_cm_yr, stringsAsFactors = FALSE))
+    shrink <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr < -2 & !g$mh_change, , drop = FALSE]
+    if (nrow(shrink)) add("warn", "shrink", "Large shrink (< −2 cm/yr)",
+      "Some diameter decrease is real (bark loss, drought); a drop steeper than 2 cm/yr (with no height change) is worth a second look.",
+      data.frame(plant = short(shrink$individualID), species = shrink$scientificName,
+        start_cm = round(shrink$d0, 1), now_cm = round(shrink$d1, 1), cm_per_yr = shrink$growth_cm_yr, stringsAsFactors = FALSE))
+    mh <- g[g$mh_change %in% TRUE, , drop = FALSE]
+    if (nrow(mh)) add("info", "mh", "Measurement height moved between visits",
+      "The point on the stem where diameter is taken changed, so the before/after increment isn't apples-to-apples — these are kept but excluded from growth stats.",
+      data.frame(plant = short(mh$individualID), species = mh$scientificName,
+        start_cm = round(mh$d0, 1), now_cm = round(mh$d1, 1), stringsAsFactors = FALSE))
+  }
+  ord <- c(high = 1L, warn = 2L, info = 3L)
+  flags <- flags[order(vapply(flags, function(f) ord[[f$level]], integer(1)))]
+  # per-flag row frames have different columns (jump/shrink carry sizes, resurrection
+  # doesn't) — bind_rows fills the gaps with NA so the report never errors.
+  report <- if (length(flags)) dplyr::bind_rows(lapply(flags, function(f) {
+    r <- f$rows; r$flag <- NULL
+    cbind(level = f$level, issue = f$label, r, stringsAsFactors = FALSE) })) else data.frame()
+  list(flags = flags, n_flag = length(flags), report = report)
+}

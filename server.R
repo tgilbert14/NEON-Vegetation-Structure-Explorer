@@ -262,6 +262,23 @@ server <- function(input, output, session) {
           shape, if (!is.na(ratio)) sprintf(" (a rough %.1f small per large stem)", ratio) else "")))
     }
   })
+  # "this site vs the network" — all bundled sites by woody richness, current gold
+  output$networkStrip <- renderPlotly({
+    si <- site_table; if (is.null(si) || !nrow(si) || !"n_species" %in% names(si)) return(note_plot("No network index"))
+    d <- si[is.finite(si$n_species), c("site", "name", "n_species"), drop = FALSE]
+    if (!nrow(d)) return(note_plot("No richness data"))
+    d <- d[order(d$n_species), ]; d$site <- factor(d$site, levels = d$site)
+    cur <- rv$site %||% ""
+    d$col <- ifelse(as.character(d$site) == cur, "#E0A500", DDL$navy)
+    plot_ly(d, y = ~site, x = ~n_species, type = "bar", orientation = "h",
+      marker = list(color = ~col),
+      hovertemplate = ~paste0("<b>", site, "</b> · ", name, "<br>", n_species, " woody species",
+        ifelse(as.character(site) == cur, "  ◀ this site", ""), "<extra></extra>")) %>%
+      plotly_theme(legend = FALSE) %>%
+      plotly::layout(showlegend = FALSE, bargap = 0.22,
+        xaxis = list(title = "Woody species (richness)"),
+        yaxis = list(title = "", automargin = TRUE, tickfont = list(size = 9)))
+  })
   output$htPlot <- renderPlotly({
     s <- live_only(rv$snap); h <- s$height[is.finite(s$height) & s$height > 0]; if (!length(h)) return(note_plot("No height data"))
     plot_ly(x = h, type = "histogram", nbinsx = 24, marker = list(color = DDL$bark),
@@ -275,9 +292,14 @@ server <- function(input, output, session) {
     se_ba <- if (is.finite(st$ba_se)) sprintf(" ±%s SE", st$ba_se) else ""
     se_d  <- if (is.finite(st$density_se)) sprintf(" ±%s", format(st$density_se, big.mark = ",")) else ""
     scope <- if (identical(sp$type, "shrubland")) "shrubs (basal diameter)" else "trees ≥10 cm DBH"
+    # 4th FIA number: the dominant species' share of total basal area (who owns the stand)
+    ss <- species_structure(rv$snap, rv$plots, sp)
+    dom_txt <- if (!is.null(ss) && nrow(ss) && is.finite(ss$ba_m2[1]) && sum(ss$ba_m2, na.rm = TRUE) > 0)
+      sprintf(" Dominated by <b><i>%s</i></b> (<b>%.0f%%</b> of basal area).",
+              ss$scientificName[1], 100 * ss$ba_m2[1] / sum(ss$ba_m2, na.rm = TRUE)) else ""
     insight_banner("calculator", tone = "gold",
-      HTML(sprintf("%sAcross <b>%d</b> sampled plots (%s): <span class='ci-hero'>%s m²/ha</span>%s basal area, <b>%s stems/ha</b>%s, quadratic mean %s <b>%s cm</b>. <span class='dim'>Mean ± SE across plots (the sampling unit).</span>",
-        pre, st$n_plots, scope, st$ba_ha, se_ba, format(st$density_ha, big.mark = ","), se_d, sp$size_lab, st$qmd)))
+      HTML(sprintf("%sAcross <b>%d</b> sampled plots (%s): <span class='ci-hero'>%s m²/ha</span>%s basal area, <b>%s stems/ha</b>%s, quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± SE across plots (the sampling unit) — a stand fingerprint, not a wall-to-wall inventory.</span>",
+        pre, st$n_plots, scope, st$ba_ha, se_ba, format(st$density_ha, big.mark = ","), se_d, sp$size_lab, st$qmd, dom_txt)))
   })
 
   # ---- GROWTH & MORTALITY -------------------------------------------------
@@ -380,6 +402,45 @@ server <- function(input, output, session) {
       HTML(sprintf("Compound <b>annual mortality ≈ <span class='ci-hero'>%.2f%%/yr</span></b>%s — <b>%s</b> of <b>%s</b> tracked %s died over a median ~%.1f-yr interval. The forestry-standard rate; the breakdown below is a point-in-time snapshot, not a rate.",
         mr$rate_pct, ci, format(mr$deaths, big.mark = ","), format(mr$n0, big.mark = ","), sp$nouns, mr$t_yrs)))
   })
+
+  # ---- SITE DATA-QUALITY scan (clickable inspector + downloadable report) -
+  veg_qc <- reactive({ req(rv$trees); tree_qc_site(rv$trees, SP()) })
+  qc_modal_rows <- reactiveVal(NULL)
+  output$vegQcFlags <- renderUI({
+    q <- veg_qc()
+    if (is.null(q) || !q$n_flag) return(div(class = "qc-flag qc-flag-clean", bs_icon("check2-circle"),
+      HTML(" <b>No data-quality flags.</b> No impossible status flips, implausible diameter jumps, or unexplained shrinks among the remeasured plants — clean.")))
+    ic <- c(high = "exclamation-octagon-fill", warn = "exclamation-triangle-fill", info = "info-circle-fill")
+    div(class = "qc-flag-list", lapply(q$flags, function(f)
+      tags$button(class = paste0("qc-flag qc-flag-", f$level), type = "button",
+        onclick = sprintf("Shiny.setInputValue('vegQcFlagClick', '%s', {priority:'event'})", f$key),
+        bs_icon(ic[[f$level]]),
+        tags$span(class = "qc-flag-txt", HTML(sprintf(" <b>%d</b> · %s", f$n, f$label))),
+        tags$span(class = "qc-flag-go", bs_icon("chevron-right")))))
+  })
+  observeEvent(input$vegQcFlagClick, {
+    q <- veg_qc(); req(q); f <- Filter(function(x) identical(x$key, input$vegQcFlagClick), q$flags)
+    if (!length(f)) return(); f <- f[[1]]; rows <- f$rows; rows$flag <- NULL
+    qc_modal_rows(list(key = f$key, rows = rows))
+    shown <- utils::head(rows, 60)
+    showModal(modalDialog(easyClose = TRUE, size = "l",
+      title = tagList(bs_icon("clipboard-check"), sprintf(" %s — %d plants", f$label, f$n)),
+      p(class = "qc-why", f$why),
+      tags$div(class = "qc-modal-tbl",
+        tags$table(class = "inspect-tbl",
+          tags$thead(tags$tr(lapply(names(shown), function(nm) tags$th(nm)))),
+          tags$tbody(lapply(seq_len(nrow(shown)), function(i)
+            tags$tr(lapply(shown[i, ], function(v) tags$td(as.character(v)))))))),
+      if (nrow(rows) > 60) p(class = "dim", sprintf("Showing 60 of %d — download for all.", nrow(rows))),
+      footer = tagList(downloadButton("vegQcFlagCsv", "Download these (CSV)", class = "btn-outline-dark btn-sm"), modalButton("Close"))))
+  })
+  output$vegQcFlagCsv <- downloadHandler(
+    filename = function() sprintf("NEON-veg-%s-QC-%s-%s.csv", rv$site %||% "site",
+      (qc_modal_rows() %||% list(key = "flag"))$key, format(Sys.Date(), "%Y%m%d")),
+    content = function(file) utils::write.csv((qc_modal_rows() %||% list(rows = data.frame()))$rows %||% data.frame(), file, row.names = FALSE, na = ""))
+  output$vegQcReport <- downloadHandler(
+    filename = function() sprintf("NEON-veg-%s-QC-report-%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) { q <- veg_qc(); utils::write.csv(if (is.null(q)) data.frame() else q$report, file, row.names = FALSE, na = "") })
 
   # ---- SIZE LAB (flagship) -----------------------------------------------
   output$labScatter <- renderPlotly({
