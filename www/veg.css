@@ -113,7 +113,7 @@ button.qc-flag:hover { transform: translateX(2px); box-shadow: 0 3px 12px var(--
 .leader-cats .radio-inline:has(input:checked) > span {
   background: var(--pine); border-color: var(--pine); color: #fff; font-weight: 700; }
 [data-bs-theme="dark"] .leader-cats .form-check-input:checked + .form-check-label,
-[data-bs-theme="dark"] .leader-cats .radio-inline:has(input:checked) > span { color: #10211f; }
+[data-bs-theme="dark"] .leader-cats .radio-inline:has(input:checked) > span { color: #0e1d15; }
 [data-bs-theme="dark"] .leader-cats .form-check-label:hover { background: #1f302d; }
 
 /* hero count-up uses the shared .count-up engine from app.js. The .hero-stat

@@ -6,11 +6,11 @@ server <- function(input, output, session) {
   is_dark <- function() identical(input$colorMode, "dark")
   plotly_theme <- function(p, legend = TRUE) {
     dark <- is_dark()
-    ink  <- if (dark) "#eaf2ff" else "#16243a"; grid <- if (dark) "rgba(220,232,255,0.10)" else "rgba(20,40,80,0.08)"
-    zero <- if (dark) "rgba(220,232,255,0.22)" else "rgba(20,40,80,0.15)"; lin <- if (dark) "rgba(255,255,255,0.12)" else "#d6e0ee"
-    legc <- if (dark) "#c2cfe0" else "#33405a"
-    hov  <- if (dark) list(bg = "rgba(14,29,64,0.96)", bd = "#2dd4bf", fg = "#eaf2ff")
-            else        list(bg = "rgba(20,42,60,0.96)", bd = "#149086", fg = "#ffffff")
+    ink  <- if (dark) "#eaf4ec" else "#16261c"; grid <- if (dark) "rgba(224,236,228,0.10)" else "rgba(30,70,42,0.08)"
+    zero <- if (dark) "rgba(224,236,228,0.22)" else "rgba(30,70,42,0.15)"; lin <- if (dark) "rgba(255,255,255,0.12)" else "#d6e2d8"
+    legc <- if (dark) "#bcd3c2" else "#33503e"
+    hov  <- if (dark) list(bg = "rgba(16,32,24,0.96)", bd = "#4eb86a", fg = "#eaf4ec")
+            else        list(bg = "rgba(22,50,34,0.96)", bd = "#2f8a52", fg = "#ffffff")
     p %>% plotly::layout(paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
       font = list(color = ink, family = "Rubik"),
       xaxis = list(gridcolor = grid, zerolinecolor = zero, linecolor = lin),
@@ -26,7 +26,7 @@ server <- function(input, output, session) {
       plotly::layout(paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
         xaxis = list(visible = FALSE), yaxis = list(visible = FALSE),
         annotations = list(list(text = paste0(icon, "<br>", msg), showarrow = FALSE,
-          font = list(color = if (is_dark()) "#9fb0c4" else "#6b7a85", size = 15), align = "center"))) %>%
+          font = list(color = if (is_dark()) "#a4c0aa" else "#5a6a82", size = 15), align = "center"))) %>%
       plotly::config(displayModeBar = FALSE)
   }
 
@@ -388,7 +388,7 @@ server <- function(input, output, session) {
       xs <- seq(min(g$d1), max(g$d1), length.out = 50)
       yh <- as.numeric(stats::predict(fit, data.frame(d1 = xs)))
       p <- p %>% add_trace(x = xs, y = yh, type = "scatter", mode = "lines", inherit = FALSE,
-        name = "trend", line = list(color = if (is_dark()) "#eaf2ff" else "#16243a", width = 2.5, dash = "dash"),
+        name = "trend", line = list(color = if (is_dark()) "#eaf4ec" else "#16261c", width = 2.5, dash = "dash"),
         hovertemplate = "trend<extra></extra>")
       sprintf("Trend: %s (Spearman r = %+.2f, p = %.3f, n = %d)",
         if (ct$estimate < 0) "growth slows as plants get bigger" else "growth rises with size",
@@ -469,7 +469,7 @@ server <- function(input, output, session) {
     keys <- sort(unique(pts$key))
     kpal <- if (keycol == "species") (rv$pal %||% make_species_pal(pts))
             else stats::setNames(forest_ramp(length(keys)), keys)
-    muted_col <- if (is_dark()) "#9fb0c4" else "#6b7a85"; qcol <- if (is_dark()) "#7e8da0" else "#9aa6b2"
+    muted_col <- if (is_dark()) "#a4c0aa" else "#5a6a82"; qcol <- if (is_dark()) "#7e8da0" else "#9aa6b2"
     pts$tip <- paste0(
       "<span class='smt-pin-emoji'>", sp$emoji, "</span> <b>", pts$short, "</b><br/>",
       "<em>", ifelse(is.na(pts$scientificName), "—", pts$scientificName), "</em><br/>",

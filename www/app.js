@@ -52,8 +52,8 @@ document.addEventListener("DOMContentLoaded", function () {
 // ---- confetti on standout trees (biggest / tallest / record grower) ------
 function forestConfetti(big) {
   if (typeof confetti !== "function") return;
-  // DDL desert-night palette: teal, coral, gold, bright-teal, sky.
-  const colors = ["#2dd4bf", "#fb8a7e", "#ffd24a", "#5eead4", "#43b8e8"];
+  // Canopy & Bark palette: canopy green, bark bronze, gold, bright canopy, sky.
+  const colors = ["#4eb86a", "#c98a4c", "#ffd24a", "#7fe096", "#2f8fc4"];
   const burst = (opts) => confetti(Object.assign({ colors, disableForReducedMotion: true }, opts));
   burst({ particleCount: big ? 140 : 70, spread: big ? 100 : 70, origin: { y: 0.3 }, startVelocity: 42 });
   if (big) {

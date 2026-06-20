@@ -66,19 +66,19 @@ veg_sites_in_state <- function(stt) {
 # KEPT (server.R references DDL$navy/$gold/$bark/etc.), VALUES remapped to the
 # desert palette so every chart re-themes from this one edit.
 DDL <- list(
-  navy = "#0e1d40", navy2 = "#1b2e5c", cardinal = "#fb8a7e", gold = "#ffd24a",
-  gold2 = "#e0b43a", sky = "#43b8e8", green = "#5fb56a", green2 = "#2f7d46",
-  bark = "#e0b43a", ink = "#eaf2ff", muted = "#9fb0cf", bg = "#070d1f",
-  paper = "#0e1d40", line = "rgba(255,255,255,0.12)",
-  live = "#5fb56a", dead = "#fb8a7e", rust = "#fb8a7e")   # rust = reserved true-error coral
+  navy = "#102018", navy2 = "#16412a", cardinal = "#c98a4c", gold = "#ffd24a",
+  gold2 = "#e0b43a", sky = "#2f8fc4", green = "#4eb86a", green2 = "#2f8a52",
+  bark = "#c98a4c", ink = "#eaf4ec", muted = "#a4c0aa", bg = "#0a140e",
+  paper = "#102018", line = "rgba(255,255,255,0.12)",
+  live = "#4eb86a", dead = "#c98a4c", rust = "#c98a4c")   # rust = reserved bark true-error tone
 
 # Light "desert-day" base (DEFAULT). styles.css [data-bs-theme="dark"] carries
 # the full desert-night system; both modes show the dark command-band hero +
 # dark stat info-boxes (the "light page, dark hero" look).
 app_theme <- bs_theme(
-  version = 5, bg = "#ffffff", fg = "#16243a",
-  primary = "#149086", secondary = "#e0685a",
-  success = "#3f9a52", info = "#2f8fc4", warning = "#d6a31c", danger = "#e0685a",
+  version = 5, bg = "#ffffff", fg = "#16261c",
+  primary = "#2f8a52", secondary = "#b07a3c",
+  success = "#3f9a52", info = "#2f8fc4", warning = "#c79a1c", danger = "#b07a3c",
   base_font = font_google("Rubik"), heading_font = font_google("Rubik"), "border-radius" = "10px")
 
 asset_url <- function(path) {
@@ -92,12 +92,12 @@ info_pop <- function(title, ..., placement = "auto")
   bslib::popover(tags$span(class = "info-dot", bsicons::bs_icon("info-circle")), ..., title = title, placement = placement)
 insight_banner <- function(icon, ..., tone = "navy")
   div(class = paste("chart-insight", paste0("ci-", tone)), bsicons::bs_icon(icon), div(class = "ci-text", ...))
-# Auto-picks DARK text (#16243a) on a bright fill (gold/teal/coral) and white on
+# Auto-picks DARK text (#16261c) on a bright fill (gold/canopy/bark) and white on
 # a dark fill via a luminance check, so the badge reads in both themes.
-glow_badge <- function(label, color = "#149086", glow = color) {
+glow_badge <- function(label, color = "#2f8a52", glow = color) {
   txt <- tryCatch({
     rc <- grDevices::col2rgb(color)
-    if ((0.299 * rc[1] + 0.587 * rc[2] + 0.114 * rc[3]) / 255 > 0.6) "#16243a" else "#ffffff"
+    if ((0.299 * rc[1] + 0.587 * rc[2] + 0.114 * rc[3]) / 255 > 0.6) "#16261c" else "#ffffff"
   }, error = function(e) "#ffffff")
   span(class = "glow-badge", style = sprintf("color:%s; background:%s; border-color:%s;", txt, color, color), label)
 }

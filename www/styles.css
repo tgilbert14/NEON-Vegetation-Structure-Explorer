@@ -12,12 +12,13 @@
    sky-blue (info), --rust = the reserved true-error coral. On a cool sand-sky
    canvas. The app DEFAULTS to LIGHT; dark below carries desert-night. */
 :root {
-  --pine: #149086;   --pine2: #0f6f66;
-  --terra: #e0685a;  --cardinal: #e0685a;  --gold: #d6a31c;  --gold-ink: #9a7314;
+  --pine: #2f8a52;   --pine2: #256f41;
+  --terra: #b07a3c;  --cardinal: #b07a3c;  --gold: #c79a1c;  --gold-ink: #9a7314;
   --sky: #2f8fc4;    --green: #3f9a52; --rust: #b5471f;
-  --ink: #16243a;    --muted: #5a6a82;
-  --bg: #eef3fb;     --paper: #ffffff; --line: #d6e0ee;
-  --shadow: rgba(20, 144, 134, 0.10);
+  --accent: #2f8a52;
+  --ink: #16261c;    --muted: #5a6a82;
+  --bg: #eef3ee;     --paper: #ffffff; --line: #d6e2d8;
+  --shadow: rgba(47, 138, 82, 0.10);
 }
 
 /* =========================================================================
@@ -28,62 +29,63 @@
    hard-coded. Plots adapt server-side via is_dark() in plotly_theme().
    ========================================================================= */
 [data-bs-theme="dark"] {
-  --pine: #2dd4bf;  --pine2: #5eead4;          /* primary -> teal */
-  --terra: #fb8a7e; --cardinal: #fb8a7e;       /* accent  -> coral */
+  --pine: #4eb86a;  --pine2: #7fe096;          /* primary -> canopy green */
+  --terra: #c98a4c; --cardinal: #c98a4c;       /* accent  -> bark bronze */
   --gold: #ffd24a;  --gold-ink: #ffd24a;
-  --sky: #43b8e8;   --green: #5fb56a; --rust: #fb8a7e;
-  --ink: #eaf2ff;   --muted: #9fb0cf;
-  --bg: #070d1f;    --paper: #0e1d40;  --line: rgba(255,255,255,0.12);
+  --sky: #43b8e8;   --green: #4eb86a; --rust: #c98a4c;
+  --accent: #4eb86a;
+  --ink: #eaf4ec;   --muted: #a4c0aa;
+  --bg: #0a140e;    --paper: #182e20;  --line: rgba(255,255,255,0.12);
   --shadow: rgba(0, 0, 0, 0.5);
 }
 [data-bs-theme="dark"] body {
   background:
-    radial-gradient(1100px 520px at 8% -8%, rgba(45,212,191,0.12), transparent 60%),
-    radial-gradient(900px 460px at 102% 2%, rgba(251,138,126,0.10), transparent 55%),
+    radial-gradient(1100px 520px at 8% -8%, rgba(78,184,106,0.12), transparent 60%),
+    radial-gradient(900px 460px at 102% 2%, rgba(201,138,76,0.10), transparent 55%),
     radial-gradient(900px 600px at 50% 120%, rgba(255,210,74,0.06), transparent 60%),
-    linear-gradient(180deg, #070d1f 0%, #05080f 100%);
+    linear-gradient(180deg, #0a140e 0%, #06100a 100%);
   color: var(--ink);
 }
-[data-bs-theme="dark"] .control-deck { background: #0b1733; }
-/* dark-mode filled controls: brightened teal (#2f9189) fails white-text AA, so use
-   dark ink (#10211f, ~4.4:1) on every teal-background control. */
+[data-bs-theme="dark"] .control-deck { background: #0e1d15; }
+/* dark-mode filled controls: brightened canopy fails white-text AA, so use
+   dark ink (#0e1d15, ~4.4:1) on every canopy-background control. */
 [data-bs-theme="dark"] .btn-primary,
-[data-bs-theme="dark"] .btn-secondary { color: #10211f !important; }
+[data-bs-theme="dark"] .btn-secondary { color: #0e1d15 !important; }
 [data-bs-theme="dark"] .picker-mode input:checked + span,
 [data-bs-theme="dark"] .picker-mode .form-check-input:checked + .form-check-label,
 [data-bs-theme="dark"] .sp-go,
 [data-bs-theme="dark"] .sp-go:hover,
 [data-bs-theme="dark"] .tc-save-btn,
-[data-bs-theme="dark"] .tc-save-btn:hover { color: #10211f !important; }
-[data-bs-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_button.current { color: #10211f !important; }
-/* the --pine token used as TEXT goes dim on dark -> brighter teal */
+[data-bs-theme="dark"] .tc-save-btn:hover { color: #0e1d15 !important; }
+[data-bs-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_button.current { color: #0e1d15 !important; }
+/* the --pine token used as TEXT goes dim on dark -> brighter canopy */
 [data-bs-theme="dark"] .brand-title,
 [data-bs-theme="dark"] .bio-links-title,
 [data-bs-theme="dark"] .tab-head-text h4,
 [data-bs-theme="dark"] .hr-indiv-lab,
 [data-bs-theme="dark"] .stat-sub,
 [data-bs-theme="dark"] .tab-intro .bi,
-[data-bs-theme="dark"] .chart-hint .bi { color: #5eead4 !important; }
-[data-bs-theme="dark"] .deck-foot code { color: #cfe0f5; background: #14274a; }
-[data-bs-theme="dark"] .deck-foot a:hover { color: #5eead4; }
-[data-bs-theme="dark"] .bio-links a { background: #0b1733; color: var(--muted); }
-[data-bs-theme="dark"] .bio-links a:hover { background: #13244a; color: #5eead4; border-color: rgba(255,255,255,0.22); }
-/* card header on dark: deep navy surface, teal-token accents, --ink text */
-[data-bs-theme="dark"] .card-header { background: #13294f !important; }
+[data-bs-theme="dark"] .chart-hint .bi { color: #7fe096 !important; }
+[data-bs-theme="dark"] .deck-foot code { color: #d7ecdc; background: #16412a; }
+[data-bs-theme="dark"] .deck-foot a:hover { color: #7fe096; }
+[data-bs-theme="dark"] .bio-links a { background: #0e1d15; color: var(--muted); }
+[data-bs-theme="dark"] .bio-links a:hover { background: #16412a; color: #7fe096; border-color: rgba(255,255,255,0.22); }
+/* card header on dark: deep canopy-night surface, canopy-token accents, --ink text */
+[data-bs-theme="dark"] .card-header { background: #16412a !important; }
 /* form controls + selectize on dark */
 [data-bs-theme="dark"] .form-control,
 [data-bs-theme="dark"] .form-select,
 [data-bs-theme="dark"] .selectize-input,
-[data-bs-theme="dark"] .selectize-dropdown { background: #0a1530; color: var(--ink); border-color: var(--line); }
+[data-bs-theme="dark"] .selectize-dropdown { background: #0d2016; color: var(--ink); border-color: var(--line); }
 /* the sidebar theme toggle row */
 .theme-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 4px; }
 .theme-toggle-lab { font-size: 12px; font-weight: 700; color: var(--muted); display: flex; align-items: center; gap: 5px; }
 
 body {
   background:
-    radial-gradient(1100px 520px at 8% -8%, rgba(20,144,134,0.05), transparent 60%),
-    radial-gradient(900px 460px at 102% 2%, rgba(224,104,90,0.04), transparent 55%),
-    linear-gradient(180deg, #eef3fb 0%, #e7eef8 100%);
+    radial-gradient(1100px 520px at 8% -8%, rgba(47,138,82,0.05), transparent 60%),
+    radial-gradient(900px 460px at 102% 2%, rgba(176,122,60,0.04), transparent 55%),
+    linear-gradient(180deg, #eef3ee 0%, #e7efe8 100%);
   background-attachment: fixed;
   color: var(--ink);
   font-weight: 400;
@@ -115,7 +117,7 @@ body {
 .env-pop-sel { flex: 2 1 300px; min-width: 240px; }
 .env-pop-lag { flex: 1 1 220px; min-width: 190px; }
 .env-pop-bar .form-group, .env-pop-bar .shiny-input-container { margin-bottom: 0; }
-[data-bs-theme="dark"] .env-pop-bar { background: linear-gradient(180deg, #1b2942 0%, var(--paper) 100%); }
+[data-bs-theme="dark"] .env-pop-bar { background: linear-gradient(180deg, #1c3322 0%, var(--paper) 100%); }
 @media (max-width: 560px) { .env-pop-row { gap: 6px; } }
 .env-lag-hint { font-size: 10.5px; color: var(--muted); line-height: 1.35; margin: -6px 0 4px; }
 /* pointer from the driver-ranking card down to the env picker + trend overlay */
@@ -210,7 +212,7 @@ body {
 
 /* ---- dark mode (mirrors the app-wide [data-bs-theme="dark"] pattern) ---- */
 [data-bs-theme="dark"] .ec {
-  background: linear-gradient(180deg, #1b2942 0%, var(--paper) 100%);
+  background: linear-gradient(180deg, #1c3322 0%, var(--paper) 100%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
 }
 [data-bs-theme="dark"] .ec.rail-strong { --ec-rail: #5fcf86; }   /* raw greens read dim on navy */
@@ -240,12 +242,12 @@ body {
 .chart-insight .ci-text { min-width: 0; }
 .chart-insight b { font-weight: 800; }
 .ci-hero { font-weight: 800; color: var(--ci-rail, var(--ink)); }
-.ci-navy { --ci-rail: #2dd4bf; } .ci-pine { --ci-rail: #5fb56a; }
-.ci-gold { --ci-rail: #e0b43a; } .ci-terra { --ci-rail: #fb8a7e; }
+.ci-navy { --ci-rail: #2f8a52; } .ci-pine { --ci-rail: #3f9a52; }
+.ci-gold { --ci-rail: #c79a1c; } .ci-terra { --ci-rail: #b07a3c; }
 .ci-muted { --ci-rail: var(--muted); }
-[data-bs-theme="dark"] .chart-insight { background: linear-gradient(180deg, #1b2942 0%, var(--paper) 100%); }
-[data-bs-theme="dark"] .ci-navy { --ci-rail: #5a8fd0; } [data-bs-theme="dark"] .ci-pine { --ci-rail: #5fcf86; }
-[data-bs-theme="dark"] .ci-gold { --ci-rail: var(--gold-ink); } [data-bs-theme="dark"] .ci-terra { --ci-rail: #ff7a8a; }
+[data-bs-theme="dark"] .chart-insight { background: linear-gradient(180deg, #1c3322 0%, var(--paper) 100%); }
+[data-bs-theme="dark"] .ci-navy { --ci-rail: #4eb86a; } [data-bs-theme="dark"] .ci-pine { --ci-rail: #7fe096; }
+[data-bs-theme="dark"] .ci-gold { --ci-rail: #ffd24a; } [data-bs-theme="dark"] .ci-terra { --ci-rail: #c98a4c; }
 @media (max-width: 560px) { .chart-insight { font-size: 12.5px; padding: 8px 11px; } }
 
 .or-divider { display: flex; align-items: center; text-align: center; color: var(--muted); margin: 12px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }
@@ -622,8 +624,8 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
   color: #fff; overflow: hidden; isolation: isolate;
   background:
     radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--rc) 55%, #fff 0%), transparent 60%),
-    linear-gradient(160deg, var(--rc) 0%, #070d1f 92%);
-  box-shadow: 0 18px 44px -12px rgba(12,35,75,.55), inset 0 0 0 2px rgba(255,255,255,.18); }
+    linear-gradient(160deg, var(--rc) 0%, #0a140e 92%);
+  box-shadow: 0 18px 44px -12px rgba(10,30,18,.55), inset 0 0 0 2px rgba(255,255,255,.18); }
 /* static holographic sheen (capturable by html-to-image) */
 .tc-holo { position: absolute; inset: 0; z-index: -1; opacity: .5; mix-blend-mode: screen;
   background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.35) 45%, transparent 52%,
@@ -937,7 +939,7 @@ table.dataTable tbody tr:active { background: #dfe8f4 !important; }
 .podium-1 .podium-stat { font-size: 18px; }
 .podium-sp { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes podiumRise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-[data-bs-theme="dark"] .podium-card { background: #0e1d40; }
+[data-bs-theme="dark"] .podium-card { background: #182e20; }
 .leader-dt .medal { font-size: 15px; }
 @media (max-width: 560px) { .podium-sp { display: none; } .podium-emoji { font-size: 28px; } .podium { gap: 8px; } }
 
@@ -1073,11 +1075,11 @@ svg.smt-pin-lines {
 .qc-card .inspect-tbl { width: 100%; }
 
 /* dark theme: deepen the card surfaces (flag chips stay vivid, they're meant to pop) */
-[data-bs-theme="dark"] .qc-card { background: linear-gradient(162deg, #1c2941 0%, #0e1d40 100%); }
+[data-bs-theme="dark"] .qc-card { background: linear-gradient(162deg, #1c3322 0%, #182e20 100%); }
 [data-bs-theme="dark"] .qc-flag.high { background: #3a1c19; color: #f3b6ad; }
 [data-bs-theme="dark"] .qc-flag.warn { background: rgba(255,210,74,.12); color: #ffd24a; }
 [data-bs-theme="dark"] .qc-flag.info { background: rgba(67,184,232,.12); color: #8fd2f2; }
-[data-bs-theme="dark"] .qc-flag.clean { background: rgba(45,212,191,.12); color: #7fe6d8; }
+[data-bs-theme="dark"] .qc-flag.clean { background: rgba(78,184,106,.14); color: #9ce6ad; }
 
 /* ====================================================================== *
  *  PREMIUM DESERT-NIGHT layer — command-band hero, starfield, sheen, and
@@ -1088,11 +1090,11 @@ svg.smt-pin-lines {
 @keyframes vstSheen { 0% { left:-65%; opacity:0; } 12% { opacity:.85; } 100% { left:135%; opacity:0; } }
 @keyframes vstFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
-/* the hero becomes a dark navy/teal COMMAND BAND with a drifting starfield + nebula */
+/* the hero becomes a dark canopy-night COMMAND BAND with a drifting starfield + nebula */
 .app-hero {
   position: relative; overflow: hidden;
-  background: radial-gradient(125% 150% at 16% -12%, #15425f 0%, #0b1733 46%, #070d1f 100%) !important;
-  box-shadow: 0 18px 46px rgba(3,8,20,.45), inset 0 0 0 1px rgba(45,212,191,.18) !important;
+  background: radial-gradient(125% 150% at 16% -12%, #16412a 0%, #102018 46%, #0a140e 100%) !important;
+  box-shadow: 0 18px 46px rgba(3,8,20,.45), inset 0 0 0 1px rgba(78,184,106,.18) !important;
 }
 .app-hero > * { position: relative; z-index: 1; }
 .app-hero::before {           /* drifting starfield */
@@ -1100,20 +1102,20 @@ svg.smt-pin-lines {
   background-repeat: repeat; background-size: 210px 220px,210px 220px,210px 220px,210px 220px;
   background-image:
     radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.6), transparent),
-    radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,220,255,.5), transparent),
-    radial-gradient(1.5px 1.5px at 90px 175px, rgba(255,210,74,.4), transparent),
-    radial-gradient(1.1px 1.1px at 175px 28px, rgba(94,234,212,.5), transparent);
+    radial-gradient(1.2px 1.2px at 150px 90px, rgba(180,240,200,.5), transparent),
+    radial-gradient(1.5px 1.5px at 90px 175px, rgba(201,138,76,.4), transparent),
+    radial-gradient(1.1px 1.1px at 175px 28px, rgba(127,224,150,.5), transparent);
   animation: vstStars 120s linear infinite;
 }
-.app-hero::after {            /* teal/coral/gold nebula */
+.app-hero::after {            /* canopy/bark/gold nebula */
   content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.6;
   background:
-    radial-gradient(48px 48px at 10% 26%, rgba(45,212,191,.18), transparent 70%),
-    radial-gradient(66px 66px at 86% 16%, rgba(251,138,126,.14), transparent 70%),
+    radial-gradient(48px 48px at 10% 26%, rgba(78,184,106,.18), transparent 70%),
+    radial-gradient(66px 66px at 86% 16%, rgba(201,138,76,.14), transparent 70%),
     radial-gradient(54px 54px at 64% 94%, rgba(255,210,74,.12), transparent 70%);
 }
 .app-hero .app-title { color: #ffd24a !important; }
-.app-hero .app-subtitle { color: #cfe0f5 !important; }
+.app-hero .app-subtitle { color: #d7ecdc !important; }
 .brand-mark, .app-emoji { display: inline-block; animation: vstFloat 6s ease-in-out infinite; }
 
 /* ---- DARK "info-box" surfaces on the LIGHT page (the cascade look) ---------- *
@@ -1122,25 +1124,25 @@ svg.smt-pin-lines {
  * + the per-stat accent rail, in BOTH modes (so the light page shows dark boxes). */
 .hero-stat {
   position: relative; overflow: hidden; isolation: isolate;
-  background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%) !important;
+  background: linear-gradient(180deg, #182e20 0%, #0a140e 100%) !important;
   border: 1px solid rgba(255,255,255,.10) !important;
   border-top: 3px solid var(--green) !important;
   box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) !important;
   transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .28s ease, border-color .2s ease;
 }
-/* keep the per-stat accent rail/icon: forest quartet -> desert tier hues */
-.hero-stat.hero-pine  { border-top-color: #2dd4bf !important; }
+/* keep the per-stat accent rail/icon: canopy quartet -> Canopy & Bark tier hues */
+.hero-stat.hero-pine  { border-top-color: #4eb86a !important; }
 .hero-stat.hero-sky   { border-top-color: #43b8e8 !important; }
 .hero-stat.hero-gold  { border-top-color: #ffd24a !important; }
-.hero-stat.hero-bark  { border-top-color: #e0b43a !important; }
-.hero-stat.hero-terra { border-top-color: #fb8a7e !important; }
+.hero-stat.hero-bark  { border-top-color: #c98a4c !important; }
+.hero-stat.hero-terra { border-top-color: #c98a4c !important; }
 .hero-stat .hs-v { color: #ffffff !important; }
-.hero-stat .hs-l { color: #9fb0cf !important; }
-.hero-stat .hs-icon          { color: #5eead4 !important; }
+.hero-stat .hs-l { color: #a4c0aa !important; }
+.hero-stat .hs-icon          { color: #7fe096 !important; }
 .hero-stat.hero-sky  .hs-icon { color: #43b8e8 !important; }
 .hero-stat.hero-gold .hs-icon { color: #ffd24a !important; }
-.hero-stat.hero-bark .hs-icon { color: #e0b43a !important; }
-.hero-stat.hero-terra .hs-icon { color: #fb8a7e !important; }
+.hero-stat.hero-bark .hs-icon { color: #c98a4c !important; }
+.hero-stat.hero-terra .hs-icon { color: #c98a4c !important; }
 .hero-stat .stat-q { color: #ffd24a !important; }
 /* sheen-sweep + lift on the stat info-boxes */
 .hero-stat::before {
@@ -1151,15 +1153,44 @@ svg.smt-pin-lines {
 .hero-stat:hover::before { animation: vstSheen .85s ease; }
 .hero-stat:hover {
   transform: translateY(-4px);
-  box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(45,212,191,.35) !important;
+  box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(78,184,106,.35) !important;
 }
 /* dark mode keeps the same dark info-boxes (override the veg.css dark fallback) */
-[data-bs-theme="dark"] .hero-stat { background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%) !important; }
+[data-bs-theme="dark"] .hero-stat { background: linear-gradient(180deg, #182e20 0%, #0a140e 100%) !important; }
 .hero-title { color: var(--pine); }
-[data-bs-theme="dark"] .hero-title { color: #5eead4; }
+[data-bs-theme="dark"] .hero-title { color: #7fe096; }
+
+/* ---- SITE-HEADER BAND parity (the 3rd dark info-box) ---------------------- *
+ * Skin .hero-site to the dark command-band scheme in BOTH modes so the light
+ * page shows a dark site band alongside the hero + KPI boxes. */
+.hero-site {
+  background: linear-gradient(120deg, #16412a 0%, #102018 70%) !important;
+  color: #eaf4ec !important; padding: 10px 15px !important; border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-top: 3px solid #4eb86a !important;
+  box-shadow: 0 10px 26px -12px rgba(3,8,20,.5) !important;
+}
+.hero-site .hero-site-label { color: #ffffff !important; }
+.hero-site .hero-site-range { color: #a4c0aa !important; border-left-color: rgba(255,255,255,.18) !important; }
+[data-bs-theme="dark"] .hero-site { background: linear-gradient(120deg, #16412a 0%, #102018 70%) !important; }
+
+/* ---- sheen-sweep + hover-lift on the key splash cards (flagship parity) --- */
+.local-card, .site-card {
+  position: relative; overflow: hidden; isolation: isolate;
+}
+.local-card::before, .site-card::before {
+  content:""; position:absolute; top:0; left:-65%; width:55%; height:100%; z-index:4;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
+  transform: skewX(-18deg); pointer-events:none; opacity:0;
+}
+.local-card:hover::before, .site-card:hover::before { animation: vstSheen .85s ease; }
+.local-card:hover, .site-card:hover {
+  border-color: var(--pine) !important;
+  box-shadow: 0 16px 34px rgba(0,0,0,.18), 0 0 0 1px rgba(78,184,106,.35) !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .app-hero::before, .brand-mark, .app-emoji,
-  .hero-stat::before { animation: none !important; }
-  .hero-stat:hover { transform: none; }
+  .hero-stat::before, .local-card::before, .site-card::before { animation: none !important; }
+  .hero-stat:hover, .local-card:hover, .site-card:hover { transform: none; }
 }

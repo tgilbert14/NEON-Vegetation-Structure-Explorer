@@ -8,7 +8,7 @@
   <meta name="description"
     content="Explore real NEON woody-vegetation survey data across 42 sites and every biome — every tagged tree and desert shrub's diameter and height, the stand's size structure and basal area, how plants grow over the years, and a tap-to-pin Size Lab. Honest statistics, instant loads." />
 
-  <meta name="theme-color" content="#070d1f" />
+  <meta name="theme-color" content="#0a140e" />
 
   <!-- Open Graph / social card. Absolute URLs = the GitHub Pages domain for this repo. -->
   <meta property="og:type" content="website" />
@@ -29,14 +29,14 @@
     rel="stylesheet" />
   <style>
     :root {
-      --parch: #070d1f;
-      --paper: #0e1d40;
-      --ink: #eaf2ff;
-      --ink2: #cfe0f5;
-      --muted: #9fb0cf;
-      --pine: #2dd4bf;
-      --pine2: #5eead4;
-      --bark: #fb8a7e;
+      --parch: #0a140e;
+      --paper: #102018;
+      --ink: #eaf4ec;
+      --ink2: #d7ecdc;
+      --muted: #a4c0aa;
+      --pine: #4eb86a;
+      --pine2: #7fe096;
+      --bark: #c98a4c;
       --gold: #ffd24a;
       --gold-ink: #ffd24a;
       --line: rgba(255,255,255,.12);
@@ -61,7 +61,7 @@
       background-repeat: repeat; background-size: 240px 240px, 240px 240px, 240px 240px;
       background-image:
         radial-gradient(1.4px 1.4px at 40px 60px, rgba(255,255,255,.55), transparent),
-        radial-gradient(1.3px 1.3px at 170px 120px, rgba(94,234,212,.5), transparent),
+        radial-gradient(1.3px 1.3px at 170px 120px, rgba(127,224,150,.5), transparent),
         radial-gradient(1.5px 1.5px at 100px 200px, rgba(255,210,74,.4), transparent);
       animation: coverStars 160s linear infinite;
     }
@@ -77,14 +77,14 @@
       position: relative;
       overflow: hidden;
       color: var(--ink);
-      background: radial-gradient(125% 150% at 16% -12%, #15425f 0%, #0b1733 46%, #070d1f 100%)
+      background: radial-gradient(125% 150% at 16% -12%, #16412a 0%, #102018 46%, #0a140e 100%)
     }
     .hero::after {
       content: "";
       position: absolute; inset: 0; opacity: .6; pointer-events: none;
       background:
-        radial-gradient(120px 120px at 14% 28%, rgba(45,212,191,.18), transparent 70%),
-        radial-gradient(150px 150px at 84% 20%, rgba(251,138,126,.14), transparent 70%),
+        radial-gradient(120px 120px at 14% 28%, rgba(78,184,106,.18), transparent 70%),
+        radial-gradient(150px 150px at 84% 20%, rgba(201,138,76,.14), transparent 70%),
         radial-gradient(140px 140px at 60% 96%, rgba(255,210,74,.10), transparent 70%)
     }
     .hero .wrap { position: relative; z-index: 1; padding: 66px 22px 60px }
@@ -92,13 +92,13 @@
     .badge {
       display: inline-flex; align-items: center; gap: 8px;
       font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-      color: #5eead4; background: rgba(255, 255, 255, .06); border: 1px solid var(--line);
+      color: #7fe096; background: rgba(255, 255, 255, .06); border: 1px solid var(--line);
       padding: 6px 13px; border-radius: 999px
     }
 
     .hero h1 {
       font-size: clamp(2.2rem, 5.4vw, 3.5rem); margin: 18px 0 10px; letter-spacing: -.01em;
-      background: linear-gradient(100deg, #ffffff 0%, #5eead4 55%, #fb8a7e 100%);
+      background: linear-gradient(100deg, #ffffff 0%, #7fe096 55%, #c98a4c 100%);
       -webkit-background-clip: text; background-clip: text; color: transparent;
     }
     .hero h1 .tag {
@@ -108,7 +108,7 @@
       border: 1px solid rgba(255, 255, 255, .35); border-radius: 999px; padding: 3px 10px
     }
     .hero p.lead {
-      font-size: clamp(1.05rem, 2.2vw, 1.24rem); max-width: 62ch; margin: 0 0 28px; color: #cfe0f5
+      font-size: clamp(1.05rem, 2.2vw, 1.24rem); max-width: 62ch; margin: 0 0 28px; color: #d7ecdc
     }
 
     .cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center }
@@ -120,17 +120,17 @@
     @keyframes ctaFlow { 0%,100% { background-position: 0% 50% } 50% { background-position: 100% 50% } }
     .btn-primary {
       color: #06231f;
-      background: linear-gradient(100deg, #2dd4bf, #5eead4, #2dd4bf); background-size: 200% 100%;
-      box-shadow: 0 8px 24px rgba(45, 212, 191, .3); animation: ctaFlow 6s ease infinite }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(45, 212, 191, .45) }
+      background: linear-gradient(100deg, #4eb86a, #7fe096, #4eb86a); background-size: 200% 100%;
+      box-shadow: 0 8px 24px rgba(78, 184, 106, .3); animation: ctaFlow 6s ease infinite }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(78, 184, 106, .45) }
     .btn-ghost { color: var(--ink); border: 1.5px solid rgba(255, 255, 255, .35) }
     .btn-ghost:hover { background: rgba(255, 255, 255, .08) }
-    .warm { font-size: .82rem; color: #cfe0f5; margin-top: 14px; min-height: 1.2em }
+    .warm { font-size: .82rem; color: #d7ecdc; margin-top: 14px; min-height: 1.2em }
     @media (prefers-reduced-motion: reduce) { .btn-primary { animation: none } }
 
     /* Stats strip — dark glass info-boxes */
     .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: -34px auto 0; position: relative; z-index: 2 }
-    .stat { background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%); border: 1px solid rgba(255,255,255,.10); border-radius: 14px; padding: 18px 16px; box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) }
+    .stat { background: linear-gradient(180deg, #182e20 0%, #0a140e 100%); border: 1px solid rgba(255,255,255,.10); border-radius: 14px; padding: 18px 16px; box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) }
     .stat .n { font-family: Fraunces, serif; font-weight: 700; font-size: 1.55rem; color: #ffffff }
     .stat .l { font-size: .82rem; color: var(--muted); font-weight: 500 }
 
@@ -138,14 +138,14 @@
     section.body { padding: 54px 0 10px }
     .sub { color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .78rem }
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 22px }
-    .feat { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-top: 3px solid rgba(45,212,191,.5); border-radius: 12px; padding: 20px }
+    .feat { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-top: 3px solid rgba(78,184,106,.5); border-radius: 12px; padding: 20px }
     .feat-star { border-top: 3px solid var(--gold); background: linear-gradient(180deg, rgba(255, 210, 74, .08), rgba(255,255,255,.05) 42%) }
     .feat h3 { font-size: 1.12rem; margin-bottom: 6px; color: var(--ink) }
-    .feat p { margin: 0; color: #b9c6dd; font-size: .95rem }
+    .feat p { margin: 0; color: #c2d6c8; font-size: .95rem }
 
-    .honest { margin: 40px 0; background: rgba(45, 212, 191, .07); border-left: 4px solid var(--pine); border-radius: 10px; padding: 20px 22px }
+    .honest { margin: 40px 0; background: rgba(78, 184, 106, .07); border-left: 4px solid var(--pine); border-radius: 10px; padding: 20px 22px }
     .honest h2 { font-size: 1.3rem; margin-bottom: 10px; color: var(--ink) }
-    .honest ul { margin: 0; padding-left: 18px; color: #c2cee0 }
+    .honest ul { margin: 0; padding-left: 18px; color: #c6dccc }
     .honest li { margin: 6px 0 }
 
     footer { border-top: 1px solid var(--line); padding: 26px 0 50px; color: var(--muted); font-size: .9rem }
@@ -244,9 +244,9 @@
   </section>
 
   <style>
-    .series { background: linear-gradient(180deg, #0b1733 0%, #070d1f 100%); color: #eaf2ff; padding: 56px 0; border-top: 1px solid var(--line); }
-    .series h2 { color: #eaf2ff; margin: 0; font-size: 1.6rem; }
-    .series-sub { color: #9fb0cf; margin: 8px 0 26px; max-width: 640px; }
+    .series { background: linear-gradient(180deg, #102018 0%, #0a140e 100%); color: #eaf4ec; padding: 56px 0; border-top: 1px solid var(--line); }
+    .series h2 { color: #eaf4ec; margin: 0; font-size: 1.6rem; }
+    .series-sub { color: #a4c0aa; margin: 8px 0 26px; max-width: 640px; }
     .series-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
     .series-card { display: flex; flex-direction: column; gap: 5px; padding: 22px; border-radius: 16px;
       background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: #eaf1e6;
