@@ -97,6 +97,21 @@ server <- function(input, output, session) {
   observeEvent(input$demoBtn,  ingest(load_demo(), DEMO_META$label, is_demo = TRUE))
   observeEvent(input$demoBtn2, ingest(load_demo(), DEMO_META$label, is_demo = TRUE))
 
+  # national site-picker map on the splash: dot size = stems measured, colour =
+  # forest (teal) vs shrubland (ochre). Tap a dot to load — the flagship front door.
+  local({
+    picked_site <- mapPickerServer("picker", site_table = site_table, radius_metric = "n_trees",
+      color_fn = function(st) ifelse(st$structure_type %in% "shrubland", DDL$bark, DDL$navy),
+      label_fn = function(r) sprintf(
+        "<b>%s</b> · %s, %s<br><b>%s</b> %s · <b>%s</b> species<br>tallest %sm · widest %scm",
+        r$site, r$name %||% r$site, r$state %||% "",
+        format(r$n_trees %||% 0, big.mark = ","),
+        if (identical(r$structure_type, "shrubland")) "shrubs" else "trees",
+        r$n_species %||% "?", r$tallest_m %||% "?", r$biggest_dbh_cm %||% "?"))
+    # load in the MAIN server context so ingest()'s shinyjs::hide("splash") isn't namespaced
+    observeEvent(picked_site(), { s <- picked_site(); if (!is.null(s) && nzchar(s)) load_site(s) }, ignoreInit = TRUE)
+  })
+
   pick_tree <- function(id, navigate = FALSE) {
     if (is.null(id) || is.na(id) || id == "") return()
     if (is.null(rv$snap) || !(id %in% rv$snap$individualID)) return()

@@ -58,6 +58,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}   # push to main → Connect Cloud auto-redeploys
 
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -82,21 +84,19 @@ jobs:
         run: |
           Rscript scripts/build_site_index.R
 
-      # Land the refreshed bundle on main via a PR (re-uses one branch/PR each
-      # run). Connect Cloud auto-republishes the live app when this PR merges.
-      - name: Open/update data-refresh PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          add-paths: |
-            data
-          branch: auto/data-refresh
-          delete-branch: true
-          commit-message: "data: monthly NEON vegetation-structure refresh"
-          title: "data: monthly NEON refresh"
-          body: |
-            Automated monthly refresh of NEON Vegetation structure (`DP1.10098.001`)
-            → `data/sites/*.rds` + `data/site_index.rds`.
-
-            Merging this PR to `main` triggers Posit Connect Cloud to auto-republish
-            the live app from the refreshed bundles.
-          labels: automated, data
+      # Commit + push the refreshed bundle DIRECTLY to main — THIS is the deploy:
+      # the push makes Connect Cloud auto-republish (no human merge in the loop,
+      # matching the Small Mammal / Plant / Beetle siblings). Guarded so it no-ops
+      # cleanly when nothing changed.
+      - name: Commit & push refreshed bundles to main
+        run: |
+          git config user.name  "neon-data-bot"
+          git config user.email "neon-data-bot@users.noreply.github.com"
+          git add -A data
+          if git diff --cached --quiet; then
+            echo "No data changes — nothing to commit or deploy."
+          else
+            git commit -m "data: monthly NEON vegetation-structure refresh [bot]"
+            git push origin HEAD:main
+            echo "Pushed refreshed bundles to main — Connect Cloud will redeploy."
+          fi

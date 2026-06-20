@@ -15,6 +15,7 @@ suppressPackageStartupMessages({
 source("R/site_metadata.R", local = FALSE)
 source("R/veg_helpers.R", local = FALSE)
 source("R/report_pdf.R", local = FALSE)
+source("R/map_picker.R", local = FALSE)   # reusable national site-picker map (flagship front door)
 
 NEON_DPID <- "DP1.10098.001"   # Vegetation structure
 .NEON_PKG <- paste0("neon", "Utilities")
