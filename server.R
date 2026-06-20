@@ -211,10 +211,33 @@ server <- function(input, output, session) {
     has_ha <- "stems_ha" %in% names(sc) && any(is.finite(sc$stems_ha))
     sc$yval <- if (has_ha) sc$stems_ha else sc$stems
     ylab <- if (has_ha) "Live stems / ha" else "Live stems (sampled)"
-    plot_ly(sc, x = ~cls, y = ~yval, type = "bar", marker = list(color = DDL$green),
-      hovertemplate = paste0("%{x} cm ", sp$size_lab, "<br>%{y} ", if (has_ha) "stems/ha" else "stems", "<extra></extra>")) %>%
-      plotly_theme(legend = FALSE) %>%
-      plotly::layout(showlegend = FALSE, xaxis = list(title = paste0(if (identical(sp$type,"shrubland")) "Basal diameter" else "Diameter", " class (cm ", sp$size_lab, ")")), yaxis = list(title = ylab))
+    forest <- !identical(sp$type, "shrubland")
+    p <- plot_ly(sc, x = ~cls, y = ~yval, type = "bar", name = "observed", marker = list(color = DDL$green),
+      hovertemplate = paste0("%{x} cm ", sp$size_lab, "<br>%{y} ", if (has_ha) "stems/ha" else "stems", "<extra></extra>"))
+    # FOREST only: overlay the expected reverse-J (de Liocourt negative-exponential)
+    # decline, fit log-linearly to the populated classes and drawn across ALL of
+    # them — so a recruitment gap shows as bars sitting BELOW the smooth reference.
+    # Shrublands use basal-diameter classes that don't follow de Liocourt, so it's
+    # omitted there (the insight text already characterises their shape).
+    if (forest) {
+      sc$idx <- seq_len(nrow(sc))
+      d <- sc[is.finite(sc$yval) & sc$yval > 0, , drop = FALSE]
+      if (nrow(d) >= 3) {
+        fit <- try(stats::lm(log(yval) ~ idx, data = d), silent = TRUE)
+        if (!inherits(fit, "try-error")) {
+          sc$exp <- exp(as.numeric(stats::predict(fit, sc)))
+          p <- p %>% add_trace(data = sc, x = ~cls, y = ~exp, type = "scatter", mode = "lines",
+            name = "expected reverse-J", inherit = FALSE,
+            line = list(color = DDL$bark, width = 2.5, dash = "dash"),
+            hovertemplate = paste0("expected reverse-J<br>~%{y:.0f} ", if (has_ha) "stems/ha" else "stems", "<extra></extra>"))
+        }
+      }
+    }
+    p %>% plotly_theme(legend = forest) %>%
+      plotly::layout(showlegend = forest,
+        legend = list(orientation = "h", y = 1.08, x = 0),
+        xaxis = list(title = paste0(if (forest) "Diameter" else "Basal diameter", " class (cm ", sp$size_lab, ")")),
+        yaxis = list(title = ylab))
   })
   output$sizeInsight <- renderUI({
     sp <- SP(); sc <- size_class(rv$snap, NULL, sp); req(!is.null(sc))
