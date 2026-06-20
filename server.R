@@ -97,20 +97,101 @@ server <- function(input, output, session) {
   observeEvent(input$demoBtn,  ingest(load_demo(), DEMO_META$label, is_demo = TRUE))
   observeEvent(input$demoBtn2, ingest(load_demo(), DEMO_META$label, is_demo = TRUE))
 
+  # ---- the site-choice popup + "About this site" card --------------------
+  # Tapping a dot no longer auto-loads. It opens a small popup anchored on the
+  # dot offering a CLEAR choice: "Explore this site" (loads the record) or
+  # "About this site" (an instant info card) — mirroring the flagship Small
+  # Mammal Tracker. Both built from the clicked site code.
+  site_popup_html <- function(row) {
+    code  <- row$site[1]
+    shrub <- identical(row$structure_type[1], "shrubland")
+    emoji <- if (shrub) "\U0001F33F" else "\U0001F333"
+    noun  <- if (shrub) "shrubs" else "trees"
+    where <- paste(stats::na.omit(c(as.character(row$name[1]), as.character(row$state[1]))),
+                   collapse = ", ")
+    size_line <- if (!is.na(row$tallest_m[1]) || !is.na(row$biggest_dbh_cm[1]))
+      sprintf("<div class='sp-years'>tallest %sm &middot; widest %scm</div>",
+              row$tallest_m[1] %||% "?", row$biggest_dbh_cm[1] %||% "?") else ""
+    htmltools::HTML(sprintf(
+      "<div class='pm-pop site-pop'>
+         <div class='pm-pop-t'>%s %s <span class='sp-code'>(%s)</span></div>
+         <div class='pm-pop-s'>%s</div>
+         <div class='pm-pop-n'><b>%s</b> %s &middot; <b>%s</b> species</div>
+         %s
+         <div class='sp-actions'>
+           <button type='button' class='sp-btn sp-go' onclick=\"smtLoadStart('%s \\u2014 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});\">Explore this site &rarr;</button>
+           <button type='button' class='sp-btn sp-info' onclick=\"Shiny.setInputValue('siteInfo','%s',{priority:'event'});\">About this site</button>
+         </div>
+       </div>",
+      emoji, row$name[1] %||% code, code, where,
+      format(row$n_trees[1] %||% 0, big.mark = ","), noun, row$n_species[1] %||% "?",
+      size_line, gsub("'", "", row$name[1] %||% code), code, code))
+  }
+
+  site_info_modal <- function(code) {
+    row <- site_table[site_table$site == code, , drop = FALSE]
+    if (is.null(row) || !nrow(row))
+      return(modalDialog(title = "Site info", easyClose = TRUE, footer = modalButton("Close"),
+                         p("No details are available for this site.")))
+    dash   <- function(x) if (length(x) == 0 || is.na(x) || !nzchar(as.character(x))) "—" else as.character(x)
+    shrub  <- identical(row$structure_type[1], "shrubland")
+    emoji  <- if (shrub) "\U0001F33F" else "\U0001F333"
+    noun   <- if (shrub) "shrubs" else "trees"
+    coords <- if (!is.na(row$lat[1]) && !is.na(row$lng[1]))
+      sprintf("%.3f, %.3f", row$lat[1], row$lng[1]) else "—"
+    bio    <- site_bio(code)
+    stat <- function(v, lab) div(class = "si-stat",
+      div(class = "si-stat-n", if (is.null(v) || is.na(v)) "—" else format(v, big.mark = ",")),
+      div(class = "si-stat-l", lab))
+    modalDialog(
+      title = HTML(sprintf("%s %s <span class='si-code'>(%s)</span>", emoji, dash(row$name[1]), code)),
+      easyClose = TRUE, size = "m",
+      footer = tagList(
+        modalButton("Close"),
+        tags$button(type = "button", class = "btn btn-primary",
+          onclick = sprintf("smtLoadStart('%s \\u2014 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});",
+                            gsub("'", "\\\\'", dash(row$name[1])), code),
+          HTML("Explore this site&rsquo;s data &rarr;"))),
+      div(class = "site-info",
+        div(class = "si-sec",
+          div(class = "si-h", "Where"),
+          div(class = "si-row", dash(row$state[1]), " · NEON ", dash(row$domain[1])),
+          if (!is.null(bio)) div(class = "si-row si-bio", bio),
+          div(class = "si-coords", bs_icon("geo-alt"), " ", coords)),
+        div(class = "si-sec",
+          div(class = "si-h", "What's standing here"),
+          div(class = "si-stats",
+            stat(row$n_trees[1], noun),
+            stat(row$n_species[1], "species")),
+          div(class = "si-row",
+            "Tallest ", dash(row$tallest_m[1]), "m · widest ", dash(row$biggest_dbh_cm[1]), "cm")),
+        div(class = "si-sec",
+          div(class = "si-h", "Structure"),
+          div(class = "si-row si-fam",
+            if (shrub) "Shrubland — basal-diameter sizing" else "Forest — DBH sizing"))))
+  }
+
   # national site-picker map on the splash: dot size = stems measured, colour =
-  # forest (teal) vs shrubland (ochre). Tap a dot to load — the flagship front door.
+  # forest (teal) vs shrubland (ochre). Tap a dot to OPEN the Explore | About
+  # popup — the flagship front door. The load now comes from the popup's Explore
+  # button (input$siteExplore), so the module no longer drives picked().
   local({
-    picked_site <- mapPickerServer("picker", site_table = site_table, radius_metric = "n_trees",
+    mapPickerServer("picker", site_table = site_table, radius_metric = "n_trees",
       color_fn = function(st) ifelse(st$structure_type %in% "shrubland", DDL$bark, DDL$navy),
       label_fn = function(r) sprintf(
-        "<b>%s</b> · %s, %s<br><b>%s</b> %s · <b>%s</b> species<br>tallest %sm · widest %scm",
+        "<b>%s</b> · %s, %s<br><b>%s</b> %s · <b>%s</b> species<br>tallest %sm · widest %scm<br><span style='color:#2f8fc4;font-weight:700'>Tap for site options</span>",
         r$site, r$name %||% r$site, r$state %||% "",
         format(r$n_trees %||% 0, big.mark = ","),
         if (identical(r$structure_type, "shrubland")) "shrubs" else "trees",
-        r$n_species %||% "?", r$tallest_m %||% "?", r$biggest_dbh_cm %||% "?"))
-    # load in the MAIN server context so ingest()'s shinyjs::hide("splash") isn't namespaced
-    observeEvent(picked_site(), { s <- picked_site(); if (!is.null(s) && nzchar(s)) load_site(s) }, ignoreInit = TRUE)
+        r$n_species %||% "?", r$tallest_m %||% "?", r$biggest_dbh_cm %||% "?"),
+      popup_fn = site_popup_html)
   })
+
+  # "Explore this site" (popup button OR About-modal footer button) -> load it.
+  # Runs in the MAIN server context so ingest()'s shinyjs::hide("splash") isn't namespaced.
+  observeEvent(input$siteExplore, { removeModal(); load_site(input$siteExplore) })
+  # "About this site" -> instant info card (no bundle load)
+  observeEvent(input$siteInfo, showModal(site_info_modal(input$siteInfo)))
 
   pick_tree <- function(id, navigate = FALSE) {
     if (is.null(id) || is.na(id) || id == "") return()
