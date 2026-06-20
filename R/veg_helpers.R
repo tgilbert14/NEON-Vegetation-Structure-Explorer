@@ -134,8 +134,17 @@ live_only <- function(d) { if (is.null(d) || !nrow(d)) return(d); d[d$live %in% 
 # doesn't dominate. Live stems with a real size only. Basal area uses the
 # paradigm's diameter — DBH for trees, basal diameter for shrubs (basal cover).
 # ---------------------------------------------------------------------------
-stand_by_plot <- function(snap, plots, spec = SIZE_FOREST) {
+stand_by_plot <- function(snap, plots, spec = SIZE_FOREST, plot_types = NULL) {
   if (is.null(snap) || !nrow(snap)) return(NULL)
+  # Optional design-based path: restrict to a plotType stratum (e.g. "distributed",
+  # the spatially-balanced random design that underpins an UNBIASED site mean) so the
+  # distributed-only estimate is one argument away, not a re-derivation. Default NULL
+  # keeps the shipped tower+distributed pooled behaviour untouched.
+  if (!is.null(plot_types) && "plotType" %in% names(plots)) {
+    keep_pl <- plots$plotID[plots$plotType %in% plot_types]
+    snap <- snap[snap$plotID %in% keep_pl, , drop = FALSE]
+    if (!nrow(snap)) return(NULL)
+  }
   s <- woody_only(live_only(snap), spec)
   if (is.null(s) || !nrow(s)) return(NULL)
   s$.d <- s[[spec$col]]
@@ -154,8 +163,8 @@ stand_by_plot <- function(snap, plots, spec = SIZE_FOREST) {
   per$density_ha <- per$stems / per$area_ha
   per
 }
-stand_site <- function(snap, plots, spec = SIZE_FOREST) {
-  per <- stand_by_plot(snap, plots, spec); if (is.null(per)) return(NULL)
+stand_site <- function(snap, plots, spec = SIZE_FOREST, plot_types = NULL) {
+  per <- stand_by_plot(snap, plots, spec, plot_types); if (is.null(per)) return(NULL)
   n <- nrow(per)
   se <- function(x) if (n > 1) stats::sd(x, na.rm = TRUE) / sqrt(n) else NA_real_
   list(ba_ha = round(mean(per$ba_ha, na.rm = TRUE), 1),         # plot = sampling unit (equal weight)
@@ -214,6 +223,11 @@ tree_growth <- function(trees, spec = SIZE_FOREST) {
   # ...and only PERMANENT individualIDs (TEMP.PLA ids are re-issued = different stems)
   if (!is.null(g) && "permanent" %in% names(g)) g <- g[g$permanent %in% TRUE, , drop = FALSE]
   if (is.null(g) || !nrow(g)) return(NULL)
+  # single-census / all-dates-missing cohorts (WOOD/DCFS/NOGP) have no first-vs-last
+  # span to take — bail before the which.min/which.max date reductions so they can't
+  # emit "no non-missing arguments to max; returning -Inf" warnings into the logs.
+  g <- g[!is.na(g$date), , drop = FALSE]
+  if (!nrow(g) || length(unique(g$date)) < 2) return(NULL)
   has_mh <- "measurementHeight" %in% names(g)
   # Collapse multi-bole stems to ONE equivalent whole-plant diameter per (plant, date)
   # BEFORE the first/last comparison, so the increment is like-for-like. D_eq =
@@ -353,8 +367,14 @@ tidy_trees_export <- function(trees) {
 }
 plots_export <- function(snap, plots, spec = SIZE_FOREST) {
   ps <- plot_summary_veg(snap, plots, spec); if (is.null(ps)) return(NULL)
+  # Self-identify the paradigm PER ROW so a pooled file (rbind of two sites'
+  # plots.csv) never silently mixes physically different measurements: forest
+  # ba_m2_ha is bole cross-section at breast height (DBH), shrubland ba_m2_ha is
+  # basal COVER at the stem base — a ~500x-ratio difference in kind, not degree.
+  size_metric <- if (identical(spec$type, "shrubland")) "basal-diameter basal cover (stem base)" else "bole-DBH basal area (breast height)"
   data.frame(
     plotID = ps$plotID, plotType = ps$plotType, nlcdClass = ps$nlcdClass,
+    structure_type = spec$type, size_metric = size_metric,
     lat = ps$lat, lng = ps$lng, sampled_area_m2 = ps$area_use,
     ba_m2_ha = ps$ba_ha, density_stems_ha = ps$density_ha,
     n_species = ps$n_species, tallest_m = ps$tallest, biggest_diam_cm = ps$biggest,
@@ -371,8 +391,8 @@ veg_codebook <- function() {
     c("growthForm","trees_long","character","single bole tree/multi-bole tree/small tree/single shrub/small shrub/sapling/...","NEON growth form; forest stand metrics scope to tree forms, shrubland to shrub forms."),
     c("date","trees_long","date (ISO)","YYYY-MM-DD","Measurement date of this bout."),
     c("year","trees_long","integer","","Calendar year of the bout."),
-    c("dbh_cm","trees_long","numeric","cm","Diameter at breast height (~130 cm) — trees; ~empty for short desert shrubs."),
-    c("basal_stem_diam_cm","trees_long","numeric","cm","Basal stem diameter (near ground) — the size measurement for shrubs / short stems."),
+    c("dbh_cm","trees_long","numeric","cm","Diameter at breast height (~130 cm) — the FOREST-paradigm size measurement. NA = not measured under this site's paradigm (shrubland stems carry basal_stem_diam_cm instead), so it is structurally NA, not missing data — e.g. ~28% NA even at a forest site like HARV."),
+    c("basal_stem_diam_cm","trees_long","numeric","cm","Basal stem diameter (near ground) — the SHRUBLAND-paradigm size measurement for shrubs / short stems. NA = not measured under this site's paradigm (forest stems carry dbh_cm instead), so it is structurally NA, not missing data — e.g. ~79% NA at a forest site like HARV."),
     c("height_m","trees_long","numeric","m","Plant height; often NA (not every stem is measured for height)."),
     c("max_crown_diam_m","trees_long","numeric","m","Maximum crown/canopy diameter (where measured)."),
     c("measurement_height_cm","trees_long","numeric","cm","Height on the stem at which dbh_cm was taken; a change makes an increment apples-to-oranges."),
@@ -382,10 +402,19 @@ veg_codebook <- function() {
     c("live","trees_long","logical","TRUE/FALSE","Derived = grepl('^Live', plant_status)."),
     c("permanent","trees_long","logical","TRUE/FALSE","Derived = id starts with 'NEON'; growth metrics use permanent ids only."),
     c("is_species","trees_long","logical","TRUE/FALSE","Derived = identified to species or finer (unambiguous)."),
+    c("plotType","plots","character","distributed/tower","NEON plot design class — distributed (random placement, the basis for the unbiased site estimate) vs tower (clustered near the flux tower). Split by plotType before pooling for a design-based estimate."),
+    c("structure_type","plots","character","forest/shrubland","The site's measurement paradigm — forest (woody plants sized by DBH at breast height) vs shrubland (sized by basal stem diameter at the base). Tags every row so a pooled plots.csv from multiple sites self-identifies which paradigm produced its ba_m2_ha / biggest_diam_cm — these are NOT the same measurement across the fork (see ba_m2_ha)."),
+    c("size_metric","plots","character","bole-DBH basal area (breast height)/basal-diameter basal cover (stem base)","Plain-language name of the physical quantity ba_m2_ha represents for this row, set by structure_type. Forest = bole cross-section at ~130 cm; shrubland = basal cover at the stem base."),
+    c("nlcdClass","plots","character","","NEON land-cover class (NLCD) at the plot."),
+    c("lat","plots","numeric","decimal degrees","Plot centroid latitude (WGS84 decimal degrees)."),
+    c("lng","plots","numeric","decimal degrees","Plot centroid longitude (WGS84 decimal degrees)."),
     c("sampled_area_m2","plots","numeric","m^2","Sampled area for the paradigm — totalSampledAreaTrees (forest) or totalSampledAreaShrubSapling (shrubland) — the per-hectare denominator."),
-    c("ba_m2_ha","plots","numeric","m^2/ha","Live basal area per hectare (basal cover) for this plot."),
+    c("ba_m2_ha","plots","numeric","m^2/ha","Live basal area per hectare for this plot. JOIN HAZARD: this is NOT one comparable measurement across sites — at a forest site it is bole cross-section at breast height (DBH), at a shrubland site it is basal COVER at the stem base, a ~500x-ratio difference in kind. Use the structure_type / size_metric column on the SAME row to know which; never pool ba_m2_ha across paradigms without splitting on structure_type."),
     c("density_stems_ha","plots","numeric","stems/ha","Live stem density per hectare for this plot."),
-    c("n_species","plots","integer","","Live species count in the plot."))
+    c("n_species","plots","integer","","Live species count in the plot."),
+    c("tallest_m","plots","numeric","m","Height of the tallest live plant in the plot."),
+    c("biggest_diam_cm","plots","numeric","cm","Largest live stem diameter in the plot — DBH for forest, basal diameter for shrubland."),
+    c("dominant_species","plots","character","","Live plant with the largest diameter in the plot (the plot's size-dominant taxon)."))
   out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
   names(out) <- c("column", "table", "type", "allowed_values", "definition"); out
 }
@@ -421,10 +450,10 @@ status_summary <- function(snap, spec = SIZE_FOREST) {
 # Compound ANNUAL mortality rate (Sheil & May) — the forestry standard, distinct
 # from the snapshot live/dead ratio. Cohort = permanent woody individuals LIVE at
 # their first census with a KNOWN fate (live or dead, not lost-track) at their
-# last; m = 1 - (1 - deaths/N0)^(1/t) annualised at the median census interval,
-# with a binomial CI. NULL (→ snapshot only) when <2 censuses or the cohort is
-# too thin (<10) to report honestly. Mixed intervals make t a representative
-# median, not exact — the UI says so.
+# last; m = 1 - (1 - deaths/N0)^(1/t) annualised over the MEAN per-plant exposure
+# t = Σtᵢ/N₀ (each individual weighted by its own census interval — stricter than a
+# single median t when cadences are mixed), with a binomial CI. NULL (→ snapshot
+# only) when <2 censuses or the cohort is too thin (<10) to report honestly.
 # ---------------------------------------------------------------------------
 stand_mortality <- function(trees, spec = SIZE_FOREST) {
   if (is.null(trees) || !nrow(trees) || !"date" %in% names(trees)) return(NULL)
@@ -432,6 +461,10 @@ stand_mortality <- function(trees, spec = SIZE_FOREST) {
   d <- trees[(trees$growthForm %in% forms | is.na(trees$growthForm)) & !is.na(trees$date), , drop = FALSE]
   if ("permanent" %in% names(d)) d <- d[d$permanent %in% TRUE, , drop = FALSE]
   if (is.null(d) || !nrow(d) || !"plantStatus" %in% names(d)) return(NULL)
+  # single-census sites (one date for every plant) carry no first-vs-last fate —
+  # bail before the grouped which.min/which.max date reductions so an empty cohort
+  # can't leak a -Inf max() warning into the logs.
+  if (length(unique(d$date)) < 2) return(NULL)
   d$.live <- grepl("^Live", d$plantStatus)
   d$.dead <- grepl("[Dd]ead|Downed", d$plantStatus)
   per <- d %>% dplyr::group_by(.data$individualID) %>%
@@ -444,7 +477,12 @@ stand_mortality <- function(trees, spec = SIZE_FOREST) {
   coh <- per[per$first_live %in% TRUE & per$t > 0 & (per$last_live %in% TRUE | per$last_dead %in% TRUE), , drop = FALSE]
   n0 <- nrow(coh); if (n0 < 10) return(NULL)
   deaths <- sum(coh$last_dead %in% TRUE & !(coh$last_live %in% TRUE))
-  t <- stats::median(coh$t); if (!is.finite(t) || t <= 0) return(NULL)
+  # Annualise over each plant's OWN interval and pool (the stricter Sheil & May
+  # form): use mean per-plant exposure t̄ = Σtᵢ/N₀ as the compound exponent rather
+  # than a single median census interval. When plots run mixed cadences (1-yr tower
+  # vs 5-yr distributed) a lone median t can bias the pooled annual rate; mean
+  # exposure weights every individual by the interval it was actually observed over.
+  t <- mean(coh$t, na.rm = TRUE); if (!is.finite(t) || t <= 0) return(NULL)
   ann <- function(q) 100 * (1 - (1 - q)^(1 / t))
   bt <- tryCatch(stats::binom.test(deaths, n0)$conf.int, error = function(e) c(NA_real_, NA_real_))
   list(rate_pct = round(ann(deaths / n0), 2), n0 = n0, deaths = deaths, t_yrs = round(t, 1),

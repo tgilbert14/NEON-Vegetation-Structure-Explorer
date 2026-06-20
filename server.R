@@ -378,9 +378,27 @@ server <- function(input, output, session) {
     dom_txt <- if (!is.null(ss) && nrow(ss) && is.finite(ss$ba_m2[1]) && sum(ss$ba_m2, na.rm = TRUE) > 0)
       sprintf(" Dominated by <b><i>%s</i></b> (<b>%.0f%%</b> of basal area).",
               ss$scientificName[1], 100 * ss$ba_m2[1] / sum(ss$ba_m2, na.rm = TRUE)) else ""
+    # Design-based path, behind a click only: when BOTH plot designs are present, the
+    # shipped number pools them — offer the distributed-only (spatially-balanced random)
+    # mean, the basis for an UNBIASED site estimate, inside a popover so the default view
+    # stays clean. Omitted entirely at single-design sites (nothing to disclose).
+    design_pop <- NULL
+    types <- unique(rv$plots$plotType[rv$plots$plotID %in% rv$snap$plotID])
+    if (sum(c("distributed", "tower") %in% types) == 2) {
+      dst <- stand_site(rv$snap, rv$plots, sp, plot_types = "distributed")
+      if (!is.null(dst)) design_pop <- bslib::popover(
+        tags$span(class = "info-dot", bs_icon("info-circle")),
+        title = "Design-based estimate",
+        p("The headline pools ", tags$b("tower"), " (clustered at the flux tower) and ", tags$b("distributed"),
+          " (spatially-balanced random) plots. For an unbiased site mean, the ", tags$b("distributed-only"), " stratum is:"),
+        p(HTML(sprintf("<b>%s m²/ha</b>%s basal area, <b>%s stems/ha</b> across <b>%d</b> distributed plots.",
+          dst$ba_ha, if (is.finite(dst$ba_se)) sprintf(" ±%s SE", dst$ba_se) else "",
+          format(dst$density_ha, big.mark = ","), dst$n_plots))))
+    }
     insight_banner("calculator", tone = "gold",
       HTML(sprintf("%sAcross <b>%d</b> sampled plots (%s): <span class='ci-hero'>%s m²/ha</span>%s basal area, <b>%s stems/ha</b>%s, quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± SE across plots (the sampling unit) — a stand fingerprint, not a wall-to-wall inventory.</span>",
-        pre, st$n_plots, scope, st$ba_ha, se_ba, format(st$density_ha, big.mark = ","), se_d, sp$size_lab, st$qmd, dom_txt)))
+        pre, st$n_plots, scope, st$ba_ha, se_ba, format(st$density_ha, big.mark = ","), se_d, sp$size_lab, st$qmd, dom_txt)),
+      design_pop)
   })
 
   # ---- GROWTH & MORTALITY -------------------------------------------------
@@ -490,7 +508,7 @@ server <- function(input, output, session) {
       HTML("<b>Annual mortality:</b> needs ≥2 censuses of a big-enough cohort — not estimable here yet, so only the live/standing-dead snapshot below is shown.")))
     ci <- if (is.finite(mr$lo) && is.finite(mr$hi)) sprintf(" (95%% CI %.2f–%.2f)", mr$lo, mr$hi) else ""
     insight_banner("heart-pulse", tone = "pine",
-      HTML(sprintf("Compound <b>annual mortality ≈ <span class='ci-hero'>%.2f%%/yr</span></b>%s — <b>%s</b> of <b>%s</b> tracked %s died over a median ~%.1f-yr interval. The forestry-standard rate; the breakdown below is a point-in-time snapshot, not a rate.",
+      HTML(sprintf("Compound <b>annual mortality ≈ <span class='ci-hero'>%.2f%%/yr</span></b>%s — <b>%s</b> of <b>%s</b> tracked %s died over a mean ~%.1f-yr interval. The forestry-standard rate; the breakdown below is a point-in-time snapshot, not a rate.",
         mr$rate_pct, ci, format(mr$deaths, big.mark = ","), format(mr$n0, big.mark = ","), sp$nouns, mr$t_yrs)))
   })
 
@@ -930,26 +948,32 @@ server <- function(input, output, session) {
     a <- isolate(compare_stats(input$cmpA)); b <- isolate(compare_stats(input$cmpB))
     if (is.null(a) || is.null(b) || is.null(a$st) || is.null(b$st))
       return(div(class = "compare-hint", bs_icon("exclamation-triangle"), " One of those sites isn't bundled with usable plot data."))
-    rowf <- function(lab, va, vb, fmt = "%s") {
+    mixed <- !identical(a$type, b$type)
+    rowf <- function(lab, va, vb, fmt = "%s", comparable = TRUE) {
       na <- suppressWarnings(as.numeric(va)); nb <- suppressWarnings(as.numeric(vb))
-      wa <- is.finite(na) && is.finite(nb) && na > nb; wb <- is.finite(na) && is.finite(nb) && nb > na
+      # Suppress the winner-highlight on diameter-based rows across the paradigm fork:
+      # forest DBH basal area is bole stocking at breast height, shrubland is basal
+      # cover at the base — a ~500x measurement-height artifact, not a real "more".
+      # Omitting the highlight (vs adding a caveat per row) keeps the table clean.
+      wa <- comparable && is.finite(na) && is.finite(nb) && na > nb
+      wb <- comparable && is.finite(na) && is.finite(nb) && nb > na
       tags$tr(tags$td(class = "cmp-lab", lab),
         tags$td(class = paste("cmp-val", if (wa) "cmp-win"), sprintf(fmt, va)),
         tags$td(class = paste("cmp-val", if (wb) "cmp-win"), sprintf(fmt, vb)))
     }
-    mixed <- !identical(a$type, b$type)
     sizelab <- if (mixed) "stem ø" else a$size_lab
+    cmp <- !mixed   # diameter-based rows are only comparable within one paradigm
     tbl <- tags$table(class = "compare-table",
       tags$thead(tags$tr(tags$th(""),
         tags$th(div(class = "cmp-head", a$site, tags$small(sprintf(" · %s", a$type)))),
         tags$th(div(class = "cmp-head", b$site, tags$small(sprintf(" · %s", b$type)))))),
       tags$tbody(
-        rowf("Basal area (m²/ha)", a$st$ba_ha, b$st$ba_ha),
+        rowf("Basal area (m²/ha)", a$st$ba_ha, b$st$ba_ha, comparable = cmp),
         rowf("Stem density (/ha)", a$st$density_ha, b$st$density_ha),
-        rowf(sprintf("Quadratic mean %s (cm)", sizelab), a$st$qmd, b$st$qmd),
+        rowf(sprintf("Quadratic mean %s (cm)", sizelab), a$st$qmd, b$st$qmd, comparable = cmp),
         rowf("Species", a$n_species, b$n_species),
         rowf("Tallest (m)", a$tallest, b$tallest),
-        rowf(sprintf("Biggest %s (cm)", sizelab), a$biggest, b$biggest),
+        rowf(sprintf("Biggest %s (cm)", sizelab), a$biggest, b$biggest, comparable = cmp),
         rowf("Plots sampled", a$st$n_plots, b$st$n_plots)))
     div(tbl, div(class = "compare-foot", bs_icon("info-circle"),
       if (mixed) " Note: one site is a forest (sized by DBH) and one a shrubland (sized by basal diameter) — size rows aren't directly comparable. " else " ",
