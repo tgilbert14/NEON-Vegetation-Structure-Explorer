@@ -329,6 +329,58 @@ server <- function(input, output, session) {
     DT::datatable(df, rownames = FALSE, options = list(pageLength = 8, dom = "tp", order = list(list(4, "desc"))))
   })
 
+  # growth-allometry: does annual diameter increment slow as plants get bigger?
+  # (the structural twin of the mammal Size Lab — current size vs growth rate.)
+  output$growthSize <- renderPlotly({
+    sp <- SP(); g <- tree_growth(rv$trees, sp)
+    if (is.null(g) || !nrow(g)) return(note_plot(sprintf("No remeasured %s yet", sp$nouns)))
+    g <- g[is.finite(g$d1) & g$d1 > 0 & is.finite(g$growth_cm_yr) &
+           g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2 & !g$mh_change, , drop = FALSE]
+    if (nrow(g) < 5) return(note_plot(sprintf("Not enough remeasured %s for a size–growth view", sp$nouns)))
+    topsp <- names(sort(table(g$scientificName[!is.na(g$scientificName)]), decreasing = TRUE))
+    topsp <- topsp[seq_len(min(6, length(topsp)))]
+    g$grp <- ifelse(g$scientificName %in% topsp, g$scientificName, "other species")
+    pal <- rv$pal; p <- plot_ly()
+    for (s in unique(g$grp)) {
+      gs <- g[g$grp == s, ]; col <- if (!is.null(pal) && s %in% names(pal)) pal[[s]] else DDL$muted
+      p <- p %>% add_trace(data = gs, x = ~d1, y = ~growth_cm_yr, type = "scatter", mode = "markers",
+        name = s, marker = list(size = 7, color = col, opacity = 0.7, line = list(color = "#fff", width = 0.5)),
+        hovertemplate = paste0("<b>", s, "</b><br>%{x:.0f} cm now<br>%{y:.2f} cm/yr<extra></extra>"))
+    }
+    # gated trend line: drawn ONLY when n & |Spearman r| & p clear the bar (honest —
+    # no fabricated line where the relationship isn't there)
+    ct <- suppressWarnings(stats::cor.test(g$d1, g$growth_cm_yr, method = "spearman"))
+    sub <- if (nrow(g) >= 12 && is.finite(ct$estimate) && abs(ct$estimate) >= 0.15 &&
+               is.finite(ct$p.value) && ct$p.value < 0.05) {
+      fit <- stats::lm(growth_cm_yr ~ d1, data = g)
+      xs <- seq(min(g$d1), max(g$d1), length.out = 50)
+      yh <- as.numeric(stats::predict(fit, data.frame(d1 = xs)))
+      p <- p %>% add_trace(x = xs, y = yh, type = "scatter", mode = "lines", inherit = FALSE,
+        name = "trend", line = list(color = DDL$ink, width = 2.5, dash = "dash"),
+        hovertemplate = "trend<extra></extra>")
+      sprintf("Trend: %s (Spearman r = %+.2f, p = %.3f, n = %d)",
+        if (ct$estimate < 0) "growth slows as plants get bigger" else "growth rises with size",
+        ct$estimate, ct$p.value, nrow(g))
+    } else sprintf("No clear size–growth trend at this site — shown as scatter only (n = %d)", nrow(g))
+    p %>% plotly_theme(legend = TRUE) %>%
+      plotly::layout(legend = list(orientation = "h", y = -0.25),
+        title = list(text = sub, x = 0, xref = "paper", font = list(size = 12, color = DDL$muted)),
+        margin = list(t = 46),
+        xaxis = list(title = paste0(if (identical(sp$type, "shrubland")) "Basal diameter" else "DBH", " now (cm)")),
+        yaxis = list(title = "Growth (cm/yr)", zeroline = TRUE))
+  })
+
+  # compound ANNUAL mortality rate (distinct from the snapshot pie)
+  output$mortalityBanner <- renderUI({
+    sp <- SP(); mr <- stand_mortality(rv$trees, sp)
+    if (is.null(mr)) return(insight_banner("info-circle", tone = "navy",
+      HTML("<b>Annual mortality:</b> needs ≥2 censuses of a big-enough cohort — not estimable here yet, so only the live/standing-dead snapshot below is shown.")))
+    ci <- if (is.finite(mr$lo) && is.finite(mr$hi)) sprintf(" (95%% CI %.2f–%.2f)", mr$lo, mr$hi) else ""
+    insight_banner("heart-pulse", tone = "pine",
+      HTML(sprintf("Compound <b>annual mortality ≈ <span class='ci-hero'>%.2f%%/yr</span></b>%s — <b>%s</b> of <b>%s</b> tracked %s died over a median ~%.1f-yr interval. The forestry-standard rate; the breakdown below is a point-in-time snapshot, not a rate.",
+        mr$rate_pct, ci, format(mr$deaths, big.mark = ","), format(mr$n0, big.mark = ","), sp$nouns, mr$t_yrs)))
+  })
+
   # ---- SIZE LAB (flagship) -----------------------------------------------
   output$labScatter <- renderPlotly({
     one <- rv$one; req(one); sp <- SP()

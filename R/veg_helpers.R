@@ -416,3 +416,38 @@ status_summary <- function(snap, spec = SIZE_FOREST) {
   out$cls <- factor(out$cls, levels = lvl)
   out[order(out$cls), , drop = FALSE]
 }
+
+# ---------------------------------------------------------------------------
+# Compound ANNUAL mortality rate (Sheil & May) — the forestry standard, distinct
+# from the snapshot live/dead ratio. Cohort = permanent woody individuals LIVE at
+# their first census with a KNOWN fate (live or dead, not lost-track) at their
+# last; m = 1 - (1 - deaths/N0)^(1/t) annualised at the median census interval,
+# with a binomial CI. NULL (→ snapshot only) when <2 censuses or the cohort is
+# too thin (<10) to report honestly. Mixed intervals make t a representative
+# median, not exact — the UI says so.
+# ---------------------------------------------------------------------------
+stand_mortality <- function(trees, spec = SIZE_FOREST) {
+  if (is.null(trees) || !nrow(trees) || !"date" %in% names(trees)) return(NULL)
+  forms <- spec$forms %||% TREE_FORMS
+  d <- trees[(trees$growthForm %in% forms | is.na(trees$growthForm)) & !is.na(trees$date), , drop = FALSE]
+  if ("permanent" %in% names(d)) d <- d[d$permanent %in% TRUE, , drop = FALSE]
+  if (is.null(d) || !nrow(d) || !"plantStatus" %in% names(d)) return(NULL)
+  d$.live <- grepl("^Live", d$plantStatus)
+  d$.dead <- grepl("[Dd]ead|Downed", d$plantStatus)
+  per <- d %>% dplyr::group_by(.data$individualID) %>%
+    dplyr::filter(dplyr::n_distinct(.data$date) >= 2) %>%
+    dplyr::summarise(
+      first_live = .data$.live[which.min(.data$date)],
+      last_live  = .data$.live[which.max(.data$date)],
+      last_dead  = .data$.dead[which.max(.data$date)],
+      t = as.numeric(max(.data$date) - min(.data$date)) / 365.25, .groups = "drop")
+  coh <- per[per$first_live %in% TRUE & per$t > 0 & (per$last_live %in% TRUE | per$last_dead %in% TRUE), , drop = FALSE]
+  n0 <- nrow(coh); if (n0 < 10) return(NULL)
+  deaths <- sum(coh$last_dead %in% TRUE & !(coh$last_live %in% TRUE))
+  t <- stats::median(coh$t); if (!is.finite(t) || t <= 0) return(NULL)
+  ann <- function(q) 100 * (1 - (1 - q)^(1 / t))
+  bt <- tryCatch(stats::binom.test(deaths, n0)$conf.int, error = function(e) c(NA_real_, NA_real_))
+  list(rate_pct = round(ann(deaths / n0), 2), n0 = n0, deaths = deaths, t_yrs = round(t, 1),
+       lo = if (is.finite(bt[1])) round(ann(bt[1]), 2) else NA_real_,
+       hi = if (is.finite(bt[2])) round(ann(bt[2]), 2) else NA_real_)
+}
