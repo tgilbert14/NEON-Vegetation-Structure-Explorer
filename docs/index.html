@@ -3,11 +3,10 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NEON Vegetation Structure Explorer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NEON Vegetation Structure — the Explorer Suite by Desert Data Labs</title>
   <meta name="description"
-    content="Explore real NEON woody-vegetation survey data across 42 sites and every biome — every tagged tree and desert shrub's diameter and height, the stand's size structure and basal area, how plants grow over the years, and a tap-to-pin Size Lab. Honest statistics, instant loads." />
-
+    content="The standing architecture of every NEON site: woody-stem density, basal area, and height structure — the slow producer floor under everything that lives there. Real NEON data across 42 sites and every biome. Honest statistics, instant loads." />
   <meta name="theme-color" content="#0a140e" />
 
   <!-- Open Graph / social card. Absolute URLs = the GitHub Pages domain for this repo. -->
@@ -25,313 +24,387 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Rubik:wght@400;500;600;700;800&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- promote to JS layout before paint so there is no flash of the fallback list -->
+  <script>document.documentElement.className += ' js';</script>
+
   <style>
     :root {
-      --parch: #0a140e;
-      --paper: #102018;
-      --ink: #eaf4ec;
-      --ink2: #d7ecdc;
-      --muted: #a4c0aa;
-      --pine: #4eb86a;
-      --pine2: #7fe096;
-      --bark: #c98a4c;
-      --gold: #ffd24a;
-      --gold-ink: #ffd24a;
-      --line: rgba(255,255,255,.12);
+      --bg-0:#0a140e; --bg-1:#102018; --bg-2:#182e20;
+      --teal:#4eb86a; --teal-rgb:78,184,106; --bright:#7fe096;
+      --coral:#c98a4c; --coral-rgb:201,138,76;
+      --gold:#ffd24a; --gold-rgb:255,210,74;
+      --ink:#eaf4ec; --dim:#a4c0aa; --line:rgba(255,255,255,.12); --card:rgba(255,255,255,.045);
+      /* vegetation-structure layer hues (accent shades, dark -> light) */
+      --clim:#2f7a48; --phen:#4eb86a; --prod:#7fe096; --cons:#c98a4c;
     }
-
     * { box-sizing: border-box }
-
-    @keyframes coverStars { to { background-position: 0 240px, 0 240px, 0 240px; } }
-
+    html,body { margin:0 }
     body {
-      margin: 0;
-      font-family: Rubik, system-ui, sans-serif;
-      color: var(--ink);
-      background: var(--parch);
-      -webkit-font-smoothing: antialiased;
-      line-height: 1.55;
-      position: relative;
+      font-family: Rubik, system-ui, sans-serif; color: var(--ink); background: var(--bg-0);
+      -webkit-font-smoothing: antialiased; line-height: 1.55; overflow-x:hidden;
     }
-    /* drifting desert-night starfield over the whole page */
-    body::before {
-      content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
-      background-repeat: repeat; background-size: 240px 240px, 240px 240px, 240px 240px;
-      background-image:
-        radial-gradient(1.4px 1.4px at 40px 60px, rgba(255,255,255,.55), transparent),
-        radial-gradient(1.3px 1.3px at 170px 120px, rgba(127,224,150,.5), transparent),
-        radial-gradient(1.5px 1.5px at 100px 200px, rgba(255,210,74,.4), transparent);
-      animation: coverStars 160s linear infinite;
-    }
-    body > * { position: relative; z-index: 1; }
-    @media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
+    h1,h2,h3 { font-family: Rubik, sans-serif; line-height: 1.12; margin:0; font-weight:800 }
+    a { color: var(--bright); text-decoration:none }
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 0 22px; position:relative; z-index:2 }
 
-    h1, h2, h3 { font-family: Fraunces, Georgia, serif; line-height: 1.12; margin: 0; font-weight: 600 }
-    a { color: var(--pine) }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 0 22px }
-
-    /* Hero — desert-night command band with a nebula glow */
-    .hero {
-      position: relative;
-      overflow: hidden;
-      color: var(--ink);
-      background: radial-gradient(125% 150% at 16% -12%, #16412a 0%, #102018 46%, #0a140e 100%)
-    }
-    .hero::after {
-      content: "";
-      position: absolute; inset: 0; opacity: .6; pointer-events: none;
+    /* ---------- desert-night / canopy sky ---------- */
+    .sky { position: fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;
       background:
-        radial-gradient(120px 120px at 14% 28%, rgba(78,184,106,.18), transparent 70%),
-        radial-gradient(150px 150px at 84% 20%, rgba(201,138,76,.14), transparent 70%),
-        radial-gradient(140px 140px at 60% 96%, rgba(255,210,74,.10), transparent 70%)
+        radial-gradient(120% 90% at 50% -8%, var(--bg-2), transparent 58%),
+        radial-gradient(140% 120% at 50% 120%, #16412a 0%, var(--bg-1) 45%, var(--bg-0) 100%); }
+    .sky::before { content:""; position:absolute; inset:-50%; opacity:.45;
+      background-repeat:repeat; background-size:240px 240px;
+      background-image:
+        radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.5), transparent),
+        radial-gradient(1.2px 1.2px at 150px 90px, rgba(127,224,150,.45), transparent),
+        radial-gradient(1.5px 1.5px at 90px 170px, rgba(255,210,74,.4), transparent);
+      animation: drift 140s linear infinite; }
+    @keyframes drift { to { transform: translateY(240px) } }
+
+    /* ---------- hero ---------- */
+    .hero { position:relative; z-index:2; padding: 46px 0 6px }
+    .brand { display:inline-flex; align-items:center; gap:10px; }
+    .brand svg { width:26px; height:26px; overflow:visible }
+    .brand .stroke { stroke:var(--teal); stroke-width:7; fill:none; stroke-linecap:round }
+    .brand .pip { fill:var(--bright) }
+    .brand b { font-weight:700; font-size:.82rem; letter-spacing:.16em; text-transform:uppercase; color:var(--dim) }
+    .eyebrow { margin-top:18px; font-family: ui-monospace,Menlo,Consolas,monospace; font-size:.72rem;
+      letter-spacing:.26em; text-transform:uppercase; color:var(--teal); }
+    .hero h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); margin:.5rem 0 .6rem; letter-spacing:-.02em;
+      background:linear-gradient(100deg,#fff 10%, var(--bright) 45%, var(--coral) 95%);
+      -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .lead { font-size: clamp(1.05rem,2.2vw,1.24rem); max-width:60ch; margin:0 0 24px; color:var(--ink) }
+    .lead b { color:var(--bright); font-weight:600 }
+
+    /* ---------- standout launch button (the one thing to click) ---------- */
+    .cta-row { display:flex; flex-wrap:wrap; gap:14px; align-items:center }
+    .launch {
+      position:relative; display:inline-flex; align-items:center; gap:11px;
+      font-weight:800; font-size:1.06rem; padding:15px 28px; border-radius:14px;
+      color:#06231f; border:1px solid rgba(255,255,255,.5); overflow:hidden; isolation:isolate;
+      background:linear-gradient(100deg, var(--bright), var(--teal) 45%, #aef0bd 80%, var(--bright));
+      background-size:220% 100%;
+      box-shadow:0 10px 34px rgba(var(--teal-rgb),.5), 0 0 0 6px rgba(var(--teal-rgb),.08);
+      transition: transform .16s ease, box-shadow .25s ease;
+      animation: ctaFlow 7s linear infinite;
     }
-    .hero .wrap { position: relative; z-index: 1; padding: 66px 22px 60px }
+    @keyframes ctaFlow { to { background-position:220% 0 } }
+    .launch::after { content:""; position:absolute; inset:0; z-index:-1; mix-blend-mode:soft-light;
+      background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%);
+      transform:translateX(-120%); transition:transform .6s ease; }
+    .launch:hover { transform: translateY(-2px) scale(1.015);
+      box-shadow:0 16px 46px rgba(var(--teal-rgb),.65), 0 0 0 6px rgba(var(--teal-rgb),.12) }
+    .launch:hover::after { transform:translateX(120%) }
+    .launch .arrow { font-size:1.1em; transition:transform .2s ease }
+    .launch:hover .arrow { transform:translateX(4px) }
+    .ghost { display:inline-flex; align-items:center; gap:8px; padding:14px 22px; border-radius:14px;
+      color:#fff; border:1.5px solid var(--line); font-weight:600; transition:background .2s, border-color .2s }
+    .ghost:hover { background:rgba(255,255,255,.07); border-color:rgba(var(--teal-rgb),.5) }
+    .warm { font-size:.82rem; color:var(--dim); margin-top:14px; min-height:1.2em }
 
-    .badge {
-      display: inline-flex; align-items: center; gap: 8px;
-      font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-      color: #7fe096; background: rgba(255, 255, 255, .06); border: 1px solid var(--line);
-      padding: 6px 13px; border-radius: 999px
+    /* ---------- the constellation (suite hub + signature motion) ---------- */
+    .constel-sec { position:relative; z-index:2; padding: 26px 0 8px }
+    .constel { position:relative; width:100%; max-width:680px; margin:0 auto;
+      aspect-ratio:1/1; max-height:74vh; }
+    .ctraces { position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:1; pointer-events:none }
+    .ctraces line { stroke:rgba(var(--teal-rgb),.5); stroke-width:1.4; stroke-linecap:round;
+      stroke-dasharray:5 9; opacity:0; transition:opacity .5s ease; }
+    .constel.lit .ctraces line { opacity:.6; animation: cascadeFlow 1.5s linear infinite; }
+    @keyframes cascadeFlow { to { stroke-dashoffset:-28 } }    /* energy flows outward from the core */
+
+    /* core = the launch */
+    .ccore {
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      z-index:4; width:var(--core,150px); height:var(--core,150px); --core:clamp(120px,21vmin,168px);
+      display:grid; place-items:center; border-radius:50%; text-align:center; color:#06231f; cursor:pointer;
+      background:radial-gradient(circle at 42% 36%, #eafff1 0%, var(--bright) 30%, var(--teal) 64%, #1f6e3e 100%);
+      border:2px solid rgba(255,255,255,.65);
+      box-shadow:0 0 0 7px rgba(var(--teal-rgb),.10), 0 0 46px 6px rgba(var(--teal-rgb),.5), inset 0 0 30px rgba(255,255,255,.4);
+      animation: corePulse 3.6s ease-in-out infinite;
     }
-
-    .hero h1 {
-      font-size: clamp(2.2rem, 5.4vw, 3.5rem); margin: 18px 0 10px; letter-spacing: -.01em;
-      background: linear-gradient(100deg, #ffffff 0%, #7fe096 55%, #c98a4c 100%);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+    @keyframes corePulse {
+      0%,100% { box-shadow:0 0 0 7px rgba(var(--teal-rgb),.10), 0 0 46px 6px rgba(var(--teal-rgb),.5), inset 0 0 30px rgba(255,255,255,.4) }
+      50% { box-shadow:0 0 0 12px rgba(var(--teal-rgb),.04), 0 0 66px 12px rgba(var(--teal-rgb),.62), inset 0 0 34px rgba(255,255,255,.5) }
     }
-    .hero h1 .tag {
-      font-family: Rubik, sans-serif; font-size: .32em; font-weight: 700; vertical-align: middle; margin-left: 12px;
-      text-transform: uppercase; letter-spacing: .12em; color: var(--ink);
-      -webkit-text-fill-color: var(--ink);
-      border: 1px solid rgba(255, 255, 255, .35); border-radius: 999px; padding: 3px 10px
+    .ccore:hover,.ccore:focus-visible { outline:none; transform:translate(-50%,-50%) scale(1.05) }
+    .ccore .clabel { font-weight:800; font-size:clamp(.86rem,2vw,1.02rem); line-height:1.1; padding:0 .5rem }
+    .ccore .csub { display:block; font-weight:700; font-size:.64em; letter-spacing:.14em; text-transform:uppercase;
+      color:#1f6e3e; margin-top:.25rem }
+
+    /* explorer nodes */
+    .cnode { position:absolute; left:0; top:0; z-index:3;
+      transform:translate(calc(var(--x,0px) - 50%), calc(var(--y,0px) - 50%)); }
+    html.js .cnode { opacity:0 }
+    .constel.lit .cnode { opacity:1 }
+    .cnode-orb { display:grid; place-items:center; width:var(--ns,72px); height:var(--ns,72px); border-radius:50%;
+      color:var(--ink); text-align:center; padding:6px;
+      background:radial-gradient(circle at 38% 32%, rgba(255,255,255,.5), rgba(var(--h,78 184 106),.0) 60%), rgba(10,22,42,.85);
+      border:1.5px solid rgba(var(--hc,var(--teal-rgb)),.6);
+      box-shadow:0 0 16px rgba(var(--hc,var(--teal-rgb)),.35), inset 0 0 12px rgba(255,255,255,.12);
+      transition: transform .22s cubic-bezier(.22,1,.36,1), box-shadow .22s ease, border-color .2s ease; }
+    .constel.lit .cnode-orb { animation: bob 6s ease-in-out infinite; animation-delay: calc(var(--i,0) * -.5s) }
+    @keyframes bob { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-6px) } }
+    .cnode:hover, .cnode:focus-visible { outline:none; z-index:9 }
+    .cnode:hover .cnode-orb, .cnode:focus-visible .cnode-orb {
+      transform:scale(1.16); border-color:#fff;
+      box-shadow:0 0 28px rgba(var(--hc,var(--teal-rgb)),.7), inset 0 0 16px rgba(255,255,255,.22) }
+    .cnode-dot { width:9px; height:9px; border-radius:50%; background:rgb(var(--hc,var(--teal-rgb)));
+      box-shadow:0 0 10px rgb(var(--hc,var(--teal-rgb))) }
+    .cnode-lab { font-size:.68rem; font-weight:700; line-height:1.05; margin-top:4px }
+
+    /* ---------- the "how it reads" band (what the app does) ---------- */
+    .cascade-band { position:relative; z-index:2; margin: 30px 0 6px; padding:26px 0 }
+    .kick { font-family: ui-monospace,Menlo,Consolas,monospace; font-size:.72rem; letter-spacing:.22em;
+      text-transform:uppercase; color:var(--dim) }
+    .cascade-band h2 { font-size:clamp(1.4rem,3.4vw,1.9rem); margin:.4rem 0 4px;
+      background:linear-gradient(100deg,#fff, var(--bright)); -webkit-background-clip:text; background-clip:text; color:transparent }
+    .cascade-band > .wrap > p { color:var(--dim); margin:0 0 20px; max-width:64ch }
+    .flow { display:grid; gap:0 }
+    .frung { position:relative; display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:14px;
+      background:var(--card); border:1px solid var(--line); border-left:4px solid var(--lc); overflow:hidden }
+    .frung + .frung { margin-top:10px }
+    .frung::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.0;
+      background:linear-gradient(100deg, transparent, rgba(var(--lrgb),.16), transparent); }
+    .frung.pip-on::before { animation: pip 2.4s ease-in-out; }     /* energy pulse sweeps each rung in turn */
+    @keyframes pip { 0%{opacity:0; transform:translateX(-30%)} 40%{opacity:1} 100%{opacity:0; transform:translateX(30%)} }
+    .frung .fmark { width:34px; height:34px; flex:0 0 auto; border-radius:9px; position:relative;
+      background:rgba(var(--lrgb),.16); border:1px solid rgba(var(--lrgb),.5) }
+    .frung .fmark::after { content:""; position:absolute; inset:0; margin:auto; width:12px; height:12px; border-radius:50%;
+      background:var(--lc); box-shadow:0 0 12px var(--lc) }
+    .frung .ftxt b { font-weight:800; font-size:1rem } .frung .ftxt span { color:var(--dim); font-size:.86rem }
+    .frung.r1 { --lc:var(--clim); --lrgb:47,122,72 }
+    .frung.r2 { --lc:var(--phen); --lrgb:78,184,106; margin-left:14px }
+    .frung.r3 { --lc:var(--prod); --lrgb:127,224,150; margin-left:28px }
+    .frung.r4 { --lc:var(--cons); --lrgb:201,138,76; margin-left:42px }
+    .farrow { color:rgba(255,255,255,.32); text-align:center; margin:2px 0 2px 17px; font-size:1.05rem }
+
+    /* ---------- stats + about ---------- */
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:26px 0 0; position:relative; z-index:2 }
+    .stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 14px; text-align:center }
+    .stat .n { font-weight:800; font-size:1.5rem; color:var(--bright) } .stat .l { font-size:.78rem; color:var(--dim) }
+    details.more { margin:30px 0 0; border:1px solid var(--line); border-radius:14px; background:var(--card); overflow:hidden }
+    details.more > summary { cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between;
+      gap:1rem; padding:1rem 1.3rem; font-weight:700; color:var(--bright) }
+    details.more > summary::-webkit-details-marker { display:none }
+    details.more > summary::after { content:"+"; color:var(--coral); font-weight:800; font-size:1.2rem }
+    details.more[open] > summary::after { content:"\2212" }
+    details.more[open] { border-color:rgba(var(--teal-rgb),.4) }
+    details.more .mbody { padding:0 1.3rem 1.2rem; color:var(--dim) }
+    details.more .mbody b { color:var(--ink) }
+
+    footer { position:relative; z-index:2; border-top:1px solid var(--line); margin-top:34px; padding:26px 0 54px;
+      color:var(--dim); font-size:.9rem }
+    .cta-foot { display:inline-block; margin-bottom:10px; font-weight:700; color:var(--coral) }
+
+    @media (max-width:560px){ .stats { grid-template-columns:repeat(2,1fr) } .frung { margin-left:0 !important } }
+
+    /* ---------- no-JS fallback: a plain reachable grid of the suite ---------- */
+    html:not(.js) .ctraces, html:not(.js) .ccore .csub { display:none }
+    html:not(.js) .constel { aspect-ratio:auto; max-width:100%; display:grid;
+      grid-template-columns:repeat(2,1fr); gap:12px; padding:8px 0 }
+    html:not(.js) .ccore { position:static; transform:none; width:auto; height:auto; border-radius:14px;
+      grid-column:1/-1; padding:18px; animation:none }
+    html:not(.js) .cnode { position:static; transform:none; opacity:1 }
+    html:not(.js) .cnode-orb { width:auto; height:auto; flex-direction:row; gap:10px; border-radius:14px;
+      padding:14px 16px; justify-content:flex-start; animation:none }
+    html:not(.js) .cnode-lab { font-size:.95rem; margin-top:0 }
+
+    @media (prefers-reduced-motion: reduce){
+      .sky::before, .launch, .ccore, .constel.lit .cnode-orb, .constel.lit .ctraces line, .frung.pip-on::before { animation:none !important }
+      .launch::after { display:none }
     }
-    .hero p.lead {
-      font-size: clamp(1.05rem, 2.2vw, 1.24rem); max-width: 62ch; margin: 0 0 28px; color: #d7ecdc
-    }
-
-    .cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center }
-    .btn {
-      display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.04rem;
-      padding: 14px 26px; border-radius: 12px; text-decoration: none;
-      transition: transform .12s ease, box-shadow .12s ease
-    }
-    @keyframes ctaFlow { 0%,100% { background-position: 0% 50% } 50% { background-position: 100% 50% } }
-    .btn-primary {
-      color: #06231f;
-      background: linear-gradient(100deg, #4eb86a, #7fe096, #4eb86a); background-size: 200% 100%;
-      box-shadow: 0 8px 24px rgba(78, 184, 106, .3); animation: ctaFlow 6s ease infinite }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(78, 184, 106, .45) }
-    .btn-ghost { color: var(--ink); border: 1.5px solid rgba(255, 255, 255, .35) }
-    .btn-ghost:hover { background: rgba(255, 255, 255, .08) }
-    .warm { font-size: .82rem; color: #d7ecdc; margin-top: 14px; min-height: 1.2em }
-    @media (prefers-reduced-motion: reduce) { .btn-primary { animation: none } }
-
-    /* Stats strip — dark glass info-boxes */
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: -34px auto 0; position: relative; z-index: 2 }
-    .stat { background: linear-gradient(180deg, #182e20 0%, #0a140e 100%); border: 1px solid rgba(255,255,255,.10); border-radius: 14px; padding: 18px 16px; box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) }
-    .stat .n { font-family: Fraunces, serif; font-weight: 700; font-size: 1.55rem; color: #ffffff }
-    .stat .l { font-size: .82rem; color: var(--muted); font-weight: 500 }
-
-    /* Features */
-    section.body { padding: 54px 0 10px }
-    .sub { color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .78rem }
-    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 22px }
-    .feat { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-top: 3px solid rgba(78,184,106,.5); border-radius: 12px; padding: 20px }
-    .feat-star { border-top: 3px solid var(--gold); background: linear-gradient(180deg, rgba(255, 210, 74, .08), rgba(255,255,255,.05) 42%) }
-    .feat h3 { font-size: 1.12rem; margin-bottom: 6px; color: var(--ink) }
-    .feat p { margin: 0; color: #c2d6c8; font-size: .95rem }
-
-    .honest { margin: 40px 0; background: rgba(78, 184, 106, .07); border-left: 4px solid var(--pine); border-radius: 10px; padding: 20px 22px }
-    .honest h2 { font-size: 1.3rem; margin-bottom: 10px; color: var(--ink) }
-    .honest ul { margin: 0; padding-left: 18px; color: #c6dccc }
-    .honest li { margin: 6px 0 }
-
-    footer { border-top: 1px solid var(--line); padding: 26px 0 50px; color: var(--muted); font-size: .9rem }
-    footer a { font-weight: 600; text-decoration: none }
-    .cta-foot { display: inline-block; margin-bottom: 10px; font-weight: 700; color: var(--gold) }
-
-    @media(max-width:760px) { .stats { grid-template-columns: repeat(2, 1fr) } .grid { grid-template-columns: 1fr } }
   </style>
 </head>
 
 <body>
+  <div class="sky" aria-hidden="true"></div>
 
   <header class="hero">
     <div class="wrap">
-      <span class="badge"><span aria-hidden="true">🌳</span> NEON · Vegetation Structure · DP1.10098.001</span>
-      <h1>NEON Vegetation Structure Explorer <span class="tag">unofficial</span></h1>
-      <p class="lead">How woody plants are built across a continent. NEON tags individual trees and desert
-        shrubs, maps them, and remeasures their diameter, height, and status over the years — so each has a
-        <b>growth career</b>. Explore the stand's size structure, how plants grow between visits, and a
-        tap-to-pin <b>Size Lab</b> — across <b>42 sites and every biome</b>, forests to deserts.</p>
+      <span class="brand">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <path class="stroke" d="M50 14 L64 30 L50 46 L36 30 Z" />
+          <line class="stroke" x1="50" y1="46" x2="50" y2="86" />
+          <line class="stroke" x1="34" y1="86" x2="66" y2="86" />
+          <circle class="pip" cx="50" cy="62" r="7.5" />
+        </svg>
+        <b>Desert Data Labs</b>
+      </span>
+
+      <div class="eyebrow">The NEON Explorer Suite · Producers</div>
+      <h1>NEON Vegetation Structure</h1>
+      <p class="lead">Woody-stem measurements as the standing architecture of each NEON site:
+        <b>stem density</b>, <b>basal area</b>, and <b>height structure</b> — the slow producer floor
+        under everything that lives there. NEON tags individual trees and desert shrubs, maps them, and
+        remeasures their diameter, height, and status over the years, so each carries a <b>growth career</b>
+        across 42 sites and every biome.</p>
+
       <div class="cta-row">
-        <a id="launch" class="btn btn-primary" href="#">Launch the app&nbsp;→</a>
-        <a class="btn btn-ghost" href="https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer"
-          target="_blank" rel="noopener">View on GitHub</a>
+        <a id="launch" class="launch" href="https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/">
+          Launch the app <span class="arrow" aria-hidden="true">&rarr;</span>
+        </a>
+        <a class="ghost" href="https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer" target="_blank" rel="noopener">View on GitHub</a>
       </div>
       <div class="warm" id="warm"></div>
     </div>
   </header>
 
-  <div class="wrap">
-    <div class="stats">
-      <div class="stat"><div class="n">42 sites</div><div class="l">every biome</div></div>
-      <div class="stat"><div class="n">trees &amp; shrubs</div><div class="l">tagged &amp; remeasured</div></div>
-      <div class="stat"><div class="n">growth</div><div class="l">careers over years</div></div>
-      <div class="stat"><div class="n">instant</div><div class="l">no live API waits</div></div>
-    </div>
-  </div>
-
-  <section class="body">
+  <!-- the suite, as a living constellation. The core launches Veg Structure; each node opens an explorer. -->
+  <section class="constel-sec" aria-label="The NEON Explorer Suite">
     <div class="wrap">
-      <span class="sub">What you can do</span>
-      <div class="grid">
-        <div class="feat feat-star">
-          <h3>The Size Lab</h3>
-          <p>The flagship: every plant as a dot in <b>size × height</b> space (DBH for trees, basal diameter
-            for shrubs), split into four size-shapes. <b>Tap a dot</b> to pin its card, drag &amp; resize, then
-            download the chart with the cards baked in.</p>
-        </div>
-        <div class="feat feat-star">
-          <h3>Stand structure</h3>
-          <p>The <b>size-class distribution</b> (the forester's reverse-J for trees, basal classes for shrubs),
-            the height profile, and per-hectare <b>basal area, stem density, and QMD</b> — mean ± SE across plots.</p>
-        </div>
-        <div class="feat">
-          <h3>Growth &amp; mortality</h3>
-          <p>Annualised diameter growth between remeasurements, the fastest growers, and the live /
-            standing-dead / lost-track split — decreases kept and flagged, not deleted.</p>
-        </div>
-        <div class="feat">
-          <h3>Champions</h3>
-          <p>The record-holders — biggest, tallest, fastest-growing, longest-tracked — on a re-sortable
-            leaderboard and podium. Tap one to open its career.</p>
-        </div>
-        <div class="feat">
-          <h3>Plant Career</h3>
-          <p>Open any tree or shrub for its growth trajectory, size-for-species percentile, QC flags, a shareable
-            <b>plant card</b> (PNG), and the raw per-bout data (CSV).</p>
-        </div>
-        <div class="feat feat-star">
-          <h3>Compare, export, report</h3>
-          <p>Put two stands head-to-head, download the <b>full tidy dataset + codebook</b> (CSV/zip), or a
-            one-page <b>stand report PDF</b>.</p>
-        </div>
-      </div>
+      <div class="constel is-noscript" data-constel style="--n:7;">
+        <svg class="ctraces" viewBox="-340 -340 680 680" aria-hidden="true"><g data-traces></g></svg>
 
-      <div class="honest">
-        <h2>Honest statistics</h2>
-        <p>Every view states its method, on the chart:</p>
-        <ul>
-          <li><b>Snapshot, not pooled</b> — stand metrics use each plant's <i>latest</i> measurement; one
-            remeasured five times is counted once. Growth is the explicit multi-bout metric, annualised
-            between visits.</li>
-          <li><b>The right size measure per biome</b> — forests are sized by tree DBH; desert shrubs are too
-            short for a breast-height diameter, so they're sized by basal stem diameter (what NEON records for
-            ~96–99% of desert stems). The app classifies each site by basal-area dominance and adapts.</li>
-          <li><b>Basal area, not biomass</b> — above-ground biomass needs an allometric model whose error
-            compounds, so it is deliberately omitted; directly-measured basal area is the honest stand measure.</li>
-          <li><b>Indices, not an inventory</b> — per-hectare basal area and density are scaled from the sampled
-            plots (mean ± SE across plots, the sampling unit), not a wall-to-wall census.</li>
-          <li><b>Decreases are real, kept and flagged</b> — diameter shrinkage between visits (bark sloughing,
-            drought, a changed measurement height) is verified, not deleted. Live/dead is a snapshot ratio,
-            and lost-tag/removed stems are split out from biological mortality.</li>
-        </ul>
+        <a class="ccore" data-core href="https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/" aria-label="Launch the NEON Vegetation Structure app">
+          <span class="clabel">Veg Structure<span class="csub">launch &rarr;</span></span>
+        </a>
+
+        <a class="cnode" style="--i:0; --hc:45,212,191" href="https://tgilbert14.github.io/NEON-Driver-Cascade/" aria-label="NEON Driver Cascade"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Driver Cascade</span></span></a>
+        <a class="cnode" style="--i:1; --hc:56,168,232" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" aria-label="NEON Small Mammal Tracker"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Small Mammals</span></span></a>
+        <a class="cnode" style="--i:2; --hc:245,177,63" href="https://tgilbert14.github.io/NEON-Breeding-Birds/" aria-label="NEON Breeding Birds"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Breeding Birds</span></span></a>
+        <a class="cnode" style="--i:3; --hc:54,217,138" href="https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/" aria-label="NEON Ground Beetle Tracker"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Ground Beetles</span></span></a>
+        <a class="cnode" style="--i:4; --hc:95,209,106" href="https://tgilbert14.github.io/NEON-Plant-Diversity/" aria-label="NEON Plant Diversity"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Plant Diversity</span></span></a>
+        <a class="cnode" style="--i:5; --hc:106,191,90" href="https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/" aria-label="NEON Plant Phenology"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Plant Phenology</span></span></a>
+        <a class="cnode" style="--i:6; --hc:52,198,216" href="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" aria-label="NEON Water Chemistry"><span class="cnode-orb"><span class="cnode-dot" aria-hidden="true"></span><span class="cnode-lab">Water Chemistry</span></span></a>
       </div>
     </div>
   </section>
 
-  <style>
-    .series { background: linear-gradient(180deg, #102018 0%, #0a140e 100%); color: #eaf4ec; padding: 56px 0; border-top: 1px solid var(--line); }
-    .series h2 { color: #eaf4ec; margin: 0; font-size: 1.6rem; }
-    .series-sub { color: #a4c0aa; margin: 8px 0 26px; max-width: 640px; }
-    .series-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-    .series-card { display: flex; flex-direction: column; gap: 5px; padding: 22px; border-radius: 16px;
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: #eaf1e6;
-      text-decoration: none; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
-    .series-card:hover { transform: translateY(-3px); border-color: var(--gold); background: rgba(255,255,255,.10); }
-    .series-emoji { font-size: 1.9rem; line-height: 1; }
-    .series-name { font-weight: 800; font-size: 1.12rem; font-family: Rubik, sans-serif; }
-    .series-tag { color: #b8c8b4; font-size: .95rem; }
-    .series-go { color: var(--gold); font-weight: 700; margin-top: 6px; }
-    @media (max-width: 640px) { .series-grid { grid-template-columns: 1fr; } }
-  </style>
-  <section class="series">
+  <!-- how the survey reads: map & measure -> basal area & height -> structure -> compare -->
+  <section class="cascade-band">
     <div class="wrap">
-      <h2>Check out some of our other NEON series apps</h2>
-      <p class="series-sub">Pick another data type to explore.</p>
-      <div class="series-grid">
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/" target="_blank" rel="noopener">
-          <span class="series-emoji">🐀</span>
-          <span class="series-name">NEON Small Mammal Tracker</span>
-          <span class="series-tag">Small-mammal box-trapping across 46 NEON field sites.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Plant-Diversity/" target="_blank" rel="noopener">
-          <span class="series-emoji">🌿</span>
-          <span class="series-name">NEON Plant Diversity Explorer</span>
-          <span class="series-tag">Plant presence &amp; % cover — diversity, native vs invasive.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-Breeding-Birds/" target="_blank" rel="noopener">
-          <span class="series-emoji">🐦</span>
-          <span class="series-name">NEON Breeding Bird Explorer</span>
-          <span class="series-tag">Breeding-landbird point counts across a continent.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
-        <a class="series-card" href="https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/" target="_blank" rel="noopener">
-          <span class="series-emoji">💧</span>
-          <span class="series-name">NEON Water Chemistry Analyte Viewer</span>
-          <span class="series-tag">Surface-water chemistry across aquatic sites.</span>
-          <span class="series-go">Open&nbsp;→</span>
-        </a>
+      <span class="kick">How the survey reads</span>
+      <h2>From a single tagged stem to the whole standing stand.</h2>
+      <p>Every woody plant is mapped and remeasured, then rolled up into the stand's architecture. The app
+        lines those steps up so you can read the structure from the individual stem to the cross-site
+        comparison — with the method shown at each step.</p>
+      <div class="flow" data-flow>
+        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Map &amp; measure stems</b> &middot; <span>every tagged tree &amp; shrub, mapped and remeasured</span></span></div>
+        <div class="farrow" aria-hidden="true">&darr;</div>
+        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Basal area &amp; height</b> &middot; <span>per-hectare basal area, stem density &amp; QMD</span></span></div>
+        <div class="farrow" aria-hidden="true">&darr;</div>
+        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>Structure</b> &middot; <span>size-class distribution, height profile &amp; standing stock</span></span></div>
+        <div class="farrow" aria-hidden="true">&darr;</div>
+        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Compare</b> &middot; <span>two stands head-to-head, across sites &amp; years</span></span></div>
       </div>
+
+      <div class="stats">
+        <div class="stat"><div class="n">42</div><div class="l">NEON sites</div></div>
+        <div class="stat"><div class="n">every</div><div class="l">biome</div></div>
+        <div class="stat"><div class="n">real</div><div class="l">open data</div></div>
+        <div class="stat"><div class="n">instant</div><div class="l">no API waits</div></div>
+      </div>
+
+      <details class="more">
+        <summary>How it stays honest</summary>
+        <div class="mbody">
+          Every view states its method, on the chart. <b>Snapshot, not pooled</b> — stand metrics use each
+          plant's latest measurement; growth is the explicit multi-bout metric, annualised between visits.
+          <b>The right size measure per biome</b> — forests are sized by tree DBH; desert shrubs are too
+          short for a breast-height diameter, so they're sized by basal stem diameter (what NEON records for
+          ~96–99% of desert stems), and each site is auto-classified by basal-area dominance. <b>Basal area,
+          not biomass</b> — above-ground biomass needs an allometric model whose error compounds, so it is
+          deliberately omitted; directly-measured basal area is the honest stand measure. <b>Indices, not an
+          inventory</b> — per-hectare values are scaled from the sampled plots (mean ± SE across plots, the
+          sampling unit), not a wall-to-wall census. <b>Decreases are real, kept and flagged</b> — diameter
+          shrinkage between visits is verified, not deleted, and lost-tag stems are split out from biological
+          mortality. <b>Educational data-exploration tools, not affiliated with NEON, Battelle, or the NSF.</b>
+        </div>
+      </details>
     </div>
   </section>
 
   <footer>
     <div class="wrap">
-      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Vegetation%20Structure%20Explorer"><span aria-hidden="true">👋</span> Want a custom data app like this for your project?</a><br>
-      Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.10098.001" target="_blank"
-        rel="noopener">Vegetation structure</a> product by <b>Desert Data Labs</b> · Tucson, AZ.
-      Data: National Ecological Observatory Network (operated by Battelle, funded by NSF). An educational
-      data-exploration tool, not affiliated with NEON, Battelle, or the NSF.
+      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Want a custom data app like these for your project?</a><br>
+      Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.10098.001" target="_blank" rel="noopener">Vegetation structure</a>
+      product by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data: National Ecological Observatory Network
+      (operated by Battelle, funded by NSF). Educational tools, not affiliated with NEON, Battelle, or the NSF.
     </div>
   </footer>
 
   <script>
-    // ── Set this to your deployed app URL. After deploying on Posit Connect Cloud
-    //    (New Content → Shiny → from Git → this repo), paste the share URL here
-    //    (or "app/" for a future shinylive static build) and re-publish Pages. ──
-    const APP_URL = "https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/";
-
+    // ---- the veg-structure app (Connect Cloud share URL); pre-warm on load ----
+    var APP_URL = "https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/";
     (function () {
-      const placeholder = APP_URL.indexOf("REPLACE-WITH") !== -1;
-      const launch = document.getElementById("launch");
-      const warm = document.getElementById("warm");
-
-      if (placeholder) {
-        launch.addEventListener("click", function (e) {
-          e.preventDefault();
-          warm.textContent = "⚠ Set APP_URL in docs/index.html to your deployed app URL, then re-publish.";
-        });
-        return;
-      }
-      launch.href = APP_URL;
-
-      // Pre-warm the (possibly sleeping) app while the visitor reads, to soften cold start.
-      // Aborts after 8s so a hung request never leaves "Warming up…" stuck on screen.
+      var launch = document.getElementById("launch");
+      var warm = document.getElementById("warm");
+      if (launch) launch.href = APP_URL;
       try {
-        warm.textContent = "Warming up the app…";
+        if (warm) warm.textContent = "Warming up the app…";
         var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
         var killer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
         fetch(APP_URL, { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
-          .then(function () { warm.textContent = "Ready when you are."; })
-          .catch(function () { warm.textContent = ""; })
+          .then(function () { if (warm) warm.textContent = "Ready when you are."; })
+          .catch(function () { if (warm) warm.textContent = ""; })
           .finally(function () { if (killer) clearTimeout(killer); });
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
+    })();
+
+    // ---- the constellation: lay the 7 explorers on a ring, draw energy traces ----
+    (function () {
+      var root = document.querySelector("[data-constel]");
+      if (!root) return;
+      var nodes = Array.prototype.slice.call(root.querySelectorAll(".cnode"));
+      var tracesG = root.querySelector("[data-traces]");
+      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      root.classList.remove("is-noscript");
+
+      var n = nodes.length, TR = 300; // trace viewBox radius
+      // build a trace from center to each node
+      if (tracesG) {
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < n; i++) {
+          var th = (i * (360 / n) - 90) * Math.PI / 180;
+          var ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          ln.setAttribute("x1", "0"); ln.setAttribute("y1", "0");
+          ln.setAttribute("x2", (Math.cos(th) * TR).toFixed(1));
+          ln.setAttribute("y2", (Math.sin(th) * TR).toFixed(1));
+          frag.appendChild(ln);
+        }
+        tracesG.appendChild(frag);
+      }
+
+      function place(landed) {
+        var r = root.getBoundingClientRect();
+        var cx = r.width / 2, cy = r.height / 2;
+        var unit = Math.min(r.width, r.height);
+        var rad = unit * 0.40, ns = Math.max(58, unit * 0.135);
+        nodes.forEach(function (nd, i) {
+          nd.style.setProperty("--ns", ns.toFixed(0) + "px");
+          var th = (i * (360 / n) - 90) * Math.PI / 180;
+          var f = landed ? 1 : 0.18;            // start near the core, fly out on land
+          nd.style.setProperty("--x", (cx + Math.cos(th) * rad * f).toFixed(1) + "px");
+          nd.style.setProperty("--y", (cy + Math.sin(th) * rad * f).toFixed(1) + "px");
+        });
+      }
+
+      place(false);
+      // light it up (fly the nodes out + start the energy flow) after a beat
+      function lite() { place(true); root.classList.add("lit"); }
+      if (reduce) { lite(); }
+      else { requestAnimationFrame(function () { requestAnimationFrame(lite); }); setTimeout(lite, 400); }
+
+      var rt;
+      window.addEventListener("resize", function () {
+        clearTimeout(rt); rt = setTimeout(function () { place(root.classList.contains("lit")); }, 120);
+      }, { passive: true });
+    })();
+
+    // ---- the survey flow: pulse each rung in turn (the read cascading down) ----
+    (function () {
+      var rungs = Array.prototype.slice.call(document.querySelectorAll("[data-flow] .frung"));
+      if (!rungs.length || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var i = 0;
+      setInterval(function () {
+        rungs.forEach(function (r) { r.classList.remove("pip-on"); });
+        var el = rungs[i % rungs.length];
+        // force reflow so the animation restarts each cycle
+        void el.offsetWidth; el.classList.add("pip-on");
+        i++;
+      }, 900);
     })();
   </script>
 </body>
