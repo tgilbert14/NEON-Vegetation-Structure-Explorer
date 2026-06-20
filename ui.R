@@ -57,7 +57,7 @@ ui <- bslib::page_sidebar(
 
   div(id = "loadOverlay", class = "load-overlay",
     div(class = "load-card",
-      div(class = "load-spin", "\U0001F332"),
+      div(class = "load-spin mascot-spin", MASCOT_CRITTER),
       div(class = "load-title", "Loading site data"),
       div(id = "loadSite", class = "load-site"),
       div(class = "load-bar"),
@@ -66,6 +66,9 @@ ui <- bslib::page_sidebar(
   uiOutput("heroStats"),
 
   div(id = "splash",
+    div(class = "splash-guide",
+      div(class = "sg-bubble", "Pick a site to start!"),
+      div(class = "sg-mascot", MASCOT_CRITTER)),
     div(class = "splash",
       div(class = "app-hero app-hero-splash",
         h1(class = "app-title", "NEON Vegetation Structure Explorer", span(class = "title-tag", "unofficial")),

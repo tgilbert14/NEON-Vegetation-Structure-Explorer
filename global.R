@@ -104,3 +104,20 @@ glow_badge <- function(label, color = "#2f8a52", glow = color) {
 card_head <- function(icon, title, ...)
   bslib::card_header(class = "with-info", bsicons::bs_icon(icon), tags$span(class = "ch-title", " ", title), ...)
 fmt_int <- function(x) format(round(as.numeric(x)), big.mark = ",", trim = TRUE)
+
+# The app mascot — a flat (no-gradient, no-id so it's safely reusable) cute shrub
+# in the canopy-green & gold accent. Used as the loading spinner, the splash guide,
+# and the celebration hop. Parts are classed so the CSS can wiggle leaves / blink eyes.
+MASCOT_CRITTER <- htmltools::HTML(paste0(
+  '<svg class="mascot" viewBox="0 0 120 120" aria-hidden="true">',
+  '<rect x="54" y="80" width="12" height="26" rx="3" fill="#8a5a2b"/>',
+  '<g class="mascot-ear-l"><circle cx="40" cy="44" r="15" fill="#4eb86a"/></g>',
+  '<g class="mascot-ear-r"><circle cx="80" cy="44" r="15" fill="#4eb86a"/></g>',
+  '<ellipse cx="60" cy="58" rx="34" ry="30" fill="#4eb86a"/>',
+  '<circle cx="42" cy="66" r="3" fill="#ffd24a"/>',
+  '<circle cx="80" cy="50" r="2.6" fill="#ffd24a"/>',
+  '<g class="mascot-eyes"><circle cx="51" cy="56" r="6.5" fill="#11331f"/>',
+  '<circle cx="69" cy="56" r="6.5" fill="#11331f"/>',
+  '<circle cx="49" cy="53.5" r="2.4" fill="#ffffff"/>',
+  '<circle cx="69" cy="53.5" r="2.4" fill="#ffffff"/></g>',
+  '</svg>'))
