@@ -6,18 +6,18 @@
    forest-floor paper. Rubik font. White cards, soft warm shadow, 3px top border.
    ========================================================================= */
 
-/* Variable NAMES kept for low churn; VALUES are the Old-Growth Canopy forest
-   CROSS-BIOME system: --pine = deep teal-pine (primary; forest + alpine water),
-   --terra = desert ochre (accent), --gold = amber (highlight), --sky = tundra
-   slate-blue (info), --rust = the reserved true-error red. On a sun-bleached
-   sand canvas so no single biome owns the palette. (Palette by Vera.)   */
+/* Variable NAMES kept for low churn; VALUES are the DDL desert-DAY system
+   (matches the Small Mammal Tracker sibling): --pine = deep teal (primary),
+   --terra = coral (accent), --gold = desert gold (highlight), --sky = desert
+   sky-blue (info), --rust = the reserved true-error coral. On a cool sand-sky
+   canvas. The app DEFAULTS to LIGHT; dark below carries desert-night. */
 :root {
-  --pine: #1f6a63;   --pine2: #164d48;
-  --terra: #8a5a2b;  --gold: #E0A500;  --gold-ink: #8a6310;
-  --sky: #356f80;    --green: #2f7d46; --rust: #b5471f;
-  --ink: #1d2a24;    --muted: #5c6b62;
-  --bg: #f1efe6;     --paper: #fdfcf7; --line: #e1ddcf;
-  --shadow: rgba(20, 40, 30, 0.10);
+  --pine: #149086;   --pine2: #0f6f66;
+  --terra: #e0685a;  --cardinal: #e0685a;  --gold: #d6a31c;  --gold-ink: #9a7314;
+  --sky: #2f8fc4;    --green: #3f9a52; --rust: #b5471f;
+  --ink: #16243a;    --muted: #5a6a82;
+  --bg: #eef3fb;     --paper: #ffffff; --line: #d6e0ee;
+  --shadow: rgba(20, 144, 134, 0.10);
 }
 
 /* =========================================================================
@@ -28,22 +28,23 @@
    hard-coded. Plots adapt server-side via is_dark() in plotly_theme().
    ========================================================================= */
 [data-bs-theme="dark"] {
-  --pine: #2f9189;   --pine2: #247a73;     /* brightened teal-pine for dark surfaces */
-  --terra: #b07d45;  --gold: #e8b54a;
-  --sky: #4f93a5;    --green: #5aa46a; --rust: #e06a40;
-  --ink: #e8ece6;  --muted: #9aa8a0;
-  --bg: #101513;   --paper: #161c1a;  --line: #2c352f;
-  --gold-ink: #c79a3e;                 /* amber for icons/text on dark */
-  --shadow: rgba(0, 0, 0, 0.50);
+  --pine: #2dd4bf;  --pine2: #5eead4;          /* primary -> teal */
+  --terra: #fb8a7e; --cardinal: #fb8a7e;       /* accent  -> coral */
+  --gold: #ffd24a;  --gold-ink: #ffd24a;
+  --sky: #43b8e8;   --green: #5fb56a; --rust: #fb8a7e;
+  --ink: #eaf2ff;   --muted: #9fb0cf;
+  --bg: #070d1f;    --paper: #0e1d40;  --line: rgba(255,255,255,0.12);
+  --shadow: rgba(0, 0, 0, 0.5);
 }
 [data-bs-theme="dark"] body {
   background:
-    radial-gradient(1100px 520px at 10% -8%, rgba(47,145,137,0.14), transparent 60%),
-    radial-gradient(900px 460px at 100% 0%, rgba(176,125,69,0.10), transparent 55%),
-    linear-gradient(180deg, #101513 0%, #0a0e0d 100%);
+    radial-gradient(1100px 520px at 8% -8%, rgba(45,212,191,0.12), transparent 60%),
+    radial-gradient(900px 460px at 102% 2%, rgba(251,138,126,0.10), transparent 55%),
+    radial-gradient(900px 600px at 50% 120%, rgba(255,210,74,0.06), transparent 60%),
+    linear-gradient(180deg, #070d1f 0%, #05080f 100%);
   color: var(--ink);
 }
-[data-bs-theme="dark"] .control-deck { background: #131a18; }
+[data-bs-theme="dark"] .control-deck { background: #0b1733; }
 /* dark-mode filled controls: brightened teal (#2f9189) fails white-text AA, so use
    dark ink (#10211f, ~4.4:1) on every teal-background control. */
 [data-bs-theme="dark"] .btn-primary,
@@ -62,27 +63,27 @@
 [data-bs-theme="dark"] .hr-indiv-lab,
 [data-bs-theme="dark"] .stat-sub,
 [data-bs-theme="dark"] .tab-intro .bi,
-[data-bs-theme="dark"] .chart-hint .bi { color: #5fc4b8 !important; }
-[data-bs-theme="dark"] .deck-foot code { color: #cfeae6; background: #1f302d; }
-[data-bs-theme="dark"] .deck-foot a:hover { color: #cfeae6; }
-[data-bs-theme="dark"] .bio-links a { background: #1a2422; color: var(--muted); }
-[data-bs-theme="dark"] .bio-links a:hover { background: #1f302d; color: #cfeae6; border-color: #3a5e58; }
-/* lift the card-header canopy slightly so it separates from the dark card body */
-[data-bs-theme="dark"] .card-header { background: #1f4a45 !important; }
+[data-bs-theme="dark"] .chart-hint .bi { color: #5eead4 !important; }
+[data-bs-theme="dark"] .deck-foot code { color: #cfe0f5; background: #14274a; }
+[data-bs-theme="dark"] .deck-foot a:hover { color: #5eead4; }
+[data-bs-theme="dark"] .bio-links a { background: #0b1733; color: var(--muted); }
+[data-bs-theme="dark"] .bio-links a:hover { background: #13244a; color: #5eead4; border-color: rgba(255,255,255,0.22); }
+/* card header on dark: deep navy surface, teal-token accents, --ink text */
+[data-bs-theme="dark"] .card-header { background: #13294f !important; }
 /* form controls + selectize on dark */
 [data-bs-theme="dark"] .form-control,
 [data-bs-theme="dark"] .form-select,
 [data-bs-theme="dark"] .selectize-input,
-[data-bs-theme="dark"] .selectize-dropdown { background: #102018; color: var(--ink); border-color: var(--line); }
+[data-bs-theme="dark"] .selectize-dropdown { background: #0a1530; color: var(--ink); border-color: var(--line); }
 /* the sidebar theme toggle row */
 .theme-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 4px; }
 .theme-toggle-lab { font-size: 12px; font-weight: 700; color: var(--muted); display: flex; align-items: center; gap: 5px; }
 
 body {
   background:
-    radial-gradient(1100px 520px at 10% -8%, rgba(31,107,58,0.06), transparent 60%),
-    radial-gradient(900px 460px at 100% 0%, rgba(122,82,48,0.05), transparent 55%),
-    linear-gradient(180deg, #f3f1e9 0%, #ece8dc 100%);
+    radial-gradient(1100px 520px at 8% -8%, rgba(20,144,134,0.05), transparent 60%),
+    radial-gradient(900px 460px at 102% 2%, rgba(224,104,90,0.04), transparent 55%),
+    linear-gradient(180deg, #eef3fb 0%, #e7eef8 100%);
   background-attachment: fixed;
   color: var(--ink);
   font-weight: 400;
@@ -155,7 +156,7 @@ body {
   box-shadow: 0 1px 2px rgba(12, 35, 75, .05);
   animation: ecReveal .3s ease;
 }
-.ec.rail-strong { --ec-rail: #1a7f37; }          /* green (no green CSS token in this theme) */
+.ec.rail-strong { --ec-rail: #5fb56a; }          /* green (no green CSS token in this theme) */
 .ec.rail-mod    { --ec-rail: #c9a300; }          /* amber */
 .ec.rail-weak   { --ec-rail: var(--muted); }
 
@@ -191,7 +192,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .ec-rvalue .bi { font-size: 18px; }
-.ec-rvalue.ec-sgn-pos { color: #1a7f37; }
+.ec-rvalue.ec-sgn-pos { color: #5fb56a; }
 .ec-rvalue.ec-sgn-neg { color: var(--terra, #AB0520); }
 
 .ec-foot {
@@ -204,7 +205,7 @@ body {
 .ec-meta b { color: var(--ink); font-weight: 800; }
 .ec-meta-dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .4; }
 .ec-dir { margin-left: auto; }                   /* push "higher -> more/fewer" to the right edge */
-.ec-dir.ec-sgn-pos b { color: #1a7f37; }
+.ec-dir.ec-sgn-pos b { color: #5fb56a; }
 .ec-dir.ec-sgn-neg b { color: var(--terra, #AB0520); }
 
 /* ---- dark mode (mirrors the app-wide [data-bs-theme="dark"] pattern) ---- */
@@ -239,12 +240,12 @@ body {
 .chart-insight .ci-text { min-width: 0; }
 .chart-insight b { font-weight: 800; }
 .ci-hero { font-weight: 800; color: var(--ci-rail, var(--ink)); }
-.ci-navy { --ci-rail: #8a5a2b; } .ci-pine { --ci-rail: #1f6a63; }
-.ci-gold { --ci-rail: #8a6310; } .ci-terra { --ci-rail: #b5471f; }
+.ci-navy { --ci-rail: #2dd4bf; } .ci-pine { --ci-rail: #5fb56a; }
+.ci-gold { --ci-rail: #e0b43a; } .ci-terra { --ci-rail: #fb8a7e; }
 .ci-muted { --ci-rail: var(--muted); }
-[data-bs-theme="dark"] .chart-insight { background: linear-gradient(180deg, #1b2a1b 0%, var(--paper) 100%); }
-[data-bs-theme="dark"] .ci-navy { --ci-rail: #c79f6a; } [data-bs-theme="dark"] .ci-pine { --ci-rail: #5fc4b8; }
-[data-bs-theme="dark"] .ci-gold { --ci-rail: var(--gold-ink); } [data-bs-theme="dark"] .ci-terra { --ci-rail: #ff9d6b; }
+[data-bs-theme="dark"] .chart-insight { background: linear-gradient(180deg, #1b2942 0%, var(--paper) 100%); }
+[data-bs-theme="dark"] .ci-navy { --ci-rail: #5a8fd0; } [data-bs-theme="dark"] .ci-pine { --ci-rail: #5fcf86; }
+[data-bs-theme="dark"] .ci-gold { --ci-rail: var(--gold-ink); } [data-bs-theme="dark"] .ci-terra { --ci-rail: #ff7a8a; }
 @media (max-width: 560px) { .chart-insight { font-size: 12.5px; padding: 8px 11px; } }
 
 .or-divider { display: flex; align-items: center; text-align: center; color: var(--muted); margin: 12px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }
@@ -621,8 +622,8 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
   color: #fff; overflow: hidden; isolation: isolate;
   background:
     radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--rc) 55%, #fff 0%), transparent 60%),
-    linear-gradient(160deg, var(--rc) 0%, #0c1b34 92%);
-  box-shadow: 0 18px 44px -12px rgba(16,42,40,.55), inset 0 0 0 2px rgba(255,255,255,.18); }
+    linear-gradient(160deg, var(--rc) 0%, #070d1f 92%);
+  box-shadow: 0 18px 44px -12px rgba(12,35,75,.55), inset 0 0 0 2px rgba(255,255,255,.18); }
 /* static holographic sheen (capturable by html-to-image) */
 .tc-holo { position: absolute; inset: 0; z-index: -1; opacity: .5; mix-blend-mode: screen;
   background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.35) 45%, transparent 52%,
@@ -858,7 +859,7 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
 /* ---- loading overlay (opaque, indeterminate) -------------------------- */
 .load-overlay { display: none; position: fixed; inset: 0; z-index: 4000;
   background: rgba(243,241,233,0.97); align-items: center; justify-content: center; }
-[data-bs-theme="dark"] .load-overlay { background: rgba(16,24,15,0.97); }
+[data-bs-theme="dark"] .load-overlay { background: rgba(7,13,31,0.97); }
 .load-card { background: var(--paper); border-radius: 16px; padding: 28px 34px; width: min(440px, 90vw);
   text-align: center; box-shadow: 0 24px 60px -16px rgba(20,40,20,.28); border-top: 5px solid var(--gold); }
 .load-spin { font-size: 44px; animation: float 2.2s ease-in-out infinite; }
@@ -917,7 +918,7 @@ table.dataTable tbody tr:active { background: #dfe8f4 !important; }
 /* dark mode: pine text and the dark amber go low-contrast on dark paper — brighten */
 [data-bs-theme="dark"] .inspect-link { color: #b9d2f2; }
 [data-bs-theme="dark"] .env-pick-hint { color: #b9d2f2; }
-[data-bs-theme="dark"] .mover-warn { color: #e8c552; }
+[data-bs-theme="dark"] .mover-warn { color: #ffd24a; }
 
 /* ---- Hall of Fame podium (top-3, olympic: 2nd · 1st-raised · 3rd) ------ */
 .podium { display: flex; justify-content: center; align-items: flex-end; gap: 14px; margin: 4px 0 16px; }
@@ -936,7 +937,7 @@ table.dataTable tbody tr:active { background: #dfe8f4 !important; }
 .podium-1 .podium-stat { font-size: 18px; }
 .podium-sp { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes podiumRise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-[data-bs-theme="dark"] .podium-card { background: #161c1a; }
+[data-bs-theme="dark"] .podium-card { background: #0e1d40; }
 .leader-dt .medal { font-size: 15px; }
 @media (max-width: 560px) { .podium-sp { display: none; } .podium-emoji { font-size: 28px; } .podium { gap: 8px; } }
 
@@ -976,27 +977,27 @@ svg.smt-pin-lines {
 /* the pinned hover card (navy, gold-edged, draggable, scalable) */
 .smt-pin {
   position: absolute; z-index: 6; max-width: 250px;
-  background: rgba(16, 42, 40, 0.97); color: #fff;
+  background: rgba(12, 35, 75, 0.97); color: #fff;
   border: 2px solid var(--gold); border-radius: 10px;
   padding: 9px 12px 12px; font-size: 12.5px; line-height: 1.42;
-  box-shadow: 0 12px 32px rgba(16, 42, 40, 0.40);
+  box-shadow: 0 12px 32px rgba(12, 35, 75, 0.40);
   cursor: grab; transform-origin: top left; touch-action: none;
 }
 .smt-pin:active { cursor: grabbing; }
 .smt-pin b { color: #fff; }
-.smt-pin em { color: #cfe2d2; font-style: italic; }
+.smt-pin em { color: #cfd9e8; font-style: italic; }
 .smt-pin-emoji { font-size: 20px; line-height: 1; }
 .smt-pin-rar { font-size: 11px; color: var(--gold); font-weight: 600; }
-.smt-pin-stats { color: #aec6b4; font-size: 11.5px; }
+.smt-pin-stats { color: #aebfd6; font-size: 11.5px; }
 .smt-pin .smt-open {
   display: inline-block; margin-top: 7px; padding: 2px 9px;
-  color: #143b37; background: var(--gold); border-radius: 6px;
+  color: #16243a; background: var(--gold); border-radius: 6px;
   font-weight: 700; font-size: 11.5px; cursor: pointer;
 }
-.smt-pin .smt-open:hover { background: #ffc640; }
+.smt-pin .smt-open:hover { background: #ffe04d; }
 .smt-pin-close {
   position: absolute; top: 1px; right: 6px; background: none; border: none;
-  color: #cfe2d2; font-size: 17px; line-height: 1; cursor: pointer; padding: 0;
+  color: #cfd9e8; font-size: 17px; line-height: 1; cursor: pointer; padding: 0;
 }
 .smt-pin-close:hover { color: #fff; }
 .smt-pin-resize {
@@ -1007,8 +1008,8 @@ svg.smt-pin-lines {
 }
 .smt-pin-resize:hover { opacity: 1; }
 @keyframes smtPulse {
-  0%, 100% { box-shadow: 0 12px 32px rgba(16, 42, 40, 0.40); }
-  50% { box-shadow: 0 0 0 4px var(--gold), 0 12px 32px rgba(16, 42, 40, 0.55); }
+  0%, 100% { box-shadow: 0 12px 32px rgba(12, 35, 75, 0.40); }
+  50% { box-shadow: 0 0 0 4px var(--gold), 0 12px 32px rgba(12, 35, 75, 0.55); }
 }
 .smt-pin.smt-pulse { animation: smtPulse 0.5s ease 2; }
 
@@ -1072,8 +1073,93 @@ svg.smt-pin-lines {
 .qc-card .inspect-tbl { width: 100%; }
 
 /* dark theme: deepen the card surfaces (flag chips stay vivid, they're meant to pop) */
-[data-bs-theme="dark"] .qc-card { background: linear-gradient(162deg, #18221f 0%, #161c1a 100%); }
+[data-bs-theme="dark"] .qc-card { background: linear-gradient(162deg, #1c2941 0%, #0e1d40 100%); }
 [data-bs-theme="dark"] .qc-flag.high { background: #3a1c19; color: #f3b6ad; }
-[data-bs-theme="dark"] .qc-flag.warn { background: #352c12; color: #ecd28a; }
-[data-bs-theme="dark"] .qc-flag.info { background: #16263c; color: #a9c6e6; }
-[data-bs-theme="dark"] .qc-flag.clean { background: #163224; color: #9fd9b3; }
+[data-bs-theme="dark"] .qc-flag.warn { background: rgba(255,210,74,.12); color: #ffd24a; }
+[data-bs-theme="dark"] .qc-flag.info { background: rgba(67,184,232,.12); color: #8fd2f2; }
+[data-bs-theme="dark"] .qc-flag.clean { background: rgba(45,212,191,.12); color: #7fe6d8; }
+
+/* ====================================================================== *
+ *  PREMIUM DESERT-NIGHT layer — command-band hero, starfield, sheen, and
+ *  DARK info-box surfaces on the LIGHT page (the "light page, dark hero" look).
+ *  Mirrors the Small Mammal Tracker premium block. Reduced-motion gated below.
+ * ====================================================================== */
+@keyframes vstStars { to { background-position: 0 220px, 0 220px, 0 220px, 0 220px; } }
+@keyframes vstSheen { 0% { left:-65%; opacity:0; } 12% { opacity:.85; } 100% { left:135%; opacity:0; } }
+@keyframes vstFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* the hero becomes a dark navy/teal COMMAND BAND with a drifting starfield + nebula */
+.app-hero {
+  position: relative; overflow: hidden;
+  background: radial-gradient(125% 150% at 16% -12%, #15425f 0%, #0b1733 46%, #070d1f 100%) !important;
+  box-shadow: 0 18px 46px rgba(3,8,20,.45), inset 0 0 0 1px rgba(45,212,191,.18) !important;
+}
+.app-hero > * { position: relative; z-index: 1; }
+.app-hero::before {           /* drifting starfield */
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.55;
+  background-repeat: repeat; background-size: 210px 220px,210px 220px,210px 220px,210px 220px;
+  background-image:
+    radial-gradient(1.4px 1.4px at 30px 40px, rgba(255,255,255,.6), transparent),
+    radial-gradient(1.2px 1.2px at 150px 90px, rgba(150,220,255,.5), transparent),
+    radial-gradient(1.5px 1.5px at 90px 175px, rgba(255,210,74,.4), transparent),
+    radial-gradient(1.1px 1.1px at 175px 28px, rgba(94,234,212,.5), transparent);
+  animation: vstStars 120s linear infinite;
+}
+.app-hero::after {            /* teal/coral/gold nebula */
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.6;
+  background:
+    radial-gradient(48px 48px at 10% 26%, rgba(45,212,191,.18), transparent 70%),
+    radial-gradient(66px 66px at 86% 16%, rgba(251,138,126,.14), transparent 70%),
+    radial-gradient(54px 54px at 64% 94%, rgba(255,210,74,.12), transparent 70%);
+}
+.app-hero .app-title { color: #ffd24a !important; }
+.app-hero .app-subtitle { color: #cfe0f5 !important; }
+.brand-mark, .app-emoji { display: inline-block; animation: vstFloat 6s ease-in-out infinite; }
+
+/* ---- DARK "info-box" surfaces on the LIGHT page (the cascade look) ---------- *
+ * The app defaults to light, but the prominent info boxes — the hero stat
+ * value-boxes — wear the dark desert-night command-band scheme with light text
+ * + the per-stat accent rail, in BOTH modes (so the light page shows dark boxes). */
+.hero-stat {
+  position: relative; overflow: hidden; isolation: isolate;
+  background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%) !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-top: 3px solid var(--green) !important;
+  box-shadow: 0 12px 28px -12px rgba(3,8,20,.6) !important;
+  transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .28s ease, border-color .2s ease;
+}
+/* keep the per-stat accent rail/icon: forest quartet -> desert tier hues */
+.hero-stat.hero-pine  { border-top-color: #2dd4bf !important; }
+.hero-stat.hero-sky   { border-top-color: #43b8e8 !important; }
+.hero-stat.hero-gold  { border-top-color: #ffd24a !important; }
+.hero-stat.hero-bark  { border-top-color: #e0b43a !important; }
+.hero-stat.hero-terra { border-top-color: #fb8a7e !important; }
+.hero-stat .hs-v { color: #ffffff !important; }
+.hero-stat .hs-l { color: #9fb0cf !important; }
+.hero-stat .hs-icon          { color: #5eead4 !important; }
+.hero-stat.hero-sky  .hs-icon { color: #43b8e8 !important; }
+.hero-stat.hero-gold .hs-icon { color: #ffd24a !important; }
+.hero-stat.hero-bark .hs-icon { color: #e0b43a !important; }
+.hero-stat.hero-terra .hs-icon { color: #fb8a7e !important; }
+.hero-stat .stat-q { color: #ffd24a !important; }
+/* sheen-sweep + lift on the stat info-boxes */
+.hero-stat::before {
+  content:""; position:absolute; top:0; left:-65%; width:55%; height:100%; z-index:4;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
+  transform: skewX(-18deg); pointer-events:none; opacity:0;
+}
+.hero-stat:hover::before { animation: vstSheen .85s ease; }
+.hero-stat:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(45,212,191,.35) !important;
+}
+/* dark mode keeps the same dark info-boxes (override the veg.css dark fallback) */
+[data-bs-theme="dark"] .hero-stat { background: linear-gradient(180deg, #15294f 0%, #0e1d40 100%) !important; }
+.hero-title { color: var(--pine); }
+[data-bs-theme="dark"] .hero-title { color: #5eead4; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-hero::before, .brand-mark, .app-emoji,
+  .hero-stat::before { animation: none !important; }
+  .hero-stat:hover { transform: none; }
+}

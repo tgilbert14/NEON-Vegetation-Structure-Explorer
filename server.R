@@ -6,11 +6,11 @@ server <- function(input, output, session) {
   is_dark <- function() identical(input$colorMode, "dark")
   plotly_theme <- function(p, legend = TRUE) {
     dark <- is_dark()
-    ink  <- if (dark) "#e8ece6" else "#1d2a24"; grid <- if (dark) "rgba(220,232,228,0.10)" else "rgba(32,40,36,0.08)"
-    zero <- if (dark) "rgba(220,232,228,0.22)" else "rgba(32,40,36,0.15)"; lin <- if (dark) "#2c352f" else "#d9d5c8"
-    legc <- if (dark) "#c2cfc8" else "#33403a"
-    hov  <- if (dark) list(bg = "rgba(14,24,22,0.97)", bd = "#e8b54a", fg = "#f1f6f3")
-            else        list(bg = "rgba(20,42,39,0.96)", bd = "#E0A500", fg = "#ffffff")
+    ink  <- if (dark) "#eaf2ff" else "#16243a"; grid <- if (dark) "rgba(220,232,255,0.10)" else "rgba(20,40,80,0.08)"
+    zero <- if (dark) "rgba(220,232,255,0.22)" else "rgba(20,40,80,0.15)"; lin <- if (dark) "rgba(255,255,255,0.12)" else "#d6e0ee"
+    legc <- if (dark) "#c2cfe0" else "#33405a"
+    hov  <- if (dark) list(bg = "rgba(14,29,64,0.96)", bd = "#2dd4bf", fg = "#eaf2ff")
+            else        list(bg = "rgba(20,42,60,0.96)", bd = "#149086", fg = "#ffffff")
     p %>% plotly::layout(paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
       font = list(color = ink, family = "Rubik"),
       xaxis = list(gridcolor = grid, zerolinecolor = zero, linecolor = lin),
@@ -269,7 +269,7 @@ server <- function(input, output, session) {
     if (!nrow(d)) return(note_plot("No richness data"))
     d <- d[order(d$n_species), ]; d$site <- factor(d$site, levels = d$site)
     cur <- rv$site %||% ""
-    d$col <- ifelse(as.character(d$site) == cur, "#E0A500", DDL$navy)
+    d$col <- ifelse(as.character(d$site) == cur, "#ffd24a", DDL$sky)
     plot_ly(d, y = ~site, x = ~n_species, type = "bar", orientation = "h",
       marker = list(color = ~col),
       hovertemplate = ~paste0("<b>", site, "</b> · ", name, "<br>", n_species, " woody species",
@@ -310,7 +310,7 @@ server <- function(input, output, session) {
       hovertemplate = paste0("%{x} cm/yr<br>%{y} ", sp$nouns, "<extra></extra>")) %>%
       plotly_theme(legend = FALSE) %>%
       plotly::layout(showlegend = FALSE, xaxis = list(title = paste0(if (identical(sp$type,"shrubland")) "Basal-diameter" else "Diameter", " growth (cm/yr)")), yaxis = list(title = sp$Nouns),
-        shapes = list(list(type="line", x0=0, x1=0, yref="paper", y0=0, y1=1, line=list(color="rgba(122,82,48,0.7)", dash="dot", width=1))))
+        shapes = list(list(type="line", x0=0, x1=0, yref="paper", y0=0, y1=1, line=list(color="rgba(224,180,58,0.8)", dash="dot", width=1))))
   })
   output$growthInsight <- renderUI({
     sp <- SP(); g <- tree_growth(rv$trees, sp); req(!is.null(g), nrow(g) > 0)
@@ -388,7 +388,7 @@ server <- function(input, output, session) {
       xs <- seq(min(g$d1), max(g$d1), length.out = 50)
       yh <- as.numeric(stats::predict(fit, data.frame(d1 = xs)))
       p <- p %>% add_trace(x = xs, y = yh, type = "scatter", mode = "lines", inherit = FALSE,
-        name = "trend", line = list(color = DDL$ink, width = 2.5, dash = "dash"),
+        name = "trend", line = list(color = if (is_dark()) "#eaf2ff" else "#16243a", width = 2.5, dash = "dash"),
         hovertemplate = "trend<extra></extra>")
       sprintf("Trend: %s (Spearman r = %+.2f, p = %.3f, n = %d)",
         if (ct$estimate < 0) "growth slows as plants get bigger" else "growth rises with size",
@@ -499,7 +499,7 @@ server <- function(input, output, session) {
     if (!is.null(tag)) { ir <- pts[pts$individualID == tag, ]
       if (nrow(ir) == 1) p <- p %>% add_trace(x = ir$size, y = ir$height, type="scatter", mode="markers",
         name = "★ viewing", customdata = ir$tip, showlegend = TRUE,
-        marker = list(symbol="diamond", size=18, color="#E0A500", line=list(color="#fff", width=1.6)),
+        marker = list(symbol="diamond", size=18, color="#ffd24a", line=list(color="#fff", width=1.6)),
         hovertemplate = paste0("viewing ", ir$short, "<extra></extra>")) }
     p %>% plotly_theme() %>% plotly::layout(
       xaxis = list(title = paste0(if (identical(sp$type,"shrubland")) "Basal stem diameter" else "Diameter at breast height", " (cm)")), yaxis = list(title = "Height (m)"),

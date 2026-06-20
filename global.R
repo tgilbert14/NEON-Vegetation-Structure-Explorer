@@ -58,23 +58,27 @@ veg_sites_in_state <- function(stt) {
   setNames(rows$site, sprintf("%s — %s", rows$site, rows$name))
 }
 
-# ---- theme: cross-biome identity ------------------------------------------
-# "Sun-warmed earth meets high-country water" — a biome-neutral palette so the
-# app reads as forest AND desert AND tundra AND tropical, not forest-only:
-# a deep teal-pine primary (forest + alpine water), desert-ochre accent, amber
-# highlight, on a sun-bleached sand canvas. No single biome owns the identity.
-# Key names 'navy'/'cardinal' are KEPT for low churn but hold cross-biome values.
+# ---- theme: DDL desert-night creative system ------------------------------
+# Matches the DDL suite cover + the Small Mammal Tracker sibling: teal primary,
+# coral accent, gold highlight on a dark sky — carried by the chart layer. The
+# app DEFAULTS to LIGHT (ui.R input_dark_mode mode="light"); these DDL values
+# drive the plotly markers/lines, which read crisp in both modes. Key NAMES are
+# KEPT (server.R references DDL$navy/$gold/$bark/etc.), VALUES remapped to the
+# desert palette so every chart re-themes from this one edit.
 DDL <- list(
-  navy = "#1f6a63", navy2 = "#164d48", cardinal = "#8a5a2b", gold = "#E0A500",
-  gold2 = "#8a6310", sky = "#356f80", green = "#2f7d46", green2 = "#1c4d2c",
-  bark = "#8a5a2b", ink = "#1d2a24", muted = "#5c6b62", bg = "#f1efe6",
-  paper = "#fdfcf7", line = "#e1ddcf",
-  live = "#2f7d46", dead = "#9a5a3a", rust = "#b5471f")   # rust = reserved true-error red
+  navy = "#0e1d40", navy2 = "#1b2e5c", cardinal = "#fb8a7e", gold = "#ffd24a",
+  gold2 = "#e0b43a", sky = "#43b8e8", green = "#5fb56a", green2 = "#2f7d46",
+  bark = "#e0b43a", ink = "#eaf2ff", muted = "#9fb0cf", bg = "#070d1f",
+  paper = "#0e1d40", line = "rgba(255,255,255,0.12)",
+  live = "#5fb56a", dead = "#fb8a7e", rust = "#fb8a7e")   # rust = reserved true-error coral
 
+# Light "desert-day" base (DEFAULT). styles.css [data-bs-theme="dark"] carries
+# the full desert-night system; both modes show the dark command-band hero +
+# dark stat info-boxes (the "light page, dark hero" look).
 app_theme <- bs_theme(
-  version = 5, bg = "#fdfcf7", fg = DDL$ink,
-  primary = DDL$navy, secondary = DDL$bark,
-  success = DDL$green, info = DDL$sky, warning = DDL$gold, danger = DDL$rust,
+  version = 5, bg = "#ffffff", fg = "#16243a",
+  primary = "#149086", secondary = "#e0685a",
+  success = "#3f9a52", info = "#2f8fc4", warning = "#d6a31c", danger = "#e0685a",
   base_font = font_google("Rubik"), heading_font = font_google("Rubik"), "border-radius" = "10px")
 
 asset_url <- function(path) {
@@ -88,8 +92,15 @@ info_pop <- function(title, ..., placement = "auto")
   bslib::popover(tags$span(class = "info-dot", bsicons::bs_icon("info-circle")), ..., title = title, placement = placement)
 insight_banner <- function(icon, ..., tone = "navy")
   div(class = paste("chart-insight", paste0("ci-", tone)), bsicons::bs_icon(icon), div(class = "ci-text", ...))
-glow_badge <- function(label, color = "#0C234B", glow = color)
-  span(class = "glow-badge", style = sprintf("color:#fff; background:%s; border-color:%s;", color, color), label)
+# Auto-picks DARK text (#16243a) on a bright fill (gold/teal/coral) and white on
+# a dark fill via a luminance check, so the badge reads in both themes.
+glow_badge <- function(label, color = "#149086", glow = color) {
+  txt <- tryCatch({
+    rc <- grDevices::col2rgb(color)
+    if ((0.299 * rc[1] + 0.587 * rc[2] + 0.114 * rc[3]) / 255 > 0.6) "#16243a" else "#ffffff"
+  }, error = function(e) "#ffffff")
+  span(class = "glow-badge", style = sprintf("color:%s; background:%s; border-color:%s;", txt, color, color), label)
+}
 card_head <- function(icon, title, ...)
   bslib::card_header(class = "with-info", bsicons::bs_icon(icon), tags$span(class = "ch-title", " ", title), ...)
 fmt_int <- function(x) format(round(as.numeric(x)), big.mark = ",", trim = TRUE)

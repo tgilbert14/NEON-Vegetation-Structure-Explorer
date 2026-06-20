@@ -116,6 +116,7 @@ button.qc-flag:hover { transform: translateX(2px); box-shadow: 0 3px 12px var(--
 [data-bs-theme="dark"] .leader-cats .radio-inline:has(input:checked) > span { color: #10211f; }
 [data-bs-theme="dark"] .leader-cats .form-check-label:hover { background: #1f302d; }
 
-/* hero count-up uses the shared .count-up engine from app.js */
-[data-bs-theme="dark"] .hero-stat,
+/* hero count-up uses the shared .count-up engine from app.js. The .hero-stat
+   info-boxes are styled dark in BOTH modes by the premium block in styles.css
+   (the "light page, dark hero" look), so only the site-card needs the dark fill. */
 [data-bs-theme="dark"] .site-card { background: var(--paper); }
