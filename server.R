@@ -337,18 +337,28 @@ server <- function(input, output, session) {
       hovertemplate = paste0("%{label}<br>%{value} ", sp$nouns, "<extra></extra>")) %>%
       plotly_theme(legend = FALSE) %>% plotly::layout(showlegend = FALSE)
   })
+  # shared so a clicked row maps to the exact plant (DT row index = data index)
+  fast_growers <- reactive({
+    sp <- SP(); g <- tree_growth(rv$trees, sp); if (is.null(g) || !nrow(g)) return(NULL)
+    g <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 0 & g$growth_cm_yr <= 5 & !g$mh_change, , drop = FALSE]
+    if (!nrow(g)) return(NULL)
+    g[order(-g$growth_cm_yr), , drop = FALSE][seq_len(min(20, nrow(g))), , drop = FALSE]
+  })
   output$fastTable <- DT::renderDT({
-    sp <- SP(); g <- tree_growth(rv$trees, sp)
-    if (is.null(g) || !nrow(g)) return(DT::datatable(data.frame(Message = sprintf("No remeasured %s yet.", sp$nouns)), rownames = FALSE, options = list(dom = "t")))
-    g <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 0 & g$growth_cm_yr <= 5 & !g$mh_change, ]
-    if (!nrow(g)) return(DT::datatable(data.frame(Message = "No clean remeasurement growth yet."), rownames = FALSE, options = list(dom = "t")))
-    g <- g[order(-g$growth_cm_yr), ][seq_len(min(20, nrow(g))), ]
+    sp <- SP(); g <- fast_growers()
+    if (is.null(g)) return(DT::datatable(data.frame(Message = sprintf("No clean remeasured %s growth yet.", sp$nouns)), rownames = FALSE, options = list(dom = "t")))
     lab0 <- sprintf("%s start (cm)", sp$size_lab); lab1 <- sprintf("%s now (cm)", sp$size_lab)
     df <- data.frame(Plant = short_tree(g$individualID), Species = g$scientificName,
                      v0 = round(g$d0,1), v1 = round(g$d1,1),
                      `Growth (cm/yr)` = g$growth_cm_yr, check.names = FALSE)
     names(df)[3:4] <- c(lab0, lab1)
-    DT::datatable(df, rownames = FALSE, options = list(pageLength = 8, dom = "tp", order = list(list(4, "desc"))))
+    DT::datatable(df, rownames = FALSE, selection = "single", class = "leader-dt",
+      options = list(pageLength = 8, dom = "tp", order = list(list(4, "desc"))))
+  })
+  # click a fast-grower row -> open that plant's career (matches the Champions table)
+  observeEvent(input$fastTable_rows_selected, {
+    g <- fast_growers(); i <- input$fastTable_rows_selected
+    if (!is.null(g) && length(i) && i <= nrow(g)) pick_tree(g$individualID[i], navigate = TRUE)
   })
 
   # growth-allometry: does annual diameter increment slow as plants get bigger?

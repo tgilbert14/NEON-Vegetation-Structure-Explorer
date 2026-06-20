@@ -165,7 +165,7 @@ ui <- bslib::page_sidebar(
               p("A ", tags$b("dashed trend line"), " is drawn ", tags$b("only"), " when the size–growth relationship is real (n ≥ 12, |Spearman r| ≥ 0.15, p < 0.05); otherwise it's an honest scatter with a “no clear trend” note — no fabricated line."))),
           spin(plotlyOutput("growthSize", height = "360px"))),
         card(card_head("trophy", "Fastest-growing plants",
-            info_pop("Fastest growers", p("Plants ranked by annualised diameter growth (≥2 visits spanning ≥1 year), DBH for trees and basal diameter for shrubs. Implausible jumps (>5 cm/yr) are excluded as likely measurement issues, not champions."))),
+            info_pop("Fastest growers", p("Plants ranked by annualised diameter growth (≥2 visits spanning ≥1 year), DBH for trees and basal diameter for shrubs. Implausible jumps (>5 cm/yr) are excluded as likely measurement issues, not champions."), p(tags$b("Tap a row"), " to open that plant's growth career."))),
           spin(DT::DTOutput("fastTable")))),
 
       nav_panel(title = tagList(bs_icon("bullseye"), " Size Lab"), value = "lab",
