@@ -113,10 +113,10 @@ for (s in SITES) {
     n_trees = nrow(live[live$growthForm %in% c("single bole tree", "multi-bole tree", "small tree"), ]),
     n_species = length(unique(live$scientificName)),
     tallest_m = round(max(snap$height, na.rm = TRUE), 1),
-    biggest_dbh_cm = round(max(snap$stemDiameter, na.rm = TRUE), 1),
+    biggest_diam_cm = round(max(snap$stemDiameter, na.rm = TRUE), 1),
     lat = b$meta$lat, lng = b$meta$lng, stringsAsFactors = FALSE)
   cat(sprintf("  %s: %d live trees, %d species | tallest %.1f m, biggest %.1f cm | %d tree-bouts | size %s\n",
-      s, idx_rows[[s]]$n_trees, idx_rows[[s]]$n_species, idx_rows[[s]]$tallest_m, idx_rows[[s]]$biggest_dbh_cm,
+      s, idx_rows[[s]]$n_trees, idx_rows[[s]]$n_species, idx_rows[[s]]$tallest_m, idx_rows[[s]]$biggest_diam_cm,
       nrow(tr), format(file.size(file.path("data/sites", paste0(s, ".rds"))), big.mark = ",")))
 }
 idx <- dplyr::bind_rows(idx_rows)

@@ -32,11 +32,11 @@ rows <- lapply(sites, function(s) {
     n_trees = nrow(woody),                                         # live plants (trees or shrubs)
     n_species = dplyr::n_distinct(woody_sp$scientificName),        # species among them
     tallest_m = round(smax(live_only(snap)$height), 1),
-    biggest_dbh_cm = round(smax(woody_only(live_only(snap), spec)[[spec$col]]), 1),
+    biggest_diam_cm = round(smax(woody_only(live_only(snap), spec)[[spec$col]]), 1),
     lat = b$meta$lat %||% NA_real_, lng = b$meta$lng %||% NA_real_,
     stringsAsFactors = FALSE)
 })
 idx <- dplyr::bind_rows(rows)
 saveRDS(idx, "data/site_index.rds", compress = "xz")
 cat("site_index rebuilt (adaptive forest/shrubland defs, matched to the app hero):\n")
-print(idx[, c("site","structure_type","n_trees","n_species","tallest_m","biggest_dbh_cm")]); cat("DONE\n")
+print(idx[, c("site","structure_type","n_trees","n_species","tallest_m","biggest_diam_cm")]); cat("DONE\n")

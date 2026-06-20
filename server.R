@@ -109,9 +109,9 @@ server <- function(input, output, session) {
     noun  <- if (shrub) "shrubs" else "trees"
     where <- paste(stats::na.omit(c(as.character(row$name[1]), as.character(row$state[1]))),
                    collapse = ", ")
-    size_line <- if (!is.na(row$tallest_m[1]) || !is.na(row$biggest_dbh_cm[1]))
+    size_line <- if (!is.na(row$tallest_m[1]) || !is.na(row$biggest_diam_cm[1]))
       sprintf("<div class='sp-years'>tallest %sm &middot; widest %scm</div>",
-              row$tallest_m[1] %||% "?", row$biggest_dbh_cm[1] %||% "?") else ""
+              row$tallest_m[1] %||% "?", row$biggest_diam_cm[1] %||% "?") else ""
     htmltools::HTML(sprintf(
       "<div class='pm-pop site-pop'>
          <div class='pm-pop-t'>%s %s <span class='sp-code'>(%s)</span></div>
@@ -164,7 +164,7 @@ server <- function(input, output, session) {
             stat(row$n_trees[1], noun),
             stat(row$n_species[1], "species")),
           div(class = "si-row",
-            "Tallest ", dash(row$tallest_m[1]), "m · widest ", dash(row$biggest_dbh_cm[1]), "cm")),
+            "Tallest ", dash(row$tallest_m[1]), "m · widest ", dash(row$biggest_diam_cm[1]), "cm")),
         div(class = "si-sec",
           div(class = "si-h", "Structure"),
           div(class = "si-row si-fam",
@@ -183,7 +183,7 @@ server <- function(input, output, session) {
         r$site, r$name %||% r$site, r$state %||% "",
         format(r$n_trees %||% 0, big.mark = ","),
         if (identical(r$structure_type, "shrubland")) "shrubs" else "trees",
-        r$n_species %||% "?", r$tallest_m %||% "?", r$biggest_dbh_cm %||% "?"),
+        r$n_species %||% "?", r$tallest_m %||% "?", r$biggest_diam_cm %||% "?"),
       popup_fn = site_popup_html)
   })
 
