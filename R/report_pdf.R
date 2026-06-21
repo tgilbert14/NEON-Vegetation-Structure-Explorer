@@ -23,7 +23,7 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
 
   # ---- header band -------------------------------------------------------
   graphics::rect(0, 92, 100, 100, col = P$pine, border = NA)
-  graphics::text(3, 96.4, "NEON Vegetation Structure — Stand Report", col = "#ffffff",
+  graphics::text(3, 96.4, "NEON Vegetation Structure: Stand Report", col = "#ffffff",
                  cex = 1.5, font = 2, adj = 0)
   graphics::text(3, 93.6, label, col = P$gold, cex = 1.0, font = 2, adj = 0)
   graphics::text(97, 93.6, format(Sys.Date(), "%Y-%m-%d  ·  DP1.10098.001"),
@@ -51,7 +51,7 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
   }
 
   # ---- section: composition by basal area (top species) ------------------
-  graphics::text(3, 80, "Composition — top species by basal area", col = P$pine2, cex = 1.0, font = 2, adj = 0)
+  graphics::text(3, 80, "Composition: top species by basal area", col = P$pine2, cex = 1.0, font = 2, adj = 0)
   if (!is.null(ss) && nrow(ss)) {
     topn <- utils::head(ss, 8); topn <- topn[nrow(topn):1, ]
     tot <- sum(ss$ba_m2, na.rm = TRUE); mx <- max(topn$ba_m2, na.rm = TRUE)

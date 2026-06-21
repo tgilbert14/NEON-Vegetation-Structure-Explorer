@@ -56,7 +56,7 @@ tree(640, 404, 30, gold)
 # subtitle
 text(70, 322, "Every tagged tree and desert shrub's diameter and height, the stand's size",
      col = ink2, cex = 1.12, adj = 0)
-text(70, 292, "structure, and how plants grow over the years — 42 NEON sites, every biome.",
+text(70, 292, "structure, and how plants grow over the years. 42 NEON sites, every biome.",
      col = ink2, cex = 1.12, adj = 0)
 
 # stat chips

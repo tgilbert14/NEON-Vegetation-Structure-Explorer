@@ -273,21 +273,21 @@ tree_history <- function(trees, id) {
 tree_qc_flags <- function(hist, spec = SIZE_FOREST) {
   flags <- list(); add <- function(level, text) flags[[length(flags) + 1L]] <<- list(level = level, text = text)
   if (is.null(hist) || !nrow(hist)) return(flags)
-  if (nrow(hist) < 2) { add("info", "Measured once — no remeasurement yet, so the growth trajectory and its checks don't apply."); return(flags) }
+  if (nrow(hist) < 2) { add("info", "Measured once, no remeasurement yet, so the growth trajectory and its checks don't apply."); return(flags) }
   dcol <- if (spec$col %in% names(hist)) spec$col else "stemDiameter"
   d <- hist[[dcol]]; dt <- as.numeric(diff(hist$date)) / 365.25
   dd <- diff(d)
   # status went back to Live after dead = impossible (tag/data issue)
   st <- ifelse(grepl("^Live", hist$plantStatus), 1L, ifelse(grepl("[Dd]ead|Downed", hist$plantStatus), 0L, NA))
   sv <- st[!is.na(st)]
-  if (length(sv) >= 2 && any(diff(sv) > 0)) add("high", "Status returned to Live after being recorded dead — impossible for one stem; a tagging or data-entry issue.")
+  if (length(sv) >= 2 && any(diff(sv) > 0)) add("high", "Status returned to Live after being recorded dead, impossible for one stem; a tagging or data-entry issue.")
   # implausible fast growth
   rate <- ifelse(dt > 0, dd / dt, NA)
-  if (any(is.finite(rate) & rate > 5)) add("warn", sprintf("Diameter grew >5 cm/yr between visits (max %.1f cm/yr) — implausibly fast; check for a measurement-height change or a tag mix-up.", max(rate, na.rm = TRUE)))
+  if (any(is.finite(rate) & rate > 5)) add("warn", sprintf("Diameter grew >5 cm/yr between visits (max %.1f cm/yr), implausibly fast; check for a measurement-height change or a tag mix-up.", max(rate, na.rm = TRUE)))
   # diameter shrank
   if (any(is.finite(dd) & dd < -0.1)) {
     mh_changed <- "measurementHeight" %in% names(hist) && length(unique(stats::na.omit(hist$measurementHeight))) > 1
-    add("info", paste0("Diameter decreased between visits — common and often real (bark sloughing, drought shrinkage",
+    add("info", paste0("Diameter decreased between visits, common and often real (bark sloughing, drought shrinkage",
       if (mh_changed) ", and here the measurement height changed between visits, which alone can explain it" else "",
       "). Verify, don't assume an error."))
   }
@@ -391,8 +391,8 @@ veg_codebook <- function() {
     c("growthForm","trees_long","character","single bole tree/multi-bole tree/small tree/single shrub/small shrub/sapling/...","NEON growth form; forest stand metrics scope to tree forms, shrubland to shrub forms."),
     c("date","trees_long","date (ISO)","YYYY-MM-DD","Measurement date of this bout."),
     c("year","trees_long","integer","","Calendar year of the bout."),
-    c("dbh_cm","trees_long","numeric","cm","Diameter at breast height (~130 cm) — the FOREST-paradigm size measurement. NA = not measured under this site's paradigm (shrubland stems carry basal_stem_diam_cm instead), so it is structurally NA, not missing data — e.g. ~28% NA even at a forest site like HARV."),
-    c("basal_stem_diam_cm","trees_long","numeric","cm","Basal stem diameter (near ground) — the SHRUBLAND-paradigm size measurement for shrubs / short stems. NA = not measured under this site's paradigm (forest stems carry dbh_cm instead), so it is structurally NA, not missing data — e.g. ~79% NA at a forest site like HARV."),
+    c("dbh_cm","trees_long","numeric","cm","Diameter at breast height (~130 cm), the FOREST-paradigm size measurement. NA = not measured under this site's paradigm (shrubland stems carry basal_stem_diam_cm instead), so it is structurally NA, not missing data; e.g. ~28% NA even at a forest site like HARV."),
+    c("basal_stem_diam_cm","trees_long","numeric","cm","Basal stem diameter (near ground), the SHRUBLAND-paradigm size measurement for shrubs / short stems. NA = not measured under this site's paradigm (forest stems carry dbh_cm instead), so it is structurally NA, not missing data; e.g. ~79% NA at a forest site like HARV."),
     c("height_m","trees_long","numeric","m","Plant height; often NA (not every stem is measured for height)."),
     c("max_crown_diam_m","trees_long","numeric","m","Maximum crown/canopy diameter (where measured)."),
     c("measurement_height_cm","trees_long","numeric","cm","Height on the stem at which dbh_cm was taken; a change makes an increment apples-to-oranges."),
@@ -402,18 +402,18 @@ veg_codebook <- function() {
     c("live","trees_long","logical","TRUE/FALSE","Derived = grepl('^Live', plant_status)."),
     c("permanent","trees_long","logical","TRUE/FALSE","Derived = id starts with 'NEON'; growth metrics use permanent ids only."),
     c("is_species","trees_long","logical","TRUE/FALSE","Derived = identified to species or finer (unambiguous)."),
-    c("plotType","plots","character","distributed/tower","NEON plot design class — distributed (random placement, the basis for the unbiased site estimate) vs tower (clustered near the flux tower). Split by plotType before pooling for a design-based estimate."),
-    c("structure_type","plots","character","forest/shrubland","The site's measurement paradigm — forest (woody plants sized by DBH at breast height) vs shrubland (sized by basal stem diameter at the base). Tags every row so a pooled plots.csv from multiple sites self-identifies which paradigm produced its ba_m2_ha / biggest_diam_cm — these are NOT the same measurement across the fork (see ba_m2_ha)."),
+    c("plotType","plots","character","distributed/tower","NEON plot design class: distributed (random placement, the basis for the unbiased site estimate) vs tower (clustered near the flux tower). Split by plotType before pooling for a design-based estimate."),
+    c("structure_type","plots","character","forest/shrubland","The site's measurement paradigm: forest (woody plants sized by DBH at breast height) vs shrubland (sized by basal stem diameter at the base). Tags every row so a pooled plots.csv from multiple sites self-identifies which paradigm produced its ba_m2_ha / biggest_diam_cm; these are NOT the same measurement across the fork (see ba_m2_ha)."),
     c("size_metric","plots","character","bole-DBH basal area (breast height)/basal-diameter basal cover (stem base)","Plain-language name of the physical quantity ba_m2_ha represents for this row, set by structure_type. Forest = bole cross-section at ~130 cm; shrubland = basal cover at the stem base."),
     c("nlcdClass","plots","character","","NEON land-cover class (NLCD) at the plot."),
     c("lat","plots","numeric","decimal degrees","Plot centroid latitude (WGS84 decimal degrees)."),
     c("lng","plots","numeric","decimal degrees","Plot centroid longitude (WGS84 decimal degrees)."),
-    c("sampled_area_m2","plots","numeric","m^2","Sampled area for the paradigm — totalSampledAreaTrees (forest) or totalSampledAreaShrubSapling (shrubland) — the per-hectare denominator."),
-    c("ba_m2_ha","plots","numeric","m^2/ha","Live basal area per hectare for this plot. JOIN HAZARD: this is NOT one comparable measurement across sites — at a forest site it is bole cross-section at breast height (DBH), at a shrubland site it is basal COVER at the stem base, a ~500x-ratio difference in kind. Use the structure_type / size_metric column on the SAME row to know which; never pool ba_m2_ha across paradigms without splitting on structure_type."),
+    c("sampled_area_m2","plots","numeric","m^2","Sampled area for the paradigm: totalSampledAreaTrees (forest) or totalSampledAreaShrubSapling (shrubland), the per-hectare denominator."),
+    c("ba_m2_ha","plots","numeric","m^2/ha","Live basal area per hectare for this plot. JOIN HAZARD: this is NOT one comparable measurement across sites; at a forest site it is bole cross-section at breast height (DBH), at a shrubland site it is basal COVER at the stem base, a ~500x-ratio difference in kind. Use the structure_type / size_metric column on the SAME row to know which; never pool ba_m2_ha across paradigms without splitting on structure_type."),
     c("density_stems_ha","plots","numeric","stems/ha","Live stem density per hectare for this plot."),
     c("n_species","plots","integer","","Live species count in the plot."),
     c("tallest_m","plots","numeric","m","Height of the tallest live plant in the plot."),
-    c("biggest_diam_cm","plots","numeric","cm","Largest live stem diameter in the plot — DBH for forest, basal diameter for shrubland."),
+    c("biggest_diam_cm","plots","numeric","cm","Largest live stem diameter in the plot: DBH for forest, basal diameter for shrubland."),
     c("dominant_species","plots","character","","Live plant with the largest diameter in the plot (the plot's size-dominant taxon)."))
   out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
   names(out) <- c("column", "table", "type", "allowed_values", "definition"); out
@@ -525,7 +525,7 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST) {
         resurrected = any(.data$live & cumsum(.data$dead) > 0), .groups = "drop")
     rr <- res[res$resurrected %in% TRUE, , drop = FALSE]
     if (nrow(rr)) add("high", "resurrection", "Recorded Live after Dead",
-      "A plant logged dead at one visit and live at a later one — impossible biologically, so it points to a tag swap or data-entry error.",
+      "A plant logged dead at one visit and live at a later one, impossible biologically, so it points to a tag swap or data-entry error.",
       data.frame(plant = short(rr$individualID), species = rr$scientificName, stringsAsFactors = FALSE))
   }
 
@@ -544,7 +544,7 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST) {
         start_cm = round(shrink$d0, 1), now_cm = round(shrink$d1, 1), cm_per_yr = shrink$growth_cm_yr, stringsAsFactors = FALSE))
     mh <- g[g$mh_change %in% TRUE, , drop = FALSE]
     if (nrow(mh)) add("info", "mh", "Measurement height moved between visits",
-      "The point on the stem where diameter is taken changed, so the before/after increment isn't apples-to-apples — these are kept but excluded from growth stats.",
+      "The point on the stem where diameter is taken changed, so the before/after increment isn't apples-to-apples, and these are kept but excluded from growth stats.",
       data.frame(plant = short(mh$individualID), species = mh$scientificName,
         start_cm = round(mh$d0, 1), now_cm = round(mh$d1, 1), stringsAsFactors = FALSE))
   }
