@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>NEON Vegetation Structure · the Explorer Suite by Desert Data Labs</title>
   <meta name="description"
-    content="Explore the trees and shrubs at NEON research sites: how thick each trunk is, how tall, and how densely they grow. Compare a desert of small shrubs to a dense eastern forest. Real NEON data across 42 sites and every biome. Free, no account, just pick a site and start." />
+    content="Explore the trees and shrubs at NEON research sites: how thick each trunk is, how tall, and how densely they grow. Compare a desert of small shrubs to a dense eastern forest. Real NEON data across 42 sites and every biome. Pick a site to see its trees and shrubs." />
   <meta name="theme-color" content="#0a140e" />
 
   <!-- Open Graph / social card. Absolute URLs = the GitHub Pages domain for this repo. -->
@@ -14,12 +14,12 @@
   <meta property="og:url" content="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/" />
   <meta property="og:title" content="NEON Vegetation Structure Explorer" />
   <meta property="og:description"
-    content="See the size and structure of trees and shrubs at NEON research sites: how thick each trunk is, how tall, and how densely they grow. Compare a desert of small shrubs to a dense forest. Real data, 42 sites, free to use." />
+    content="See the size and structure of trees and shrubs at NEON research sites: how thick each trunk is, how tall, and how densely they grow. Compare a desert of small shrubs to a dense forest. Real data across 42 sites." />
   <meta property="og:image" content="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="NEON Vegetation Structure Explorer" />
   <meta name="twitter:description"
-    content="See the size and structure of trees and shrubs at NEON research sites: trunk thickness, height, and how densely they grow, across forests, deserts, and tundra. Free, pick a site and start." />
+    content="See the size and structure of trees and shrubs at NEON research sites: trunk thickness, height, and how densely they grow, across forests, deserts, and tundra. Pick a site to begin." />
   <meta name="twitter:image" content="https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/og-image.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -312,10 +312,10 @@
         <b>NEON</b>, the National Ecological Observatory Network, is a set of research sites all over
         the United States, paid for by the National Science Foundation, that measure plants, animals,
         water, and climate the same way everywhere, year after year, so scientists can watch how nature
-        changes nationwide. This free app lets you explore the plants: how thick each trunk is, how tall,
+        changes nationwide. The app lets you explore the plants: how thick each trunk is, how tall,
         and how densely they grow. Together those add up to how much woody plant a place holds. Put a
-        desert of small shrubs next to a dense eastern forest and see the difference. Pick a site and
-        start. No account needed.</p>
+        desert of small shrubs next to a dense eastern forest and see the difference. Pick a site to
+        begin.</p>
 
       <div class="cta-row">
         <a id="launch" class="launch" href="https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/">
@@ -369,8 +369,8 @@
       <div class="stats">
         <div class="stat"><div class="n">42</div><div class="l">research sites</div></div>
         <div class="stat"><div class="n">every</div><div class="l">habitat</div></div>
-        <div class="stat"><div class="n">real</div><div class="l">free public data</div></div>
-        <div class="stat"><div class="n">instant</div><div class="l">no waiting</div></div>
+        <div class="stat"><div class="n">open</div><div class="l">public NEON data</div></div>
+        <div class="stat"><div class="n">every</div><div class="l">tagged plant</div></div>
       </div>
 
       <details class="more">
@@ -388,7 +388,7 @@
           scaled up from the plots that were measured, with a margin of error shown. <b>Shrinking and lost
           plants are kept, not hidden.</b> When a trunk measures smaller than before (bark can flake off,
           drought can shrink it), that is checked and kept, and plants that simply lost their tag are counted
-          separately from plants that died. <b>This is a free educational tool. It is not affiliated with
+          separately from plants that died. <b>This is an educational tool. It is not affiliated with
           NEON, Battelle, or the NSF.</b>
         </div>
       </details>
@@ -397,7 +397,7 @@
 
   <footer>
     <div class="wrap">
-      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Want a custom data app like these for your project?</a><br>
+      <a class="cta-foot" href="mailto:desertdatalabs@gmail.com?subject=NEON%20Explorer%20Suite">Get in touch with Desert Data Labs →</a><br>
       Built on the NEON <a href="https://data.neonscience.org/data-products/DP1.10098.001" target="_blank" rel="noopener">Vegetation structure</a>
       product by <b>Desert Data Labs</b> &middot; Tucson, AZ. Data: National Ecological Observatory Network
       (operated by Battelle, funded by NSF). Educational tools, not affiliated with NEON, Battelle, or the NSF.
@@ -416,7 +416,7 @@
         var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
         var killer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
         fetch(APP_URL, { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
-          .then(function () { if (warm) warm.textContent = "Ready when you are."; })
+          .then(function () { if (warm) warm.textContent = "The app is ready."; })
           .catch(function () { if (warm) warm.textContent = ""; })
           .finally(function () { if (killer) clearTimeout(killer); });
       } catch (e) {}

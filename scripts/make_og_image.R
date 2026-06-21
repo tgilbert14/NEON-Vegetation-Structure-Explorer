@@ -61,7 +61,7 @@ text(70, 292, "structure, and how plants grow over the years — 42 NEON sites, 
 
 # stat chips
 chips <- list(c("42 sites", "every biome"), c("DBH + ø", "trees & shrubs"),
-              c("growth", "careers"), c("instant", "no API waits"))
+              c("growth", "careers"), c("real", "public data"))
 x0 <- 70; gap <- 14; w <- 250; h <- 96; y1 <- 64
 for (i in seq_along(chips)) {
   xl <- x0 + (i - 1) * (w + gap)
