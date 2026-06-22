@@ -30,6 +30,7 @@ rows <- lapply(sites, function(s) {
     structure_type = stype,
     size_metric = if (identical(stype, "shrubland")) "basal ø" else "DBH",
     n_trees = nrow(woody),                                         # live plants (trees or shrubs)
+    n_plots = dplyr::n_distinct(woody$plotID[!is.na(woody$plotID)]),  # sampling effort (plots w/ live woody)
     n_species = dplyr::n_distinct(woody_sp$scientificName),        # species among them
     tallest_m = round(smax(live_only(snap)$height), 1),
     biggest_diam_cm = round(smax(woody_only(live_only(snap), spec)[[spec$col]]), 1),

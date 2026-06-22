@@ -1009,6 +1009,8 @@ table.dataTable tbody tr:active { background: #dfe8f4 !important; }
   .ds-emoji, .podium-card, .dossier-card .glow-badge { animation: none !important; }
   .tag-badge.is-legendary::after, .podium-card.is-legendary::after { animation: none; opacity: 0; }
   .smt-pin.smt-pulse { animation: none !important; }
+  /* loading overlay: keep the bar + spinner VISIBLE but static (no float/sweep) */
+  .load-spin, .load-bar::after { animation: none !important; }
 }
 
 /* =========================================================================

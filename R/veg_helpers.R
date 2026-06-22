@@ -419,6 +419,25 @@ veg_codebook <- function() {
   names(out) <- c("column", "table", "type", "allowed_values", "definition"); out
 }
 
+# Data dictionary for the QC flag tables / QC-report CSV emitted by tree_qc_site().
+# Documents EVERY column the QC rows can carry (with units + NA-semantics) so the
+# downloaded flag CSVs are self-describing and the full individualID can be joined
+# back to trees_long.
+qc_dictionary <- function() {
+  rows <- list(
+    c("level","character","high/warn/info","Severity of the verify-not-wrong flag: high = biologically impossible / very likely an error; warn = unusual, worth a second look; info = context, kept but excluded from stats."),
+    c("issue","character","","Human-readable flag name (e.g. 'Implausible diameter jump (>5 cm/yr)')."),
+    c("flag","character","resurrection/jump/shrink/mh","Stable machine key for the flag type (present on per-flag downloads)."),
+    c("individualID","character","","FULL NEON stable tag for the flagged plant. Use this to join back to trees_long; it is the unabbreviated id, NOT the on-screen short form."),
+    c("plant","character","","Short display id (site/domain prefix stripped); for reading only, NOT a join key."),
+    c("species","character","","Identified taxon for the flagged plant (may be NA if unidentified)."),
+    c("start_cm","numeric","cm","Earlier-bout diameter (DBH for forest, basal stem diameter for shrubland). NA for the 'resurrection' flag, which is status-only and carries no size."),
+    c("now_cm","numeric","cm","Later-bout diameter, same measure as start_cm. NA for the 'resurrection' flag."),
+    c("cm_per_yr","numeric","cm/yr","Annualised diameter increment between the two bouts (now_cm − start_cm over the like-for-like interval). Positive = growth, negative = shrink. NA where not applicable (resurrection, measurement-height-moved)."))
+  out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
+  names(out) <- c("column", "type", "units_or_values", "definition"); out
+}
+
 # live vs dead snapshot composition (an honest crude status ratio, not a rate).
 # Reduced PER INDIVIDUAL across all snapshot stems: live if ANY stem is live, dead
 # only if a stem is dead/downed and none live. "Lost track / removed" (lost tag,
@@ -526,7 +545,8 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST) {
     rr <- res[res$resurrected %in% TRUE, , drop = FALSE]
     if (nrow(rr)) add("high", "resurrection", "Recorded Live after Dead",
       "A plant logged dead at one visit and live at a later one, impossible biologically, so it points to a tag swap or data-entry error.",
-      data.frame(plant = short(rr$individualID), species = rr$scientificName, stringsAsFactors = FALSE))
+      data.frame(individualID = as.character(rr$individualID), plant = short(rr$individualID),
+        species = rr$scientificName, stringsAsFactors = FALSE))
   }
 
   # growth-derived flags (per permanent individual, like-for-like increments)
@@ -535,17 +555,20 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST) {
     jump <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 5 & !g$mh_change, , drop = FALSE]
     if (nrow(jump)) add("high", "jump", "Implausible diameter jump (>5 cm/yr)",
       "A diameter increase faster than ~5 cm/yr (with no measurement-height change) usually means a mis-measure or a tag mix-up, not real growth.",
-      data.frame(plant = short(jump$individualID), species = jump$scientificName,
+      data.frame(individualID = as.character(jump$individualID), plant = short(jump$individualID),
+        species = jump$scientificName,
         start_cm = round(jump$d0, 1), now_cm = round(jump$d1, 1), cm_per_yr = jump$growth_cm_yr, stringsAsFactors = FALSE))
     shrink <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr < -2 & !g$mh_change, , drop = FALSE]
     if (nrow(shrink)) add("warn", "shrink", "Large shrink (< −2 cm/yr)",
       "Some diameter decrease is real (bark loss, drought); a drop steeper than 2 cm/yr (with no height change) is worth a second look.",
-      data.frame(plant = short(shrink$individualID), species = shrink$scientificName,
+      data.frame(individualID = as.character(shrink$individualID), plant = short(shrink$individualID),
+        species = shrink$scientificName,
         start_cm = round(shrink$d0, 1), now_cm = round(shrink$d1, 1), cm_per_yr = shrink$growth_cm_yr, stringsAsFactors = FALSE))
     mh <- g[g$mh_change %in% TRUE, , drop = FALSE]
     if (nrow(mh)) add("info", "mh", "Measurement height moved between visits",
       "The point on the stem where diameter is taken changed, so the before/after increment isn't apples-to-apples, and these are kept but excluded from growth stats.",
-      data.frame(plant = short(mh$individualID), species = mh$scientificName,
+      data.frame(individualID = as.character(mh$individualID), plant = short(mh$individualID),
+        species = mh$scientificName,
         start_cm = round(mh$d0, 1), now_cm = round(mh$d1, 1), stringsAsFactors = FALSE))
   }
   ord <- c(high = 1L, warn = 2L, info = 3L)

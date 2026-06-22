@@ -32,10 +32,49 @@ cat(sprintf("Writing manifest for %d files (%d site bundles)...\n",
             length(appFiles), length(list.files("data/sites", pattern = "\\.rds$"))))
 rsconnect::writeManifest(appDir = ".", appFiles = appFiles)
 
-# quick self-check
-m <- readLines("manifest.json", warn = FALSE)
-pkgs <- gsub('.*"([^"]+)": \\{', "\\1",
-             grep('^\\s*"[A-Za-z0-9.]+": \\{\\s*$', m, value = TRUE))
-cat(sprintf("manifest.json written: %d packages.\n", sum(grepl('"Source"', m))))
-if (any(grepl("neonUtilities", m))) cat("WARNING: neonUtilities leaked into the manifest!\n") else
-  cat("OK: neonUtilities is NOT in the manifest (lean bundle-only build).\n")
+# ---- LEAN PRUNE + HARD GATE -----------------------------------------------
+# Banned packages must never ship in this bundle-only deploy. neonUtilities is
+# kept out by the dynamic .NEON_PKG reference (the scanner never sees it). But
+# rsconnect's recursive closure can still over-capture arrow / data.table from
+# the build machine's broader install even though NO manifest package hard-depends
+# on them (verified: none are in any Imports/Depends/LinkingTo). They are spurious
+# weight, so we prune them, then gate to fail loud if a real (hard-dep) leak ever
+# reappears that pruning can't safely remove.
+banned <- c("neonUtilities", "arrow", "data.table")
+
+prune_banned <- function() {
+  raw <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
+  if (is.null(raw$packages)) return(invisible())
+  keep <- setdiff(names(raw$packages), banned)
+  dropped <- setdiff(names(raw$packages), keep)
+  raw$packages <- raw$packages[keep]
+  jsonlite::write_json(raw, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null")
+  dropped
+}
+
+# Sanity: refuse to prune anything a kept package HARD-depends on (that would
+# break the deploy). If a banned pkg is a true hard dependency, stop() instead.
+m0 <- jsonlite::fromJSON("manifest.json")
+for (b in intersect(banned, names(m0$packages))) {
+  dependents <- Filter(function(p) {
+    dd <- tryCatch(tools::package_dependencies(p, which = c("Depends","Imports","LinkingTo"))[[1]],
+                   error = function(e) NULL)
+    !is.null(dd) && b %in% dd
+  }, setdiff(names(m0$packages), b))
+  if (length(dependents))
+    stop(sprintf("Banned package '%s' is a HARD dependency of: %s — cannot prune safely. Investigate before deploying.",
+                 b, paste(dependents, collapse = ", ")))
+}
+
+dropped <- prune_banned()
+if (length(dropped)) cat(sprintf("Pruned spurious banned package(s): %s\n", paste(dropped, collapse = ", ")))
+
+# Final gate on the on-disk manifest.
+m <- jsonlite::fromJSON("manifest.json")
+pkgs <- names(m$packages)
+cat(sprintf("manifest.json written: %d packages, %d appFiles.\n", length(pkgs), length(m$files)))
+hit <- banned[vapply(banned, function(b) any(grepl(b, pkgs, ignore.case = TRUE)), logical(1))]
+if (length(hit))
+  stop(sprintf("BANNED package(s) still in manifest.json: %s. The deploy must stay lean (bundle-only).",
+               paste(hit, collapse = ", ")))
+cat("OK: no banned packages (neonUtilities/arrow/data.table) in the manifest (lean bundle-only build).\n")

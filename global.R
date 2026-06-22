@@ -40,7 +40,7 @@ SITE_INDEX <- tryCatch(readRDS("data/site_index.rds"), error = function(e) NULL)
 BUNDLED <- if (!is.null(SITE_INDEX)) SITE_INDEX$site else character(0)
 site_table <- if (length(BUNDLED)) {
   m <- neon_sites[match(BUNDLED, neon_sites$site), ]
-  idx_cols <- intersect(c("structure_type", "size_metric", "n_trees", "n_species",
+  idx_cols <- intersect(c("structure_type", "size_metric", "n_trees", "n_plots", "n_species",
                           "tallest_m", "biggest_diam_cm"), names(SITE_INDEX))
   out <- cbind(m, SITE_INDEX[match(m$site, SITE_INDEX$site), idx_cols])
   if (!"structure_type" %in% names(out)) out$structure_type <- "forest"

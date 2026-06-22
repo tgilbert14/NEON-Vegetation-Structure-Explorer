@@ -80,8 +80,11 @@ server <- function(input, output, session) {
     rv$lb    <- plot_summary_veg(rv$snap, b$plots, rv$spec)
     rv$pal   <- make_species_pal(species_level_only(rv$snap))
     rv$label <- label; rv$site <- b$meta$site; rv$is_demo <- is_demo; rv$tree <- NULL
+    # Treeless / single-census detection: no plot-level woody stand to scale.
+    rv$no_stand <- is.null(stand_site(rv$snap, rv$plots, rv$spec))
     yrs <- range(b$trees$year, na.rm = TRUE)
-    rv$ctx <- paste0(b$meta$site, " · ", if (yrs[1] == yrs[2]) yrs[1] else paste0(yrs[1], "–", yrs[2]))
+    rv$ctx <- paste0(b$meta$site, " · ", if (yrs[1] == yrs[2]) yrs[1] else paste0(yrs[1], "–", yrs[2]),
+                     if (isTRUE(rv$no_stand)) " · single-census / no woody stand" else "")
     shinyjs::show("mainTabsWrap"); shinyjs::show("treePickerWrap"); shinyjs::hide("splash")
     one <- rv$one; sz <- one[[rv$spec$col]]
     lab_meas <- ifelse(is.finite(sz), paste0(round(sz), "cm"),
@@ -367,18 +370,27 @@ server <- function(input, output, session) {
   # "this site vs the network" — all bundled sites by woody richness, current gold
   output$networkStrip <- renderPlotly({
     si <- site_table; if (is.null(si) || !nrow(si) || !"n_species" %in% names(si)) return(note_plot("No network index"))
-    d <- si[is.finite(si$n_species), c("site", "name", "n_species"), drop = FALSE]
+    cols <- intersect(c("site", "name", "n_species", "n_trees", "n_plots"), names(si))
+    d <- si[is.finite(si$n_species), cols, drop = FALSE]
     if (!nrow(d)) return(note_plot("No richness data"))
     d <- d[order(d$n_species), ]; d$site <- factor(d$site, levels = d$site)
     cur <- rv$site %||% ""
     d$col <- ifelse(as.character(d$site) == cur, "#ffd24a", DDL$sky)
+    # Raw observed-species count is sampling-effort-confounded (more plots / more
+    # stems find more species). Label it honestly and surface effort (n_trees,
+    # n_plots) in every bar's tooltip so the reader can see what drove the count.
+    eff <- if (all(c("n_trees","n_plots") %in% names(d)))
+      paste0("<br>", format(d$n_trees, big.mark=","), " live stems over ", d$n_plots, " plots (effort varies)")
+      else if ("n_trees" %in% names(d)) paste0("<br>", format(d$n_trees, big.mark=","), " live stems (effort varies)")
+      else ""
+    d$tip <- paste0("<b>", d$site, "</b> · ", d$name, "<br>", d$n_species, " observed woody species", eff,
+        ifelse(as.character(d$site) == cur, "<br>◀ this site", ""))
     plot_ly(d, y = ~site, x = ~n_species, type = "bar", orientation = "h",
-      marker = list(color = ~col),
-      hovertemplate = ~paste0("<b>", site, "</b> · ", name, "<br>", n_species, " woody species",
-        ifelse(as.character(site) == cur, "  ◀ this site", ""), "<extra></extra>")) %>%
+      marker = list(color = ~col), customdata = ~tip,
+      hovertemplate = "%{customdata}<extra></extra>") %>%
       plotly_theme(legend = FALSE) %>%
       plotly::layout(showlegend = FALSE, bargap = 0.22,
-        xaxis = list(title = "Woody species (richness)"),
+        xaxis = list(title = "Observed woody species (sampling effort varies)"),
         yaxis = list(title = "", automargin = TRUE, tickfont = list(size = 9)))
   })
   output$htPlot <- renderPlotly({
@@ -389,7 +401,17 @@ server <- function(input, output, session) {
       plotly::layout(showlegend = FALSE, xaxis = list(title = "Height (m)"), yaxis = list(title = "Live stems"))
   })
   output$densityBanner <- renderUI({
-    sp <- SP(); st <- stand_site(rv$snap, rv$plots, sp); req(!is.null(st))
+    sp <- SP(); st <- stand_site(rv$snap, rv$plots, sp)
+    if (is.null(st)) {
+      # Treeless / single-census site (e.g. WOOD): plants are tagged but there is
+      # no plot-level woody stand to scale to per-hectare values. Show a designed
+      # empty card instead of a blank space, so the absence is explained.
+      return(div(class = "chart-insight ci-bark stand-empty", bs_icon("info-circle"),
+        div(class = "ci-text", HTML(sprintf(
+          "<b>No woody stand to summarise here.</b> %s has tagged plants but not the plot-level %s sampling needed to scale basal area and density to per-hectare values (a single-census or sparse-woody site). The individual growth, size, and quality views still work; the stand fingerprint does not apply.",
+          rv$site %||% "This site",
+          if (identical(sp$type, "shrubland")) "shrub/sapling" else "tree")))))
+    }
     pre  <- if (st$n_plots < 3) "Preliminary (few plots): " else ""
     se_ba <- if (is.finite(st$ba_se)) sprintf(" ±%s SE", st$ba_se) else ""
     se_d  <- if (is.finite(st$density_se)) sprintf(" ±%s", format(st$density_se, big.mark = ",")) else ""
@@ -551,8 +573,8 @@ server <- function(input, output, session) {
   observeEvent(input$vegQcFlagClick, {
     q <- veg_qc(); req(q); f <- Filter(function(x) identical(x$key, input$vegQcFlagClick), q$flags)
     if (!length(f)) return(); f <- f[[1]]; rows <- f$rows; rows$flag <- NULL
-    qc_modal_rows(list(key = f$key, rows = rows))
-    shown <- utils::head(rows, 60)
+    qc_modal_rows(list(key = f$key, rows = rows))   # rows keep FULL individualID for the CSV (joins to trees_long)
+    shown <- utils::head(rows, 60); shown$individualID <- NULL   # on-screen shows the short 'plant' id only
     showModal(modalDialog(easyClose = TRUE, size = "l",
       title = tagList(bs_icon("clipboard-check"), sprintf(" %s · %d plants", f$label, f$n)),
       p(class = "qc-why", f$why),
@@ -580,7 +602,17 @@ server <- function(input, output, session) {
                  !is.na(one$scientificName), , drop = FALSE]
     if (!nrow(pts)) return(note_plot(sprintf("No %s with both a %s and a height to map", sp$nouns, sp$size_lab)))
     pts$short <- short_tree(pts$individualID)
-    if (nrow(pts) > 1800) { set.seed(7); pts <- pts[sort(sample.int(nrow(pts), 1800)), ] }
+    if (nrow(pts) > 1800) {
+      # Force-keep the currently viewed tree so its gold ★ diamond never gets
+      # sampled out (it was vanishing on ~10/42 sites incl the HARV demo). Pull
+      # the viewing row aside, downsample the rest, then re-bind and de-dup.
+      keep_row <- if (!is.null(rv$tree)) pts[pts$individualID %in% rv$tree, , drop = FALSE] else pts[0, ]
+      set.seed(7); samp <- pts[sort(sample.int(nrow(pts), 1800)), , drop = FALSE]
+      pts <- if (nrow(keep_row)) {
+        rb <- rbind(keep_row, samp)
+        rb[!duplicated(rb$individualID), , drop = FALSE]
+      } else samp
+    }
     keycol <- input$labColor %||% "species"
     pts$key <- if (keycol == "species") as.character(pts$scientificName)
                else if (keycol == "canopyPosition") as.character(pts$canopyPosition)
@@ -779,6 +811,8 @@ server <- function(input, output, session) {
         " trees_long.csv  · one row per individual x measurement bout (the raw growth career; aggregate it yourself).",
         " plots.csv       · one row per plot: sampled area + per-hectare stand summary.",
         " data_dictionary.csv · column definitions, types, units.",
+        " qc_report.csv   · every data-quality flag (level, issue, full individualID, sizes); join individualID to trees_long.",
+        " qc_dictionary.csv · column definitions for qc_report.csv.",
         "",
         "NOTES",
         sprintf(" * This is a %s site: plants are sized by %s (dbh_cm is ~empty for short desert shrubs; use basal_stem_diam_cm).", sp$type, sp$size_full),
@@ -790,6 +824,11 @@ server <- function(input, output, session) {
       if (!is.null(tl)) utils::write.csv(tl, file.path(tmp, "trees_long.csv"), row.names = FALSE, na = "")
       if (!is.null(pl)) utils::write.csv(pl, file.path(tmp, "plots.csv"), row.names = FALSE, na = "")
       utils::write.csv(cb, file.path(tmp, "data_dictionary.csv"), row.names = FALSE, na = "")
+      # QC report + its dictionary: the flagged rows carry the FULL individualID so
+      # they join back to trees_long; qc_dictionary.csv documents every QC column.
+      q <- tree_qc_site(rv$trees, sp)
+      utils::write.csv(if (is.null(q)) data.frame() else q$report, file.path(tmp, "qc_report.csv"), row.names = FALSE, na = "")
+      utils::write.csv(qc_dictionary(), file.path(tmp, "qc_dictionary.csv"), row.names = FALSE, na = "")
       writeLines(readme, file.path(tmp, "README.txt"))
       fs <- list.files(tmp, full.names = TRUE)
       old <- setwd(tmp); on.exit(setwd(old), add = TRUE)
@@ -817,16 +856,27 @@ server <- function(input, output, session) {
         leaflet::addControl("No plot-level stand data to map for this site. Try another site.", position = "topright"))
     }
     metric <- input$mapMetric %||% "ba_ha"
-    val <- lb[[metric]]; val[is.na(val)] <- 0
-    dom <- if (diff(range(val, na.rm=TRUE)) > 0) range(val, na.rm=TRUE) else c(val[1]-1, val[1]+1)
-    pal <- leaflet::colorNumeric("viridis", domain = dom)
-    rr <- range(lb$ba_ha, na.rm = TRUE); lb$radius <- if (diff(rr) > 0) 6 + 14*(lb$ba_ha - rr[1])/diff(rr) else 11
+    val <- lb[[metric]]                                  # KEEP NA (do not coerce to 0)
+    fin <- val[is.finite(val)]
+    grey_na <- if (is_dark()) "#5a6a82" else "#cfd6dd"   # NA plots render distinct grey
+    # Heavy-tailed stand quantities (ba_ha, density_ha) get a quantile colour scale
+    # so one big plot can't wash the rest out; bounded richness stays linear.
+    if (length(unique(fin)) >= 5 && metric %in% c("ba_ha", "density_ha")) {
+      pal <- leaflet::colorQuantile("viridis", domain = fin, n = 5, na.color = grey_na)
+    } else {
+      dom <- if (length(fin) && diff(range(fin)) > 0) range(fin) else c(0, 1)
+      pal <- leaflet::colorNumeric("viridis", domain = dom, na.color = grey_na)
+    }
+    # Radius keyed to ba_ha on the SAME log1p channel as the picker map (so size
+    # and colour move together and no single big plot dominates the radius range).
+    lb$radius <- picker_radius(lb$ba_ha)
     leaflet::leaflet(lb) %>% leaflet::addProviderTiles(input$view %||% "CartoDB.Positron") %>%
-      leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~radius, fillColor = pal(val),
+      leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~radius, fillColor = ~pal(val),
         color = "#fff", weight = 1, fillOpacity = 0.85, layerId = ~plotID,
-        label = ~lapply(sprintf("<b>%s</b><br>%s m²/ha · %s stems/ha · %s species", short_plot(plotID), ba_ha, format(density_ha, big.mark=","), n_species), htmltools::HTML)) %>%
-      leaflet::addLegend("bottomright", pal = pal, values = val,
-        title = switch(metric, ba_ha = "m²/ha", density_ha = "stems/ha", "species"))
+        label = ~lapply(sprintf("<b>%s</b><br>%s m²/ha · %s stems/ha · %s species", short_plot(plotID),
+          ifelse(is.na(ba_ha), "no woody", ba_ha), format(density_ha, big.mark=","), n_species), htmltools::HTML)) %>%
+      leaflet::addLegend("bottomright", pal = pal, values = fin,
+        title = switch(metric, ba_ha = "m²/ha", density_ha = "stems/ha", "species"), na.label = "no woody stand")
   })
 
   # ---- ABOUT --------------------------------------------------------------
