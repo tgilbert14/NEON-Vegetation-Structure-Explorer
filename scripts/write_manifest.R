@@ -34,13 +34,13 @@ rsconnect::writeManifest(appDir = ".", appFiles = appFiles)
 
 # ---- LEAN PRUNE + HARD GATE -----------------------------------------------
 # Banned packages must never ship in this bundle-only deploy. neonUtilities is
-# kept out by the dynamic .NEON_PKG reference (the scanner never sees it). But
-# rsconnect's recursive closure can still over-capture arrow / data.table from
-# the build machine's broader install even though NO manifest package hard-depends
-# on them (verified: none are in any Imports/Depends/LinkingTo). They are spurious
-# weight, so we prune them, then gate to fail loud if a real (hard-dep) leak ever
-# reappears that pruning can't safely remove.
-banned <- c("neonUtilities", "arrow", "data.table")
+# kept out by the dynamic .NEON_PKG reference (the scanner never sees it); arrow
+# is a heavy, wasm-hostile over-capture nothing here hard-depends on. We prune
+# those two, then gate to fail loud if either reappears.
+# IMPORTANT: data.table is NOT banned. plotly *Imports* data.table as a hard
+# dependency, and Connect Cloud's base image does NOT provide it, so pruning it
+# breaks the plotly install and the whole deploy. It must stay in the manifest.
+banned <- c("neonUtilities", "arrow")
 
 prune_banned <- function() {
   raw <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
@@ -77,4 +77,4 @@ hit <- banned[vapply(banned, function(b) any(grepl(b, pkgs, ignore.case = TRUE))
 if (length(hit))
   stop(sprintf("BANNED package(s) still in manifest.json: %s. The deploy must stay lean (bundle-only).",
                paste(hit, collapse = ", ")))
-cat("OK: no banned packages (neonUtilities/arrow/data.table) in the manifest (lean bundle-only build).\n")
+cat("OK: no banned packages (neonUtilities/arrow) in the manifest; data.table KEPT (plotly hard-dep).\n")
