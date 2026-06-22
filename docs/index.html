@@ -171,18 +171,23 @@
     .frung + .frung { margin-top:10px }
     .frung::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.0;
       background:linear-gradient(100deg, transparent, rgba(var(--lrgb),.16), transparent); }
-    .frung.pip-on::before { animation: pip 2.4s ease-in-out; }     /* energy pulse sweeps each rung in turn */
+    .frung.pip-on::before { animation: pip 3.2s ease-in-out; }     /* energy pulse sweeps each rung in turn (slowed) */
     @keyframes pip { 0%{opacity:0; transform:translateX(-30%)} 40%{opacity:1} 100%{opacity:0; transform:translateX(30%)} }
     .frung .fmark { width:34px; height:34px; flex:0 0 auto; border-radius:9px; position:relative;
       background:rgba(var(--lrgb),.16); border:1px solid rgba(var(--lrgb),.5) }
     .frung .fmark::after { content:""; position:absolute; inset:0; margin:auto; width:12px; height:12px; border-radius:50%;
       background:var(--lc); box-shadow:0 0 12px var(--lc) }
     .frung .ftxt b { font-weight:800; font-size:1rem } .frung .ftxt span { color:var(--dim); font-size:.86rem }
-    .frung.r1 { --lc:var(--clim); --lrgb:47,122,72 }
-    .frung.r2 { --lc:var(--phen); --lrgb:78,184,106; margin-left:14px }
-    .frung.r3 { --lc:var(--prod); --lrgb:127,224,150; margin-left:28px }
-    .frung.r4 { --lc:var(--cons); --lrgb:201,138,76; margin-left:42px }
-    .farrow { color:rgba(255,255,255,.32); text-align:center; margin:2px 0 2px 17px; font-size:1.05rem }
+    .frung.r1 { --lc:#2f7a48; --lrgb:47,122,72 }
+    .frung.r2 { --lc:#4eb86a; --lrgb:78,184,106 }
+    .frung.r3 { --lc:#7fe096; --lrgb:127,224,150 }
+    .frung.r4 { --lc:#c98a4c; --lrgb:201,138,76 }
+    .frung.r5 { --lc:#2f7a48; --lrgb:47,122,72 }
+    .frung.r6 { --lc:#4eb86a; --lrgb:78,184,106 }
+    .frung.r7 { --lc:#7fe096; --lrgb:127,224,150 }
+    .frung.r8 { --lc:#c98a4c; --lrgb:201,138,76 }
+    .cascade-band .hl-head { margin-top:30px }
+    .lead a { color:var(--bright); text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px }
 
     /* ---------- stats + about ---------- */
     .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:26px 0 0; position:relative; z-index:2 }
@@ -308,14 +313,7 @@
 
       <div class="eyebrow">Part of the NEON Explorer Suite</div>
       <h1>NEON Vegetation Structure</h1>
-      <p class="lead">See how big the trees and shrubs are at research sites across the country.
-        <b>NEON</b>, the National Ecological Observatory Network, is a set of research sites all over
-        the United States, paid for by the National Science Foundation, that measure plants, animals,
-        water, and climate the same way everywhere, year after year, so scientists can watch how nature
-        changes nationwide. The app lets you explore the plants: how thick each trunk is, how tall,
-        and how densely they grow. Together those add up to how much woody plant a place holds. Put a
-        desert of small shrubs next to a dense eastern forest and see the difference. Pick a site to
-        begin.</p>
+      <p class="lead">A Shiny web app for exploring the <a href="https://www.neonscience.org/" target="_blank" rel="noopener">National Ecological Observatory Network</a>'s woody vegetation structure data. NEON tags each tree and shrub, finds it on a map, and remeasures its diameter, height, and status over the years, so every plant has a growth career. The app turns 42 field sites of these mapped and measured stems, from old-growth Douglas-fir to Sonoran desert shrubland, into stand profiles, per-plant size cards, and side-by-side site comparisons, sizing each plant the right way for its habitat (tree diameter in forests, basal stem diameter in deserts).</p>
 
       <div class="cta-row">
         <a id="launch" class="launch" href="https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/">
@@ -351,19 +349,20 @@
   <!-- how the survey reads: map & measure -> basal area & height -> structure -> compare -->
   <section class="cascade-band">
     <div class="wrap">
-      <span class="kick">What you can do here</span>
-      <h2>From one tagged tree to the whole forest.</h2>
-      <p>NEON tags each tree and shrub, finds it on a map, and measures it again every few years. The app
-        builds on that. You start with a single plant and work up to comparing whole sites, and every step
-        shows you how the number was measured.</p>
+      <span class="kick">What it does</span>
+      <p>The app opens to a national map of NEON sites across every biome. Tap one to dive into its trees and shrubs. Each site loads instantly from a per-site data bundle that ships with the app (no network round-trip). From there it shows the stand's composition and headline numbers, the size-class distribution and height profile, per-hectare basal area and stem density, diameter growth between remeasurements, every plant as a dot in size-by-height space, the record-holding champions, and a drill-down career card for any single plant. Each site is sized the right way for its habitat: tree diameter at chest height in forests, basal stem diameter in deserts where shrubs are too short to measure that way.</p>
+      <p>It is built for two audiences: anyone curious about how NEON maps and measures woody plants, and new field technicians getting to know the trees and shrubs at their site.</p>
+
+      <h2 class="hl-head">Highlights</h2>
       <div class="flow" data-flow>
-        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Find and measure each plant</b> &middot; <span>every tagged tree and shrub, mapped and re-measured over the years</span></span></div>
-        <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Size and height</b> &middot; <span>how thick each trunk is, how tall, and how many plants per acre</span></span></div>
-        <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>The shape of the stand</b> &middot; <span>how many big plants versus small ones, and how much ground the trunks cover (its basal area)</span></span></div>
-        <div class="farrow" aria-hidden="true">&darr;</div>
-        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Compare</b> &middot; <span>two sites side by side, across the country and across the years</span></span></div>
+        <div class="frung r1"><span class="fmark"></span><span class="ftxt"><b>Select-a-site map</b> &middot; <span>All 42 bundled NEON veg-structure sites (35 forest, 7 shrubland) across every biome, with plot markers sized by basal area. The Harvard Forest demo loads instantly.</span></span></div>
+        <div class="frung r2"><span class="fmark"></span><span class="ftxt"><b>Overview</b> &middot; <span>Composition by basal area, an auto-written story of the stand, and its headline numbers, with a clickable hero band that opens ranked details.</span></span></div>
+        <div class="frung r3"><span class="fmark"></span><span class="ftxt"><b>Stand Structure</b> &middot; <span>The size-class distribution (a forester's reverse-J for trees, basal classes for shrubs), the height profile, and per-hectare basal area, stem density, and quadratic mean diameter.</span></span></div>
+        <div class="frung r4"><span class="fmark"></span><span class="ftxt"><b>Growth and Mortality</b> &middot; <span>Diameter growth rates between remeasurements, the fastest-growing plants, and the live versus standing-dead split.</span></span></div>
+        <div class="frung r5"><span class="fmark"></span><span class="ftxt"><b>Size Lab</b> &middot; <span>The flagship: every plant as a dot in size-by-height space (tree diameter or basal width), with tap-to-pin cards, named quadrants that adapt to the site, and export-with-pins.</span></span></div>
+        <div class="frung r6"><span class="fmark"></span><span class="ftxt"><b>Champions</b> &middot; <span>The record-holders, biggest, tallest, fastest-growing, and longest-tracked, on a re-sortable leaderboard and podium; tap a row to open its career.</span></span></div>
+        <div class="frung r7"><span class="fmark"></span><span class="ftxt"><b>Plant Career</b> &middot; <span>The drill-down for one plant: a shareable card (PNG) plus raw per-visit data (CSV), with its growth trajectory, size-for-species percentile, and quality flags.</span></span></div>
+        <div class="frung r8"><span class="fmark"></span><span class="ftxt"><b>Compare two stands</b> &middot; <span>Two sites head to head, plus a full-dataset CSV export with codebook and a one-page stand report PDF.</span></span></div>
       </div>
 
       <div class="stats">
@@ -483,7 +482,7 @@
         // force reflow so the animation restarts each cycle
         void el.offsetWidth; el.classList.add("pip-on");
         i++;
-      }, 900);
+      }, 1800);
     })();
   </script>
   <script>
