@@ -32,12 +32,20 @@ server <- function(input, output, session) {
 
   rv <- reactiveValues(trees = NULL, snap = NULL, one = NULL, plots = NULL, lb = NULL,
                        pal = NULL, label = NULL, site = NULL, tree = NULL, ctx = NULL, is_demo = FALSE,
-                       stype = "forest", spec = SIZE_FOREST)
+                       stype = "forest", spec = SIZE_FOREST, pendingSite = NULL)
   SP <- function() rv$spec %||% SIZE_FOREST     # the active site's size paradigm
 
   observe({ ch <- veg_state_choices(); updateSelectInput(session, "stateSel", choices = ch,
             selected = if ("MA" %in% ch) "MA" else NULL) })
-  observeEvent(input$stateSel, updateSelectInput(session, "site", choices = veg_sites_in_state(input$stateSel)), ignoreInit = FALSE)
+  # State cascade: honour a pending map/browse pick instead of snapping to the
+  # first site in the state, so the sidebar reflects the site you actually picked.
+  observeEvent(input$stateSel, {
+    sites <- veg_sites_in_state(input$stateSel)
+    sel <- if (!is.null(rv$pendingSite) && rv$pendingSite %in% sites) rv$pendingSite
+           else if (length(sites)) sites[[1]] else NULL
+    rv$pendingSite <- NULL
+    updateSelectInput(session, "site", choices = sites, selected = sel)
+  }, ignoreNULL = TRUE)
   output$siteBio <- renderUI({ req(input$site); b <- site_bio(input$site); if (is.null(b)) return(NULL)
     div(class = "site-bio", bs_icon("info-circle-fill"), span(b)) })
 
@@ -90,6 +98,19 @@ server <- function(input, output, session) {
     b <- load_site_bundle(site)
     if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That site isn't bundled in this demo.", type = "error"); return() }
     row <- site_table[site_table$site == site, ]
+    # Keep the sidebar in step with the picked site (map Explore / browse list /
+    # Load button all flow through here). If the site is in another state, queue it
+    # and cascade the state selector; the stateSel observer then selects it. If it's
+    # already in the current state, set the site dropdown directly.
+    state <- if (nrow(row)) row$state[1] else NULL
+    if (!is.null(state) && !is.na(state)) {
+      if (identical(input$stateSel, state)) {
+        updateSelectInput(session, "site", choices = veg_sites_in_state(state), selected = site)
+      } else {
+        rv$pendingSite <- site
+        updateSelectInput(session, "stateSel", selected = state)
+      }
+    }
     ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site))
   }
   observeEvent(input$loadBtn, load_site(input$site))
