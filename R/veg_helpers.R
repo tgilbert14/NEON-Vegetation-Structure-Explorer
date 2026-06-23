@@ -265,6 +265,29 @@ tree_history <- function(trees, id) {
   h[order(h$date), keep, drop = FALSE]
 }
 
+# one plant's whole-plant girth TRAJECTORY for the growth chart. Collapses any
+# multi-bole stems per visit to the SAME D_eq = sqrt(sum d^2) that tree_growth's
+# cm/yr stat uses, so the line and the stat tell ONE story (a multi-stem shrub's
+# raw per-stem rows wander/fall even while the whole plant grows, because new
+# small stems recruit). Pure addition — does NOT touch tree_growth, so the stat
+# stays byte-identical. Returns the per-visit whole-plant series + the raw
+# per-stem points (faint context dots) for the chart.
+tree_trajectory <- function(trees, id, col) {
+  if (is.null(trees) || is.null(id) || is.null(col)) return(NULL)
+  h <- trees[trees$individualID == id & !is.na(trees$date), , drop = FALSE]
+  if (!nrow(h) || !(col %in% names(h))) return(NULL)
+  h$.d <- h[[col]]
+  live_ok <- if ("live" %in% names(h)) h$live %in% TRUE else rep(TRUE, nrow(h))
+  g <- h[is.finite(h$.d) & h$.d > 0 & live_ok, , drop = FALSE]
+  if (!nrow(g)) return(NULL)
+  per_date <- g %>% dplyr::group_by(.data$date) %>%
+    dplyr::summarise(dbh = sqrt(sum(.data$.d^2, na.rm = TRUE)),
+                     n_stems = dplyr::n(), .groups = "drop") %>%
+    dplyr::arrange(.data$date)
+  list(per_date = as.data.frame(per_date),
+       raw = data.frame(date = g$date, d = g$.d)[order(g$date), , drop = FALSE])
+}
+
 # ---------------------------------------------------------------------------
 # Per-plant QC flags from its history, ranked. Every flag is "verify", not "wrong"
 # — a quarter of remeasurement intervals show diameter decreases that are real

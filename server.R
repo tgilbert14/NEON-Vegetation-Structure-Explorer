@@ -788,12 +788,25 @@ server <- function(input, output, session) {
   # every tree the user opens; recomputed on rv$tree change.
   output$treeSpark <- renderPlotly({
     id <- rv$tree; req(id); sp <- SP(); dcol <- if (sp$col %in% names(rv$trees)) sp$col else "stemDiameter"
-    h <- tree_history(rv$trees, id); h$.d <- h[[dcol]]; h <- h[is.finite(h$.d), ]; if (is.null(h) || nrow(h) < 2) return(note_plot("—"))
-    plot_ly(h, x = ~date, y = ~.d, type = "scatter", mode = "lines+markers",
+    # Plot the per-visit WHOLE-PLANT girth (the same D_eq the cm/yr stat uses), not
+    # raw per-stem rows — otherwise a multi-stem shrub's line wanders/falls while
+    # the plant is actually growing (the +cm/yr stat and the line must agree).
+    tr <- tree_trajectory(rv$trees, id, dcol)
+    if (is.null(tr) || nrow(tr$per_date) < 2) return(note_plot("—"))
+    pd <- tr$per_date; multi <- any(pd$n_stems > 1)
+    pd$lab <- ifelse(pd$n_stems > 1,
+      sprintf("%.1f cm whole-plant (%d stems)", pd$dbh, pd$n_stems), sprintf("%.1f cm", pd$dbh))
+    p <- plot_ly()
+    if (multi) p <- p %>% plotly::add_markers(data = tr$raw, x = ~date, y = ~d,
+      marker = list(color = DDL$green2, size = 5, opacity = 0.3),
+      hovertemplate = "%{x|%Y}<br>one stem %{y:.1f} cm<extra></extra>", showlegend = FALSE)
+    p <- p %>% plotly::add_trace(data = pd, x = ~date, y = ~dbh, type = "scatter", mode = "lines+markers",
       line = list(color = DDL$green, width = 2.5), marker = list(color = DDL$green2, size = 7),
-      hovertemplate = "%{x|%Y}<br>%{y:.1f} cm<extra></extra>") %>%
-      plotly_theme(legend = FALSE) %>%
-      plotly::layout(xaxis = list(title = ""), yaxis = list(title = paste0(sp$size_lab, " (cm)")), margin = list(l = 45, r = 10, t = 10, b = 30))
+      text = ~lab, hovertemplate = "%{x|%Y}<br>%{text}<extra></extra>", showlegend = FALSE)
+    p %>% plotly_theme(legend = FALSE) %>%
+      plotly::layout(xaxis = list(title = ""),
+        yaxis = list(title = paste0(sp$size_lab, " (cm)", if (multi) " · whole-plant" else "")),
+        margin = list(l = 45, r = 10, t = 10, b = 30))
   })
   output$treeProfile <- renderUI({
     sp <- SP()
