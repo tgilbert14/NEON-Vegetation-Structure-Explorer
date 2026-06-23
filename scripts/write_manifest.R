@@ -32,49 +32,24 @@ cat(sprintf("Writing manifest for %d files (%d site bundles)...\n",
             length(appFiles), length(list.files("data/sites", pattern = "\\.rds$"))))
 rsconnect::writeManifest(appDir = ".", appFiles = appFiles)
 
-# ---- LEAN PRUNE + HARD GATE -----------------------------------------------
-# Banned packages must never ship in this bundle-only deploy. neonUtilities is
-# kept out by the dynamic .NEON_PKG reference (the scanner never sees it); arrow
-# is a heavy, wasm-hostile over-capture nothing here hard-depends on. We prune
-# those two, then gate to fail loud if either reappears.
-# IMPORTANT: data.table is NOT banned. plotly *Imports* data.table as a hard
-# dependency, and Connect Cloud's base image does NOT provide it, so pruning it
-# breaks the plotly install and the whole deploy. It must stay in the manifest.
+# ---- HARD GATE (CHECK-ONLY — never re-serialize the manifest) --------------
+# neonUtilities is kept out by the dynamic .NEON_PKG reference (the scanner
+# never sees it); arrow is a heavy over-capture nothing here hard-depends on.
+# writeManifest() does not capture either, so there is nothing to prune — we
+# only VERIFY and fail loud if either slipped in.
+# CRITICAL: do NOT rewrite manifest.json here. rsconnect::writeManifest() emits
+# a canonical format (file checksums, metadata) that Connect Cloud validates;
+# re-serializing it with jsonlite mangles that format and Connect rejects the
+# deploy as "invalid manifest." data.table is a legitimate plotly hard
+# dependency (Connect's base image lacks it) and MUST stay.
 banned <- c("neonUtilities", "arrow")
-
-prune_banned <- function() {
-  raw <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
-  if (is.null(raw$packages)) return(invisible())
-  keep <- setdiff(names(raw$packages), banned)
-  dropped <- setdiff(names(raw$packages), keep)
-  raw$packages <- raw$packages[keep]
-  jsonlite::write_json(raw, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null")
-  dropped
-}
-
-# Sanity: refuse to prune anything a kept package HARD-depends on (that would
-# break the deploy). If a banned pkg is a true hard dependency, stop() instead.
-m0 <- jsonlite::fromJSON("manifest.json")
-for (b in intersect(banned, names(m0$packages))) {
-  dependents <- Filter(function(p) {
-    dd <- tryCatch(tools::package_dependencies(p, which = c("Depends","Imports","LinkingTo"))[[1]],
-                   error = function(e) NULL)
-    !is.null(dd) && b %in% dd
-  }, setdiff(names(m0$packages), b))
-  if (length(dependents))
-    stop(sprintf("Banned package '%s' is a HARD dependency of: %s — cannot prune safely. Investigate before deploying.",
-                 b, paste(dependents, collapse = ", ")))
-}
-
-dropped <- prune_banned()
-if (length(dropped)) cat(sprintf("Pruned spurious banned package(s): %s\n", paste(dropped, collapse = ", ")))
-
-# Final gate on the on-disk manifest.
 m <- jsonlite::fromJSON("manifest.json")
 pkgs <- names(m$packages)
 cat(sprintf("manifest.json written: %d packages, %d appFiles.\n", length(pkgs), length(m$files)))
-hit <- banned[vapply(banned, function(b) any(grepl(b, pkgs, ignore.case = TRUE)), logical(1))]
+hit <- intersect(banned, pkgs)
 if (length(hit))
-  stop(sprintf("BANNED package(s) still in manifest.json: %s. The deploy must stay lean (bundle-only).",
+  stop(sprintf("BANNED package(s) in manifest.json: %s. Investigate the .NEON_PKG dodge / appFiles scope and regenerate — do NOT hand-edit the manifest.",
                paste(hit, collapse = ", ")))
-cat("OK: no banned packages (neonUtilities/arrow) in the manifest; data.table KEPT (plotly hard-dep).\n")
+if ("plotly" %in% pkgs && !"data.table" %in% pkgs)
+  stop("data.table is MISSING while plotly is present. Connect Cloud's base image lacks data.table, so the plotly install (and the deploy) will fail. Regenerate with writeManifest; never prune data.table.")
+cat("OK: lean manifest (no neonUtilities/arrow); data.table present for plotly.\n")
