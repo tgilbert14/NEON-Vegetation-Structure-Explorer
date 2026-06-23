@@ -447,7 +447,9 @@ server <- function(input, output, session) {
     if (sum(c("distributed", "tower") %in% types) == 2) {
       dst <- stand_site(rv$snap, rv$plots, sp, plot_types = "distributed")
       if (!is.null(dst)) design_pop <- bslib::popover(
-        tags$span(class = "info-dot", bs_icon("info-circle")),
+        tags$span(class = "info-dot", tabindex = "0", role = "button",
+                  `aria-label` = "More info: Design-based estimate",
+                  bs_icon("info-circle", `aria-hidden` = "true")),
         title = "Design-based estimate",
         p("The headline pools ", tags$b("tower"), " (clustered at the flux tower) and ", tags$b("distributed"),
           " (spatially-balanced random) plots. For an unbiased site mean, the ", tags$b("distributed-only"), " stratum is:"),

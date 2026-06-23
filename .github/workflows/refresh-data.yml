@@ -69,7 +69,7 @@ jobs:
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: >
-            neonUtilities, dplyr, tibble, tidyr, stringr, jsonlite
+            neonUtilities, dplyr, tibble, tidyr, stringr, jsonlite, rsconnect
 
       - name: Rebuild the per-site bundles (full NEON re-pull)
         if: ${{ github.event.inputs.skip_download != 'true' }}
@@ -84,6 +84,20 @@ jobs:
         run: |
           Rscript scripts/build_site_index.R
 
+      # Rebuild the bundled "Search the network" index from the committed per-site
+      # bundles (data/sites/*.rds) so it never goes stale. Derives only from
+      # committed data, so it runs in BOTH the full-pull and skip-download paths.
+      - name: Rebuild the search index
+        run: |
+          Rscript scripts/build_search_index.R
+
+      # Regenerate the lean manifest.json (CHECK-ONLY gate: fails loud if
+      # neonUtilities/arrow slipped in; data.table excused for plotly). Committed
+      # below alongside the refreshed bundles so Connect serves a current manifest.
+      - name: Regenerate the lean manifest
+        run: |
+          Rscript scripts/write_manifest.R
+
       # Commit + push the refreshed bundle DIRECTLY to main — THIS is the deploy:
       # the push makes Connect Cloud auto-republish (no human merge in the loop,
       # matching the Small Mammal / Plant / Beetle siblings). Guarded so it no-ops
@@ -92,7 +106,8 @@ jobs:
         run: |
           git config user.name  "neon-data-bot"
           git config user.email "neon-data-bot@users.noreply.github.com"
-          git add -A data
+          git add -A data          # bundles + site_index + search_index
+          git add manifest.json    # regenerated above (root-level, not under data/)
           if git diff --cached --quiet; then
             echo "No data changes — nothing to commit or deploy."
           else

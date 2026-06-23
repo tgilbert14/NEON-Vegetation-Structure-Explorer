@@ -94,7 +94,11 @@ asset_url <- function(path) {
 
 spin <- function(x, img = NULL) shinycssloaders::withSpinner(x, color = DDL$green, type = 6)
 info_pop <- function(title, ..., placement = "auto")
-  bslib::popover(tags$span(class = "info-dot", bsicons::bs_icon("info-circle")), ..., title = title, placement = placement)
+  bslib::popover(
+    tags$span(class = "info-dot", tabindex = "0", role = "button",
+              `aria-label` = paste0("More info: ", title),
+              bsicons::bs_icon("info-circle", `aria-hidden` = "true")),
+    ..., title = title, placement = placement)
 insight_banner <- function(icon, ..., tone = "navy")
   div(class = paste("chart-insight", paste0("ci-", tone)), bsicons::bs_icon(icon), div(class = "ci-text", ...))
 # Auto-picks DARK text (#16261c) on a bright fill (gold/canopy/bark) and white on

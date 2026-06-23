@@ -164,6 +164,16 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") smtClosePopovers();
 });
 
+// ---- keyboard a11y: open role="button" triggers (info-dot popovers) on -----
+// Enter/Space. The info-dot triggers are <span tabindex="0" role="button">, so
+// they're focusable but a plain <span> doesn't fire a click on key press; this
+// forwards Enter/Space to a click so keyboard users can open every popover.
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  var el = e.target.closest && e.target.closest('[role="button"]');
+  if (el) { e.preventDefault(); el.click(); }
+});
+
 // ---- Shiny custom message handlers ---------------------------------------
 document.addEventListener("DOMContentLoaded", function () {
   if (window.Shiny) {
