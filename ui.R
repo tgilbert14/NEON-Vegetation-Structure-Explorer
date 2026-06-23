@@ -252,6 +252,46 @@ ui <- bslib::page_fillable(
               div(class = "evo-dl-row", downloadButton("vegQcReport", tagList(bs_icon("download"), " Full QC report (CSV)"), class = "btn-outline-dark btn-sm")))),
           uiOutput("vegQcFlags"))),
 
+      nav_panel(title = tagList(bs_icon("search"), " Search"), value = "search",
+        div(class = "tab-head", div(class = "tab-head-text",
+          h4("Search the network"),
+          p("Look across every bundled NEON site at once, with no loading and no download. Find which sites a woody species grows at, or list the sites that pass a size threshold, then jump straight into any one."))),
+        div(class = "search-mode",
+          radioButtons("searchMode", NULL, inline = TRUE,
+            choices = c("Find a species" = "taxon", "Sites by size" = "threshold"),
+            selected = "taxon")),
+
+        conditionalPanel("input.searchMode == 'taxon'",
+          card(
+            card_head("tree", "Find a species across the network",
+              info_pop("Find a species",
+                p("Pick any woody species recorded at a bundled site. The table lists every site where it grows, with that species' live ", tags$b("basal area"), " (m²/ha) and live ", tags$b("stem count"), " at the site, and the years it was measured."),
+                p("Basal area is area-standardized within each site (summed stem cross-section over the sampled plot area), an honest ", tags$b("within-site"), " amount, not an absolute cross-site ranking. Forest sites are sized by DBH and shrubland sites by basal stem diameter, which are different measurements, so the structure column is shown."))),
+            div(class = "search-pick",
+              selectizeInput("taxonPick", "Woody species", choices = NULL, width = "100%",
+                options = list(placeholder = "Start typing a scientific name, e.g. Quercus..."))),
+            uiOutput("taxonCount"),
+            div(style = "width:100%", DT::DTOutput("taxonHits")),
+            div(class = "search-cap", bs_icon("info-circle"),
+              " The measure is a within-site index from the sampled plots, not a wall-to-wall count. Tap a row to load that site and open its Overview."))),
+
+        conditionalPanel("input.searchMode == 'threshold'",
+          card(
+            card_head("rulers", "Sites by size threshold",
+              info_pop("Sites by size",
+                p("List the sites whose stand passes a size threshold. ", tags$b("Basal area"), " (m²/ha) is the live stand's cross-sectional stocking; ", tags$b("biggest stem"), " and ", tags$b("tallest plant"), " are the site's record sizes."),
+                p("Forest sites (sized by DBH at breast height) and shrubland sites (sized by basal stem diameter at the base) measure size differently, so these aren't a single absolute ranking; the structure column tells you which paradigm each row is. Filter to one structure type to compare like with like."))),
+            div(class = "search-controls",
+              selectInput("threshMetric", "Rank / filter by", width = "240px",
+                choices = c("Basal area (m²/ha)" = "ba_ha", "Biggest stem (cm)" = "biggest", "Tallest plant (m)" = "tallest")),
+              selectInput("threshType", "Structure", width = "180px",
+                choices = c("All sites" = "all", "Forest only" = "forest", "Shrubland only" = "shrubland")),
+              div(class = "thresh-slider", uiOutput("threshSliderUI"))),
+            uiOutput("threshCount"),
+            div(style = "width:100%", DT::DTOutput("threshHits")),
+            div(class = "search-cap", bs_icon("info-circle"),
+              " Stand indices from the sampled plots, not a wall-to-wall inventory; size measures differ between forest and shrubland sites. Tap a row to load that site and open its Overview.")))),
+
       nav_panel(title = tagList(bs_icon("info-circle"), " About"), value = "about", uiOutput("aboutPanel"))
     )),
 

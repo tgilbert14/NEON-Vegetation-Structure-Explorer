@@ -38,6 +38,11 @@ load_demo <- function() { b <- load_site_bundle(DEMO_META$site); if (!is.null(b)
 
 SITE_INDEX <- tryCatch(readRDS("data/site_index.rds"), error = function(e) NULL)
 BUNDLED <- if (!is.null(SITE_INDEX)) SITE_INDEX$site else character(0)
+
+# ---- bundled, precomputed "Search the network" index (loaded once) --------
+# Tiny list(taxa, sites, built) built by scripts/build_search_index.R from the
+# committed bundles. The Search tab filters this in memory — no live fetch, instant.
+SEARCH_INDEX <- tryCatch(readRDS("data/search_index.rds"), error = function(e) NULL)
 site_table <- if (length(BUNDLED)) {
   m <- neon_sites[match(BUNDLED, neon_sites$site), ]
   idx_cols <- intersect(c("structure_type", "size_metric", "n_trees", "n_plots", "n_species",

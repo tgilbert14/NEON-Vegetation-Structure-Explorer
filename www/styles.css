@@ -1148,6 +1148,20 @@ svg.smt-pin-lines {
 }
 .smt-pin.smt-pulse { animation: smtPulse 0.5s ease 2; }
 
+/* Search the network */
+.search-mode { padding: 4px 4px 10px; }
+.search-mode .radio-inline, .search-mode .shiny-options-group { display: inline-flex; gap: 18px; flex-wrap: wrap; }
+.search-controls { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px; }
+.search-controls .form-group, .search-controls .shiny-input-container { margin-bottom: 0; }
+.search-pick { margin-bottom: 6px; }
+.search-pick .shiny-input-container { width: 100%; }
+.search-count { font-size: 14px; color: var(--muted); margin: 2px 0 10px; }
+.search-count b { color: var(--pine); font-size: 17px; }
+.search-count .sc-taxon { font-style: italic; }
+.search-empty { font-size: 14px; color: var(--muted); padding: 14px 4px; }
+.search-cap { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+.thresh-slider { min-width: 260px; }
+
 /* tab-head controls + the scatter toolbar */
 .sizelab-controls { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
 .sizelab-controls .form-group, .sizelab-controls .shiny-input-container { margin-bottom: 0; }

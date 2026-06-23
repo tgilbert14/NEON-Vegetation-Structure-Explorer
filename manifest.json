@@ -3075,6 +3075,9 @@
     "data-sample/demo.rds": {
       "checksum": "445910fc1fe68f5352fa5cf1215998d2"
     },
+    "data/search_index.rds": {
+      "checksum": "4e0da6302eb8b91145663861f6db2318"
+    },
     "data/site_index.rds": {
       "checksum": "2c0ffd540e1298d0c0638f62d41e2907"
     },
@@ -3205,7 +3208,7 @@
       "checksum": "eea1136eed8fec9e099cbb2ff99a2a63"
     },
     "global.R": {
-      "checksum": "1976a4def1a765d6f978f78e7a17419c"
+      "checksum": "9f3c32e9b3d134ca6c3baa0e6072beb3"
     },
     "R/map_picker.R": {
       "checksum": "ea6b49d5b61e6bfe0181574de1ad1b2b"
@@ -3220,10 +3223,10 @@
       "checksum": "8d7e2db89d75c7d0e4a04cddea3b3b77"
     },
     "server.R": {
-      "checksum": "cedff30518659a67dc333b6ced7a35fd"
+      "checksum": "ad2fb4fec2bc4929b62e0a3e605bf98f"
     },
     "ui.R": {
-      "checksum": "af4dd9984cd2c578ae635bf763eaef1e"
+      "checksum": "fe3079d1bc2218f25b69296ea3e628e8"
     },
     "www/app.js": {
       "checksum": "1c12df84202faaf97b59c956a3c8920e"
@@ -3232,7 +3235,7 @@
       "checksum": "134900bc8fbf5acaf2a4127e40dbb496"
     },
     "www/styles.css": {
-      "checksum": "632558cdda41f75d264847692d832206"
+      "checksum": "5c5cf25bc5b406c381de11f3ab925c7b"
     },
     "www/veg.css": {
       "checksum": "1a36e62d48c21a509503972b6b778a7c"

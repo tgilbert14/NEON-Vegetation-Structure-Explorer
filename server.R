@@ -1071,6 +1071,140 @@ server <- function(input, output, session) {
   # ---- guided tour (on demand) -------------------------------------------
   observeEvent(input$tourBtn, session$sendCustomMessage("startTour", list()))
 
+  # ---- SEARCH THE NETWORK -------------------------------------------------
+  # Filters the small bundled SEARCH_INDEX in memory (no fetch). Two modes:
+  # (a) find a species -> every site it grows at + the per-site measure; (b) a
+  # size-threshold query over the reused site_index. Both jump to the picked
+  # site through the shared load_site() path, landing on the Overview.
+  SI_TAXA  <- if (!is.null(SEARCH_INDEX)) SEARCH_INDEX$taxa else NULL
+  SI_SITES <- if (!is.null(SEARCH_INDEX) && !is.null(SEARCH_INDEX$sites)) SEARCH_INDEX$sites else SITE_INDEX
+  site_name_of <- function(s) { r <- site_table[match(s, site_table$site), ]; ifelse(is.na(r$name), s, r$name) }
+
+  # populate the species autocomplete once the session is up (server-side for speed)
+  observe({
+    if (is.null(SI_TAXA) || !nrow(SI_TAXA)) return()
+    sp <- sort(unique(SI_TAXA$scientificName))
+    updateSelectizeInput(session, "taxonPick", choices = sp, server = TRUE,
+                         selected = isolate(input$taxonPick) %||% "")
+  })
+
+  taxon_hits <- reactive({
+    req(input$taxonPick, input$taxonPick != "")
+    if (is.null(SI_TAXA)) return(NULL)
+    h <- SI_TAXA[SI_TAXA$scientificName == input$taxonPick, , drop = FALSE]
+    if (!nrow(h)) return(h)
+    h[order(-h$ba_m2_ha, -h$n_stems), , drop = FALSE]
+  })
+
+  output$taxonCount <- renderUI({
+    if (is.null(SI_TAXA)) return(div(class = "search-empty", bs_icon("exclamation-triangle"), " The search index isn't bundled in this build."))
+    if (is.null(input$taxonPick) || input$taxonPick == "")
+      return(div(class = "search-empty", bs_icon("search"), " Pick a species above to see every site it grows at."))
+    h <- taxon_hits(); n <- nrow(SI_SITES %||% data.frame())
+    div(class = "search-count",
+      tags$b(sprintf("%d", nrow(h))), sprintf(" of %d sites", n),
+      tags$span(class = "sc-taxon", sprintf(" · %s", input$taxonPick)))
+  })
+
+  output$taxonHits <- DT::renderDT({
+    h <- taxon_hits(); req(!is.null(h))
+    if (!nrow(h)) return(DT::datatable(data.frame(Message = "Not recorded at any bundled site."),
+                                       rownames = FALSE, options = list(dom = "t")))
+    df <- data.frame(
+      Site = sprintf("%s · %s", h$site, site_name_of(h$site)),
+      Structure = h$structure_type,
+      `Basal area (m²/ha)` = h$ba_m2_ha,
+      `Live stems` = h$n_stems,
+      Years = ifelse(is.na(h$year_min), "—", sprintf("%d–%d", h$year_min, h$year_max)),
+      check.names = FALSE, stringsAsFactors = FALSE)
+    DT::datatable(df, rownames = FALSE, selection = "single", class = "leader-dt",
+      options = list(pageLength = 12, dom = "tp", order = list(list(2, "desc"))))
+  })
+  observeEvent(input$taxonHits_rows_selected, {
+    h <- taxon_hits(); i <- input$taxonHits_rows_selected
+    if (!is.null(h) && length(i) && i <= nrow(h)) {
+      session$sendCustomMessage("smtLoadStart", list(label = paste0(h$site[i], " · loading…")))
+      load_site(h$site[i])
+    }
+  })
+
+  # ---- threshold query (size over the reused site_index) ------------------
+  thresh_col <- function(metric) switch(metric,
+    ba_ha = "ba_ha", biggest = "biggest_diam_cm", tallest = "tallest_m", "tallest_m")
+
+  # site_index has no per-site basal area column; derive a stand basal-area
+  # column once from the bundles is heavy, so we offer biggest/tallest from the
+  # index and a basal-area proxy via the per-taxon index summed per site.
+  site_ba <- reactive({
+    if (is.null(SI_TAXA)) return(NULL)
+    SI_TAXA %>% dplyr::group_by(.data$site) %>%
+      dplyr::summarise(ba_ha = round(sum(.data$ba_m2_ha, na.rm = TRUE), 1), .groups = "drop")
+  })
+
+  thresh_base <- reactive({
+    if (is.null(SI_SITES) || !nrow(SI_SITES)) return(NULL)
+    d <- SI_SITES
+    ba <- site_ba()
+    d$ba_ha <- if (!is.null(ba)) ba$ba_ha[match(d$site, ba$site)] else NA_real_
+    if (!is.null(input$threshType) && input$threshType != "all")
+      d <- d[d$structure_type %in% input$threshType, , drop = FALSE]
+    d
+  })
+
+  output$threshSliderUI <- renderUI({
+    d <- thresh_base(); req(!is.null(d), nrow(d) > 0)
+    col <- thresh_col(input$threshMetric %||% "ba_ha")
+    v <- suppressWarnings(as.numeric(d[[col]])); v <- v[is.finite(v)]
+    if (!length(v)) return(NULL)
+    lo <- floor(min(v)); hi <- ceiling(max(v))
+    lab <- switch(input$threshMetric %||% "ba_ha",
+      ba_ha = "Min basal area (m²/ha)", biggest = "Min biggest stem (cm)", tallest = "Min tallest plant (m)")
+    sliderInput("threshMin", lab, min = lo, max = hi, value = lo, step = max(1, round((hi - lo) / 50)), width = "260px")
+  })
+
+  thresh_hits <- reactive({
+    d <- thresh_base(); req(!is.null(d), nrow(d) > 0)
+    col <- thresh_col(input$threshMetric %||% "ba_ha")
+    d$.v <- suppressWarnings(as.numeric(d[[col]]))
+    mn <- input$threshMin %||% -Inf
+    d <- d[is.finite(d$.v) & d$.v >= mn, , drop = FALSE]
+    d[order(-d$.v), , drop = FALSE]
+  })
+
+  output$threshCount <- renderUI({
+    if (is.null(SI_SITES)) return(div(class = "search-empty", bs_icon("exclamation-triangle"), " The search index isn't bundled in this build."))
+    d <- thresh_hits(); base <- thresh_base()
+    div(class = "search-count", tags$b(sprintf("%d", nrow(d))),
+      sprintf(" of %d sites", nrow(base)),
+      tags$span(class = "sc-taxon",
+        if (!is.null(input$threshType) && input$threshType != "all") sprintf(" · %s only", input$threshType) else ""))
+  })
+
+  output$threshHits <- DT::renderDT({
+    d <- thresh_hits(); req(!is.null(d))
+    if (!nrow(d)) return(DT::datatable(data.frame(Message = "No sites pass that threshold."),
+                                       rownames = FALSE, options = list(dom = "t")))
+    df <- data.frame(
+      Site = sprintf("%s · %s", d$site, site_name_of(d$site)),
+      Structure = d$structure_type,
+      `Basal area (m²/ha)` = d$ba_ha,
+      `Biggest stem (cm)` = d$biggest_diam_cm,
+      `Tallest (m)` = d$tallest_m,
+      Species = d$n_species,
+      check.names = FALSE, stringsAsFactors = FALSE)
+    ord <- switch(thresh_col(input$threshMetric %||% "ba_ha"),
+                  ba_ha = 2, biggest_diam_cm = 3, tallest_m = 4, 4)
+    DT::datatable(df, rownames = FALSE, selection = "single", class = "leader-dt",
+      options = list(pageLength = 12, dom = "tp", order = list(list(ord, "desc"))))
+  })
+  observeEvent(input$threshHits_rows_selected, {
+    d <- thresh_hits(); i <- input$threshHits_rows_selected
+    if (!is.null(d) && length(i) && i <= nrow(d)) {
+      session$sendCustomMessage("smtLoadStart", list(label = paste0(d$site[i], " · loading…")))
+      load_site(d$site[i])
+    }
+  })
+
   observeEvent(input$help, {
     showModal(modalDialog(easyClose = TRUE, title = tagList(bs_icon("question-circle"), " How it works"),
       tags$ul(
