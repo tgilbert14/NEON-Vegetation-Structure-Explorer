@@ -294,15 +294,61 @@ server <- function(input, output, session) {
     ssall <- species_structure(rv$snap, rv$plots, SP()); if (is.null(ssall) || !nrow(ssall)) return(note_plot("No basal-area data"))
     tot <- sum(ssall$ba_m2, na.rm = TRUE)
     ss <- head(ssall, 18); ss$share <- if (is.finite(tot) && tot > 0) round(100 * ss$ba_m2 / tot) else 0
+    ss$sciKey <- as.character(ss$scientificName)
     ss$scientificName <- factor(ss$scientificName, levels = rev(ss$scientificName))
     pal <- rv$pal %||% make_species_pal(rv$snap)
+    # source + per-bar customdata(species) make the bars CLICKABLE: the
+    # plotly_click observer below filters this site's live plants to the clicked
+    # species and reveals them in a table + a "Download these (CSV)" button.
     plot_ly(ss, x = ~ba_m2, y = ~scientificName, type = "bar", orientation = "h",
+      source = "baBar", customdata = ~sciKey,
       marker = list(color = unname(pal[as.character(ss$scientificName)] %||% DDL$green)),
-      text = ~paste0(share, "% of stand · ", stems, " stems"),
+      text = ~paste0(share, "% of stand · ", stems, " stems · click to list its plants"),
       hovertemplate = "%{y}<br>%{x:.1f} m² basal area · %{text}<extra></extra>") %>%
       plotly_theme(legend = FALSE) %>%
-      plotly::layout(showlegend = FALSE, xaxis = list(title = "Total basal area (m²)"), yaxis = list(title = ""), margin = list(l = 200))
+      plotly::layout(showlegend = FALSE, xaxis = list(title = "Total basal area (m²)"), yaxis = list(title = ""), margin = list(l = 200)) %>%
+      plotly::event_register("plotly_click")
   })
+
+  # ---- baBar member-reveal: click a species bar -> list its plants + CSV -----
+  # Reuses the QC inspector modal pattern. The clicked species' customdata is the
+  # member key; we filter this site's live plants (one row per plant) for the
+  # on-screen table and the full per-measurement careers for the CSV.
+  baBar_members <- reactiveVal(NULL)   # list(sci=, rows=on-screen df, full=career df)
+  observeEvent(event_data("plotly_click", source = "baBar"), {
+    ev <- event_data("plotly_click", source = "baBar"); req(ev)
+    sci <- ev$customdata; req(!is.null(sci), nzchar(sci))
+    sp <- SP(); one <- rv$one; req(one)
+    m <- one[!is.na(one$scientificName) & one$scientificName == sci, , drop = FALSE]
+    if (!nrow(m)) return()
+    m <- m[order(-m[[sp$col]]), , drop = FALSE]
+    shown <- data.frame(
+      plant = short_tree(m$individualID),
+      plot = m$plotID,
+      size_cm = round(m[[sp$col]], 1),
+      height_m = ifelse(is.finite(m$height), round(m$height, 1), NA),
+      status = m$plantStatus,
+      stringsAsFactors = FALSE)
+    names(shown)[3] <- paste0(sp$size_lab, "_cm")
+    full <- tidy_trees_export(rv$trees[!is.na(rv$trees$scientificName) & rv$trees$scientificName == sci, , drop = FALSE])
+    baBar_members(list(sci = sci, full = full %||% data.frame()))
+    head_rows <- utils::head(shown, 80)
+    showModal(modalDialog(easyClose = TRUE, size = "l",
+      title = tagList(bs_icon("tree-fill"), tags$em(sci), sprintf(" · %d live %s", nrow(m), sp$nouns)),
+      p(class = "qc-why", sprintf("Live, species-identified %s at this site (one row per plant, biggest stem), ranked by %s. Download for the full per-measurement careers.", sp$nouns, sp$size_full)),
+      tags$div(class = "qc-modal-tbl",
+        tags$table(class = "inspect-tbl",
+          tags$thead(tags$tr(lapply(names(head_rows), function(nm) tags$th(nm)))),
+          tags$tbody(lapply(seq_len(nrow(head_rows)), function(i)
+            tags$tr(lapply(head_rows[i, ], function(v) tags$td(as.character(v)))))))),
+      if (nrow(shown) > 80) p(class = "dim", sprintf("Showing 80 of %d. Download for all.", nrow(shown))),
+      footer = tagList(downloadButton("baBarMembersCsv", "Download these (CSV)", class = "btn-outline-dark btn-sm"), modalButton("Close"))))
+  })
+  output$baBarMembersCsv <- downloadHandler(
+    filename = function() sprintf("NEON-veg-%s-species-%s-%s.csv", rv$site %||% "site",
+      gsub("[^A-Za-z0-9]+", "", (baBar_members() %||% list(sci = "species"))$sci), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) utils::write.csv((baBar_members() %||% list(full = data.frame()))$full %||% data.frame(), file, row.names = FALSE, na = ""))
+
   output$overviewInsight <- renderUI({
     sp <- SP(); ss <- species_structure(rv$snap, rv$plots, sp); req(!is.null(ss), nrow(ss) > 0)
     st <- stand_site(rv$snap, rv$plots, sp)
@@ -533,11 +579,24 @@ server <- function(input, output, session) {
     topsp <- names(sort(table(g$scientificName[!is.na(g$scientificName)]), decreasing = TRUE))
     topsp <- topsp[seq_len(min(6, length(topsp)))]
     g$grp <- ifelse(g$scientificName %in% topsp, g$scientificName, "other species")
+    g$short <- short_tree(g$individualID)
+    # pin-card HTML per dot: name + the size/growth stats + an "Open career" chip
+    # (the delegated .smt-open listener in pincards.js selects the plant); never an
+    # inline onclick (CSP / dsvg-curl rule). Carried in customdata for plotly_click.
+    g$tip <- paste0(
+      "<span class='smt-pin-emoji'>", sp$emoji, "</span> <b>", g$short, "</b><br/>",
+      "<em>", ifelse(is.na(g$scientificName), "—", g$scientificName), "</em><br/>",
+      "<span class='smt-pin-stats'>", round(g$d1, 1), " cm ", sp$size_lab, " now · ",
+        sprintf("%+.2f", g$growth_cm_yr), " cm/yr</span>",
+      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", g$individualID,
+        "'>", sp$emoji, " Open ", sp$noun, " career &rarr;</span>",
+      "<br/><em class='smt-pin-hint'>Tap the dot to pin this card</em>")
     pal <- rv$pal; p <- plot_ly()
     for (s in unique(g$grp)) {
       gs <- g[g$grp == s, ]; col <- if (!is.null(pal) && s %in% names(pal)) pal[[s]] else DDL$muted
       p <- p %>% add_trace(data = gs, x = ~d1, y = ~growth_cm_yr, type = "scatter", mode = "markers",
-        name = s, marker = list(size = 7, color = col, opacity = 0.7, line = list(color = "#fff", width = 0.5)),
+        name = s, customdata = ~tip, marker = list(size = 7, color = col, opacity = 0.7, line = list(color = "#fff", width = 0.5)),
+        text = ~paste0(sp$noun, " ", short),
         hovertemplate = paste0("<b>", s, "</b><br>%{x:.0f} cm now<br>%{y:.2f} cm/yr<extra></extra>"))
     }
     # gated trend line: drawn ONLY when n & |Spearman r| & p clear the bar (honest —
@@ -754,7 +813,14 @@ server <- function(input, output, session) {
         tile(if (is.null(hist)) "—" else nrow(hist), "visits"),
         tile(ifelse(is.na(row$canopyPosition), "—", gsub(" .*","",row$canopyPosition)), "canopy")),
       div(class = "qc-section-h", bs_icon("graph-up"), sprintf(" Growth trajectory (%s over time)", SZ$size_full)),
-      if (!is.null(hist) && sum(is.finite(if (dcol %in% names(hist)) hist[[dcol]] else hist$stemDiameter)) >= 2) plotlyOutput("treeSpark", height = "170px") else p(class = "qc-cap-note", "Single visit, no trajectory yet."),
+      if (!is.null(hist) && sum(is.finite(if (dcol %in% names(hist)) hist[[dcol]] else hist$stemDiameter)) >= 2)
+        tagList(
+          div(class = "sizelab-toolbar", style = "margin-bottom:4px",
+            tags$button(class = "smt-snap-btn", type = "button", onclick = sprintf("smtSave('treeSparkBox','NEON-VegStructure_<site>_trajectory-%s_<date>.png')", short_tree(id)), bsicons::bs_icon("camera-fill"), " Download (with pins)"),
+            tags$button(class = "smt-clear-btn", type = "button", onclick = "smtClearPins('treeSparkBox')", bsicons::bs_icon("eraser-fill"), " Clear pins"),
+            tags$span(class = "sizelab-hint", bs_icon("hand-index-thumb"), " tap a point to pin it")),
+          div(class = "smt-pinnable", id = "treeSparkBox", plotlyOutput("treeSpark", height = "170px")))
+      else p(class = "qc-cap-note", "Single visit, no trajectory yet."),
       div(class = "qc-section-h", bs_icon("clipboard-check"), " Data-quality check"), flags_ui,
       cap_tbl,
       p(class = "qc-cap-note", style = "margin-top:8px", bs_icon("info-circle"),
@@ -796,11 +862,19 @@ server <- function(input, output, session) {
     pd <- tr$per_date; multi <- any(pd$n_stems > 1)
     pd$lab <- ifelse(pd$n_stems > 1,
       sprintf("%.1f cm whole-plant (%d stems)", pd$dbh, pd$n_stems), sprintf("%.1f cm", pd$dbh))
+    short <- short_tree(id)
+    # per-visit pin-card HTML (unique key = plant + visit year so each measurement
+    # bout pins as its own card). No "open career" chip — this IS the open plant.
+    pd$tip <- paste0(
+      "<span class='smt-pin-emoji'>", sp$emoji, "</span> <b>", short, "</b><br/>",
+      "<span class='smt-pin-stats'>", format(pd$date, "%Y-%m-%d"), " · ", pd$lab, "</span>",
+      "<span style='display:none' data-tag='", short, "_", format(pd$date, "%Y%m%d"), "'></span>")
     p <- plot_ly()
     if (multi) p <- p %>% plotly::add_markers(data = tr$raw, x = ~date, y = ~d,
       marker = list(color = DDL$green2, size = 5, opacity = 0.3),
       hovertemplate = "%{x|%Y}<br>one stem %{y:.1f} cm<extra></extra>", showlegend = FALSE)
     p <- p %>% plotly::add_trace(data = pd, x = ~date, y = ~dbh, type = "scatter", mode = "lines+markers",
+      customdata = ~tip,
       line = list(color = DDL$green, width = 2.5), marker = list(color = DDL$green2, size = 7),
       text = ~lab, hovertemplate = "%{x|%Y}<br>%{text}<extra></extra>", showlegend = FALSE)
     p %>% plotly_theme(legend = FALSE) %>%
