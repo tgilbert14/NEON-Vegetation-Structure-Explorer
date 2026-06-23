@@ -174,6 +174,17 @@ document.addEventListener("DOMContentLoaded", function () {
     Shiny.addCustomMessageHandler("startTour", function () { setTimeout(vegTour, 150); });
     // remember the current site so exported PNG filenames are self-describing
     Shiny.addCustomMessageHandler("siteCtx", function (msg) { window.__vegSite = msg && msg.site; });
+    // A Leaflet map that initialised inside a hidden container (the picker map
+    // re-shown after "change site") can paint blank/half-width until it
+    // recomputes its size. Dispatching 'resize' makes every Leaflet map
+    // invalidateSize. Fire across several frames so the page_fillable layout
+    // (and the relocated select-panel) settles its width before Leaflet measures,
+    // or the map captures a half-width and paints narrow.
+    Shiny.addCustomMessageHandler("kickMaps", function () {
+      var kick = function () { try { window.dispatchEvent(new Event("resize")); } catch (e) {} };
+      requestAnimationFrame(kick);
+      [80, 250, 500, 900].forEach(function (t) { setTimeout(kick, t); });
+    });
   }
 });
 

@@ -1,8 +1,8 @@
 # ===========================================================================
 # NEON Vegetation Structure Explorer — ui.R
 # ===========================================================================
-ui <- bslib::page_sidebar(
-  theme = app_theme, title = NULL,
+ui <- bslib::page_fillable(
+  theme = app_theme,
   window_title = "NEON Vegetation Structure Explorer", fillable = FALSE,
 
   tags$head(
@@ -23,36 +23,21 @@ ui <- bslib::page_sidebar(
   ),
   useShinyjs(),
 
-  sidebar = sidebar(
-    width = 320, class = "control-deck",
-    div(class = "brand",
-      div(class = "brand-mark", "\U0001F333"),
-      div(div(class = "brand-title", "Vegetation Structure"),
-          div(class = "brand-sub", "Trees & shrubs · remeasured"))),
-    selectInput("stateSel", label = tagList(bs_icon("geo-alt-fill"), " 1 · Pick a state"), choices = NULL, width = "100%"),
-    selectInput("site", label = tagList(bs_icon("pin-map-fill"), " 2 · Pick a site"), choices = NULL, width = "100%"),
-    uiOutput("siteBio"),
-    actionButton("loadBtn", tagList(bs_icon("globe-americas"), " Explore this site"),
-                 class = "btn-primary btn-lg w-100 load-btn", onclick = "smtLoadStart()"),
-    actionButton("demoBtn", tagList(bs_icon("stars"), " or open the Harvard Forest demo"),
-                 class = "btn-link btn-sm w-100 reset-demo", onclick = "smtLoadStart('Harvard Forest · demo dataset')"),
-    hidden(div(id = "treePickerWrap",
-      hr(class = "deck-hr"),
-      selectizeInput("treeSel", label = tagList(bs_icon("search"), " Open a tree's career"),
-                     choices = NULL, options = list(placeholder = "Pick a tree…")),
-      div(class = "pick-chips",
-        actionButton("pickBiggest", tagList(bs_icon("circle-fill"), " Biggest"), class = "btn-outline-dark btn-sm pick-chip"),
-        actionButton("pickTallest", tagList(bs_icon("arrows-vertical"), " Tallest"), class = "btn-outline-dark btn-sm pick-chip"),
-        actionButton("pickFastest", tagList(bs_icon("graph-up-arrow"), " Fastest"), class = "btn-outline-dark btn-sm pick-chip")),
-      actionButton("surpriseBtn", tagList(bs_icon("dice-5-fill"), " Surprise me"), class = "btn-outline-dark btn-sm w-100"))),
-    hr(class = "deck-hr"),
-    actionButton("help", tagList(bs_icon("question-circle"), " How it works"), class = "btn-outline-dark btn-sm w-100"),
-    div(class = "theme-toggle-row",
-      tags$span(class = "theme-toggle-lab", bs_icon("circle-half"), " Theme"),
-      input_dark_mode(id = "colorMode", mode = "light")),
-    div(class = "deck-foot",
-      bs_icon("database"), " NEON ", tags$code("DP1.10098.001"),
-      br(), tags$a(href = "https://desertdatalabs.com", target = "_blank", bs_icon("box-arrow-up-right"), " Desert Data Labs"))
+  # ---- persistent top control bar (theme + help) -------------------------
+  # The sidebar is gone in v2: the picker map IS the way to select a site, and
+  # the by-name site picker now lives on the landing (the select-panel inside the
+  # splash). The two controls that must stay reachable everywhere — the theme
+  # toggle and the help dialog — sit in this slim top-right bar above the hero.
+  div(class = "top-bar",
+    div(class = "top-bar-brand",
+      tags$span(class = "tb-mark", "\U0001F333"),
+      tags$span(class = "tb-title", "Vegetation Structure")),
+    div(class = "top-bar-actions",
+      actionButton("help", tagList(bs_icon("question-circle"), " How it works"),
+                   class = "btn-outline-dark btn-sm tb-help"),
+      div(class = "tb-theme",
+        tags$span(class = "tb-theme-lab", bs_icon("circle-half")),
+        input_dark_mode(id = "colorMode", mode = "light")))
   ),
 
   div(id = "loadOverlay", class = "load-overlay",
@@ -65,6 +50,21 @@ ui <- bslib::page_sidebar(
 
   uiOutput("heroStats"),
 
+  # "Open a tree's career" picker — was in the sidebar, now a hidden body block
+  # revealed on site load (server: shinyjs::show("treePickerWrap")). Same ids
+  # (treeSel, pickBiggest/Tallest/Fastest, surpriseBtn) so the server is untouched.
+  hidden(div(id = "treePickerWrap", class = "tree-picker-wrap",
+    div(class = "tpw-row",
+      div(class = "tpw-sel",
+        selectizeInput("treeSel", label = tagList(bs_icon("search"), " Open a tree's career"),
+                       choices = NULL, width = "100%", options = list(placeholder = "Pick a tree…"))),
+      div(class = "pick-chips",
+        actionButton("pickBiggest", tagList(bs_icon("circle-fill"), " Biggest"), class = "btn-outline-dark btn-sm pick-chip"),
+        actionButton("pickTallest", tagList(bs_icon("arrows-vertical"), " Tallest"), class = "btn-outline-dark btn-sm pick-chip"),
+        actionButton("pickFastest", tagList(bs_icon("graph-up-arrow"), " Fastest"), class = "btn-outline-dark btn-sm pick-chip"),
+        actionButton("surpriseBtn", tagList(bs_icon("dice-5-fill"), " Surprise me"), class = "btn-outline-dark btn-sm")))
+  )),
+
   div(id = "splash",
     div(class = "splash-guide",
       div(class = "sg-bubble", "Pick a site to start!"),
@@ -74,19 +74,35 @@ ui <- bslib::page_sidebar(
         h1(class = "app-title", "NEON Vegetation Structure Explorer", span(class = "title-tag", "unofficial")),
         p(class = "app-subtitle",
           "How woody plants are built across a continent. Every tagged tree and desert shrub's diameter and height, the stand's size structure, and how individuals grow over the years. 42 NEON sites, every biome (DP1.10098.001).")),
-      p("Pick a ", tags$b("site"), " below, or open the Harvard Forest demo, a New England mixed hardwood–conifer forest. Forests are sized by tree ", tags$b("DBH"), "; deserts and shrublands by ", tags$b("basal stem diameter"), ". The app adapts. The Overview names each stand's own dominant species from its live data."),
+      p("Pick a ", tags$b("site"), " on the map below (or the Browse-all list, or by name). Forests are sized by tree ", tags$b("DBH"), "; deserts and shrublands by ", tags$b("basal stem diameter"), ". The app adapts. The Overview names each stand's own dominant species from its live data."),
       div(class = "splash-map-hint", bs_icon("hand-index-thumb"),
         " Tap a site to explore it. Dot size is how many stems were measured, colour is forest vs shrubland."),
       mapPickerUI("picker", height = "520px", spinner = DDL$green),
+
+      # ---- relocated select panel (was the sidebar) ----------------------
+      # Same input ids the server's cascade + load path depend on (stateSel,
+      # site, loadBtn). Tapping a dot is the primary path; this panel is the
+      # by-name fallback. Same ids, so server.R is untouched. (This app has no
+      # date window, so the panel carries only the state + site pickers.)
+      div(class = "select-panel",
+        div(class = "sp-head", bs_icon("sliders"), " Or pick a site by name"),
+        div(class = "sp-row",
+          div(class = "sp-field",
+            selectInput("stateSel", label = tagList(bs_icon("geo-alt-fill"), " State"),
+                        choices = NULL, width = "100%")),
+          div(class = "sp-field",
+            selectInput("site", label = tagList(bs_icon("pin-map-fill"), " Site"),
+                        choices = NULL, width = "100%"))),
+        uiOutput("siteBio"),
+        actionButton("loadBtn", tagList(bs_icon("globe-americas"), " Explore this site"),
+                     class = "btn-primary btn-lg load-btn sp-load", onclick = "smtLoadStart()")),
+
       tags$details(class = "site-browse",
         tags$summary(
           tags$span(class = "sb-summary",
             tags$span(class = "sb-label", bs_icon("list-ul"), " Browse all 42 sites"),
             tags$span(class = "sb-chevron", bs_icon("chevron-down")))),
         div(class = "site-browse-body", uiOutput("siteCards"))),
-      div(class = "picker-actions",
-        actionButton("demoBtn2", tagList(bs_icon("stars"), " Open the Harvard Forest demo"),
-                     class = "btn-outline-dark btn-lg", onclick = "smtLoadStart('Harvard Forest · demo dataset')")),
       div(class = "picker-tour", actionLink("tourBtn", tagList(bs_icon("signpost-2"), " Take a quick tour"))))),
 
   div(id = "mainTabsWrap", class = "main-tabs-wrap",
@@ -102,8 +118,7 @@ ui <- bslib::page_sidebar(
           actionButton("goMap", tagList(bs_icon("map-fill"), div("Map"), tags$small("plots across the site")), class = "home-btn")),
         div(class = "tools-strip",
           actionButton("compareBtn", tagList(bs_icon("layout-split"), " Compare two stands"), class = "btn-outline-dark btn-sm"),
-          downloadButton("allDataZip", "Download all data (CSV)", class = "btn-outline-dark btn-sm"),
-          downloadButton("reportPdf", "Stand report (PDF)", class = "btn-outline-dark btn-sm")),
+          downloadButton("allDataZip", "Download all data (CSV)", class = "btn-outline-dark btn-sm")),
         card(full_screen = TRUE,
           card_head("bar-chart-steps", "What the stand is made of: species by basal area",
             info_pop("Composition",

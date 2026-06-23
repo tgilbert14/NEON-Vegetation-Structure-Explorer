@@ -118,8 +118,19 @@ server <- function(input, output, session) {
   }
   observeEvent(input$loadBtn, load_site(input$site))
   observeEvent(input$pickSite, load_site(input$pickSite))
-  observeEvent(input$demoBtn,  ingest(load_demo(), DEMO_META$label, is_demo = TRUE))
-  observeEvent(input$demoBtn2, ingest(load_demo(), DEMO_META$label, is_demo = TRUE))
+
+  # "Change site" (in the hero band) -> back to the picker-map landing.
+  # (v2 flow: the Harvard Forest demo path was removed — users pick a real site
+  #  on the map, the Browse-all list, or the by-name select panel. The demoBtn /
+  #  demoBtn2 inputs and their observers are gone with it.)
+  observeEvent(input$changeSite, {
+    rv$trees <- NULL; rv$snap <- NULL; rv$one <- NULL; rv$plots <- NULL; rv$lb <- NULL
+    rv$site <- NULL; rv$label <- NULL; rv$tree <- NULL
+    shinyjs::hide("mainTabsWrap"); shinyjs::hide("treePickerWrap"); shinyjs::show("splash")
+    # the picker map was hidden while a site was loaded; nudge it to recompute
+    # size now that it's visible again, so it never paints blank/half-width
+    session$sendCustomMessage("kickMaps", list())
+  })
 
   # ---- the site-choice popup + "About this site" card --------------------
   # Tapping a dot no longer auto-loads. It opens a small popup anchored on the
@@ -260,7 +271,13 @@ server <- function(input, output, session) {
             div(class = "hs-l", l, if (!is.null(click)) tags$span(class = "stat-q", bs_icon("chevron-right")))))))
     }
     div(class = "hero-band",
-      div(class = "hero-title", bs_icon(if (shrub) "flower2" else "tree-fill"), tags$b(rv$label)),
+      div(class = "hero-title",
+        bs_icon(if (shrub) "flower2" else "tree-fill"), tags$b(rv$label),
+        if (isTRUE(rv$is_demo)) span(class = "demo-pill", bs_icon("stars"), " DEMO"),
+        actionLink("changeSite", tagList(bs_icon("arrow-left-circle"), " change site"),
+                   class = "hero-change"),
+        downloadLink("reportPdf", tagList(bs_icon("file-earmark-arrow-down"), " report (PDF)"),
+                     class = "hero-report")),
       div(class = "hero-grid",
         hero(nrow(woody_only(one, sp)), paste0("live ", sp$nouns), icon = if (shrub) "flower2" else "tree", tone = "pine",
              ttl = sprintf("Live tagged %s %s, one count per individual.", sp$nouns, thresh)),
@@ -1057,7 +1074,7 @@ server <- function(input, output, session) {
   observeEvent(input$help, {
     showModal(modalDialog(easyClose = TRUE, title = tagList(bs_icon("question-circle"), " How it works"),
       tags$ul(
-        tags$li(HTML("Pick a <b>site</b> (or open the Harvard Forest demo). Numbers describe each plant's <b>most recent measurement</b>. Forest sites are sized by tree <b>DBH</b>; desert/shrubland sites by <b>basal stem diameter</b>, and the app adapts.")),
+        tags$li(HTML("Pick a <b>site</b> on the map (or the Browse-all list, or by name). Numbers describe each plant's <b>most recent measurement</b>. Forest sites are sized by tree <b>DBH</b>; desert/shrubland sites by <b>basal stem diameter</b>, and the app adapts.")),
         tags$li(HTML("<b>Stand Structure</b>: the size-class curve, height profile, and per-hectare basal area & density.")),
         tags$li(HTML("<b>Growth & Mortality</b>: how fast stems grow between visits, the fastest growers, and the live/dead split.")),
         tags$li(HTML("<b>Size Lab</b>: every plant as a dot (size × height); <b>tap one</b> to pin its card, then “Open career” for its full growth history.")),
