@@ -912,6 +912,7 @@ server <- function(input, output, session) {
         sprintf("NEON Vegetation Structure Explorer: data export for site %s (%s)", site, sp$type),
         sprintf("Generated %s by an unofficial Desert Data Labs explorer.", format(Sys.Date(), "%Y-%m-%d")),
         "Source: NEON Vegetation structure DP1.10098.001 (vst_mappingandtagging x vst_apparentindividual; vst_perplotperyear).",
+        "License: NEON DP1.10098.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
         "",
         "FILES",
         " trees_long.csv  · one row per individual x measurement bout (the raw growth career; aggregate it yourself).",
@@ -1000,7 +1001,12 @@ server <- function(input, output, session) {
       div(class = "about-card", h4(bs_icon("diagram-3"), " A NEONize sibling"),
         p("Built to the Desert Data Labs NEON quality bar, with the same flow, bundling, and pin-card interaction as its siblings, plus a ", tags$b("cross-biome"), " identity and woody-structure-native analyses that adapt from old-growth conifers to desert shrubs. See the NEONize playbook."),
         p(bs_icon("envelope"), " ", tags$a(href = "mailto:desertdatalabs@gmail.com", "desertdatalabs@gmail.com"),
-          " · ", tags$a(href = "https://data.neonscience.org/data-products/DP1.10098.001", target = "_blank", "NEON data product"))))
+          " · ", tags$a(href = "https://data.neonscience.org/data-products/DP1.10098.001", target = "_blank", "NEON data product"))),
+      div(class = "about-card", h4(bs_icon("award"), " Data attribution & license"),
+        p(class = "caveat",
+          "Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle. NEON data are provided under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (",
+          tags$a(href = "https://creativecommons.org/licenses/by/4.0/", target = "_blank", "creativecommons.org/licenses/by/4.0"),
+          "). This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.")))
   })
 
   # ---- clickable hero stats -> ranked-breakdown modals -------------------
