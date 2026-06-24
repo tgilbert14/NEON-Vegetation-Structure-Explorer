@@ -32,6 +32,35 @@ cat(sprintf("Writing manifest for %d files (%d site bundles)...\n",
             length(appFiles), length(list.files("data/sites", pattern = "\\.rds$"))))
 rsconnect::writeManifest(appDir = ".", appFiles = appFiles)
 
+# ---- pin terra to the last release before the GDAL-3.8 multidim code (1.8-54) ----
+# terra >= 1.8-54 ships gdal_multidimensional.cpp using a GDAL 3.8 call unguarded in
+# releases, so it FAILS to compile against Connect Cloud's GDAL 3.4.1. Connect compiles
+# from source regardless of repo. 1.8-50 is the last release before 1.8-54: it compiles
+# on 3.4.1 and still satisfies raster's terra (>= 1.8-5). terra/raster are install-only
+# (leaflet -> raster -> terra; app never calls terra) -> zero runtime impact. Also pin
+# the repo to the RSPM jammy binary mirror for suite consistency.
+# NOTE: deliberately a TEXT-level edit (readLines/gsub/writeLines), NOT a jsonlite
+# re-serialization — the HARD GATE below documents that re-serializing manifest.json
+# mangles writeManifest()'s canonical format and Connect rejects it. A line-oriented
+# substitution touches only terra's Version/RemoteSha and repo URLs, leaving the
+# canonical structure and app-file checksums intact.
+local({
+  mtxt <- readLines("manifest.json", warn = FALSE)
+  in_terra <- FALSE
+  for (i in seq_along(mtxt)) {
+    if (grepl('^\\s*"terra"\\s*:\\s*\\{', mtxt[i])) in_terra <- TRUE
+    if (in_terra) {
+      mtxt[i] <- sub('("Version"\\s*:\\s*")[^"]+(")',  '\\11.8-50\\2', mtxt[i])
+      mtxt[i] <- sub('("RemoteSha"\\s*:\\s*")[^"]+(")', '\\11.8-50\\2', mtxt[i])
+      if (grepl('^\\s*\\},?\\s*$', mtxt[i])) in_terra <- FALSE
+    }
+  }
+  mtxt <- gsub("https://cloud.r-project.org", "https://packagemanager.posit.co/cran/__linux__/jammy/latest", mtxt, fixed = TRUE)
+  mtxt <- gsub("https://packagemanager.posit.co/cran/latest", "https://packagemanager.posit.co/cran/__linux__/jammy/latest", mtxt, fixed = TRUE)
+  writeLines(mtxt, "manifest.json")
+  cat("Pinned terra to 1.8-50 + RSPM jammy repo (text-level; canonical format preserved).\n")
+})
+
 # ---- HARD GATE (CHECK-ONLY — never re-serialize the manifest) --------------
 # neonUtilities is kept out by the dynamic .NEON_PKG reference (the scanner
 # never sees it); arrow is a heavy over-capture nothing here hard-depends on.
