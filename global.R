@@ -80,11 +80,21 @@ DDL <- list(
 # Light "desert-day" base (DEFAULT). styles.css [data-bs-theme="dark"] carries
 # the full desert-night system; both modes show the dark command-band hero +
 # dark stat info-boxes (the "light page, dark hero" look).
+# Fonts are named as plain CSS families here, NOT font_google(). font_google()
+# defaults to local = TRUE, which downloads the font from Google's servers and
+# compiles it into the theme AT APP STARTUP (server-side). On Connect Cloud that
+# live fetch runs on every cold start against an empty cache and, when Google Fonts
+# is slow/unreachable, blocks/fails the boot -> "start-up error". Naming the family
+# as a string does zero network at boot; the glyphs still reach the browser via the
+# non-blocking client-side <link> in ui.R (display=swap), with a system fallback.
+rubik_stack <- bslib::font_collection(
+  "Rubik", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"
+)
 app_theme <- bs_theme(
   version = 5, bg = "#ffffff", fg = "#16261c",
   primary = "#2f8a52", secondary = "#b07a3c",
   success = "#3f9a52", info = "#2f8fc4", warning = "#c79a1c", danger = "#b07a3c",
-  base_font = font_google("Rubik"), heading_font = font_google("Rubik"), "border-radius" = "10px")
+  base_font = rubik_stack, heading_font = rubik_stack, "border-radius" = "10px")
 
 asset_url <- function(path) {
   f <- file.path("www", path)
