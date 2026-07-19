@@ -27,7 +27,7 @@ if (nzchar(QUERY_END) && !grepl("^[0-9]{4}-(0[1-9]|1[0-2])$", QUERY_END))
   stop("VST_QUERY_END must be YYYY-MM", call. = FALSE)
 if (nzchar(QUERY_END) && QUERY_END < QUERY_START)
   stop("VST_QUERY_END must not precede VST_QUERY_START", call. = FALSE)
-if (utils::packageVersion("neonUtilities") < utils::package_version("3.0.3"))
+if (utils::packageVersion("neonUtilities") < package_version("3.0.3"))
   stop("official RELEASE-2026 access requires neonUtilities >= 3.0.3", call. = FALSE)
 
 token <- trimws(Sys.getenv("NEON_TOKEN", unset = ""))
