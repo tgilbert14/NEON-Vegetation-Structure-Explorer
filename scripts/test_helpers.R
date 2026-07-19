@@ -74,6 +74,10 @@ export_fixture <- list(
                                    n_taxa = 1L, stringsAsFactors = FALSE),
   plot_opportunities_all = data.frame(site = "HARV", plotID = "HARV_001",
                                       eventID = "EV1", customOpportunityFlag = "ok",
+                                      stringsAsFactors = FALSE),
+  plot_opportunity_source = data.frame(
+                                      site = "HARV", source_record_key = "opp-uid-1",
+                                      eventID = "EV1", customSourceFlag = "review",
                                       stringsAsFactors = FALSE)
 )
 cb <- complete_veg_codebook(veg_codebook(), export_fixture)
@@ -83,8 +87,12 @@ check(any(cb$column == "dataQF" & cb$table == "trees_long"),
       "preserved QF fields receive explicit dictionary rows")
 check(any(cb$column == "customOpportunityFlag" & cb$table == "plot_opportunities_all"),
       "new opportunity fields receive explicit dictionary rows")
+check(any(cb$column == "customSourceFlag" & cb$table == "plot_opportunity_source"),
+      "preserved opportunity-source fields receive explicit dictionary rows")
 
 tree_export_fixture <- data.frame(
+  source_uid = "apparent-uid-1", protocol_stem_key = "fixture",
+  protocol_key_group_n = 1L, protocol_key_conflict = FALSE,
   eventID = "EV1", plotID = "HARV_001", individualID = "NEON.PLA.D01.1",
   tempStemID = "1", date = as.Date("2025-01-01"), year = 2025L,
   taxonRank = "species", scientificName = "Acer rubrum", growthForm = "single bole tree",
@@ -101,6 +109,8 @@ tree_export_result <- tidy_trees_export(tree_export_fixture, list(
   source_receipt = list(raw_source_digest = paste(rep("a", 64), collapse = ""))
 ))
 required_review_fields <- c(
+  "source_record_key", "protocol_stem_key", "protocol_key_group_n",
+  "protocol_key_conflict",
   "recordType", "identificationQualifier", "mappingDataQF", "tagStatus",
   "dendrometerCondition", "heightQualifier", "dataQF", "measurementErrorQF"
 )

@@ -42,7 +42,15 @@ CSV/codebook/QC exports, and a sampled-plot PDF brief.
 ## Science contract in plain language
 
 - A physical plant is `plotID + individualID`; `individualID` alone is not site-unique.
-- An apparent-individual stem row is keyed by `eventID + individualID + tempStemID`.
+- Published `uid` is preserved as source-row identity and must be unique. NEON's documented
+  apparent-individual locator, `eventID + individualID + tempStemID`, is not assumed unique: the
+  operational locator also includes `plotID` so cross-plot tag reuse stays distinct.
+- Distinct-`uid` rows that still collide on the operational locator are all preserved. No row wins by
+  date, order, or metric; the affected physical channel cannot be supported. Its conflict count stays
+  visible, and its status is `held_identity_conflict` unless an earlier protocol/presence hold applies.
+- Duplicate `plotID + eventID` opportunity-source rows are likewise preserved and both physical
+  channels are held as `held_identity_conflict`. Only a duplicate published source `uid` is a hard
+  source-row-identity failure.
 - Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, and unmatched
   opportunities are held/NA.
 - Sampled areas remain event-specific; every finite positive compatible area—including a 40 m² nested
@@ -63,12 +71,16 @@ CSV/codebook/QC exports, and a sampled-plot PDF brief.
 
 The v2 build targets official **RELEASE-2026**, provisional data excluded, with source DOI
 [10.48443/pypa-qf12](https://doi.org/10.48443/pypa-qf12). Per-site artifacts remain
-`data/sites/<SITE>.rds = list(trees, plots, meta)` for app compatibility:
+`data/sites/<SITE>.rds = list(trees, plots, opportunity_source, meta, contract)`:
 
-- `trees` preserves the apparent-individual key, plot + plant identity, event/date, taxonomy, growth
-  form, status, diameter/height, measurement-point, and available QC fields;
-- `plots` preserves event-specific opportunity, sampled-area, design, presence, impractical, and
-  data-collected state plus canonical derived summaries;
+- `trees` preserves published source `uid`, the documented and plot-scoped operational locators,
+  plot + plant identity, event/date, taxonomy, growth form, status, diameter/height,
+  measurement-point, and available QC fields;
+- `plots` carries one deterministic plot-event presentation row, support state, sampled area, design,
+  presence, data-collected state, and identity-conflict audit fields; a conflicting row is never
+  treated as selected truth;
+- `opportunity_source` preserves every published plot-opportunity source row, including conflicting
+  `plotID + eventID` records;
 - `meta` declares site, release, contract ID, source, and build provenance.
 
 Search, app, PDF, and export values must be produced by the same canonical builder before presentation

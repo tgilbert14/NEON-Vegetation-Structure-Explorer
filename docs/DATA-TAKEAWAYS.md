@@ -29,10 +29,11 @@ Those row counts describe the legacy artifact; they are not certified estimates.
 
 ## Release-blocking findings
 
-1. **The primary keys were lost.** NEON defines the apparent-individual key as
-   `eventID × individualID × tempStemID`. The legacy bundle drops `eventID` and `tempStemID`, so tied
-   same-date events, multiple boles, and duplicate rows cannot be adjudicated. We measured 15,596 tied
-   latest composite groups involving 60,367 rows.
+1. **Source-row and locator identity were lost.** Published `uid` is the source-row identity. NEON's
+   documented apparent-individual locator is `eventID × individualID × tempStemID`, but the legacy
+   bundle drops `uid`, `eventID`, and `tempStemID`, so tied same-date events, multiple boles, and
+   locator collisions cannot be adjudicated. We measured 15,596 tied latest legacy composite groups
+   involving 60,367 rows; those legacy diagnostics are not a substitute for source `uid`.
 
 2. **Plant identity was under-specified.** `individualID` alone is not unique inside a site: 460
    permanent-looking identifiers occur in more than one plot across 18 sites. App selections,
@@ -76,14 +77,38 @@ Those row counts describe the legacy artifact; they are not certified estimates.
     summary at 23 of 41 supported sites, by as much as −51.6 m²/ha at NOGP. Search, report, export,
     and on-screen values must consume the same canonical builder without independent rounding.
 
+## RELEASE-2026 identity preflight
+
+These are source-identity findings, not a green candidate or release receipt:
+
+- 42 sites contain 527,000 apparent rows.
+- The documented `eventID × individualID × tempStemID` locator has 1,275 collision groups covering
+  2,688 rows across 37 sites.
+- Twenty-two groups are cross-plot tag reuse. The operational
+  `plotID × eventID × individualID × tempStemID` locator leaves 1,253 true plot-scoped groups covering
+  2,644 rows.
+- Among those plot-scoped groups, 1,085 remain tied at the latest date and 845 conflict on metric or
+  status fields. All distinct-`uid` rows are preserved, no arbitrary winner is ranked, and the affected
+  physical channel remains held. The conflict count stays explicit; the status is
+  `held_identity_conflict` unless an earlier protocol/presence hold applies.
+- Ten `vst_perplotperyear` rows form five duplicate `plotID × eventID` groups across BLAN (two
+  groups), DEJU, JERC, and JORN. All source rows are preserved and both physical channels are
+  `held_identity_conflict`.
+- A duplicate published source `uid`, rather than a duplicate documented or operational locator, is
+  the hard source-row-identity failure.
+
 ## V2 contract
 
 The replacement bundle targets the official **RELEASE-2026** product release with provisional data
 excluded. It preserves:
 
-- apparent-individual key: `eventID + individualID + tempStemID`;
+- published source-row identity: unique `uid`;
+- documented apparent-individual locator: `eventID + individualID + tempStemID`;
+- operational locator: `plotID + eventID + individualID + tempStemID`, with distinct-`uid` collisions
+  preserved and held rather than deduplicated;
 - physical plant key: `plotID + individualID`;
-- event-specific plot opportunity, sampled area, design, presence, impractical, and data-collected state;
+- every event-specific plot-opportunity source row, sampled area, design, presence, impractical,
+  data-collected, and identity-conflict state;
 - measurement height/location, basal measurement height, status, growth form, and available QC fields;
 - deterministic latest mapping/tagging record, never arbitrary `first()` selection;
 - explicit support states: sampled-with-records, sampled-absence-zero, and held/unsupported.
@@ -93,7 +118,9 @@ All consumer surfaces must declare the same contract ID, release, source DOI, an
 ## Required fixtures before certification
 
 - same raw ID in two plots stays two plants;
-- multi-stem event is retained; duplicate full primary key fails; same-date distinct events remain;
+- multi-stem and same-date distinct events remain; duplicate source `uid` fails, while distinct-`uid`
+  operational-locator collisions remain preserved and hold the affected channel opportunity;
+- duplicate `plotID × eventID` opportunity-source rows remain preserved and hold both channels;
 - sampled presence + records, explicit sampled absence, sampling impractical, and dendrometer-only states
   resolve to measured, zero, held, and held respectively;
 - large trees ignore shrub records; shrub/sapling channels use their compatible form and area;

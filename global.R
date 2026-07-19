@@ -21,7 +21,7 @@ NEON_DPID <- "DP1.10098.001"   # Vegetation structure
 .NEON_PKG <- paste0("neon", "Utilities")
 LIVE_FETCH <- (Sys.getenv("VST_LIVE", "0") != "0") && requireNamespace(.NEON_PKG, quietly = TRUE)
 
-# ---- bundled per-site data: list(trees, plots, meta) ----------------------
+# ---- bundled per-site data: trees, plots, opportunity source, metadata ----
 SITE_DIR  <- "data/sites"
 DEMO_PATH <- "data-sample/demo.rds"
 DEMO_META <- list(site = "HARV", label = "HARV · Harvard Forest · demo")
@@ -284,9 +284,10 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
     reason <- c(reason, "the exact v2 index family is on hold")
   }
   if (!is.list(bundle) || !is.data.frame(bundle$trees) ||
-      !is.data.frame(bundle$plots) || !is.list(bundle$meta) ||
+      !is.data.frame(bundle$plots) || !is.data.frame(bundle$opportunity_source) ||
+      !is.list(bundle$meta) ||
       !is.list(bundle$contract)) {
-    return(.veg_gate_result(FALSE, c(reason, "bundle lacks trees, plots, meta, or embedded contract")))
+    return(.veg_gate_result(FALSE, c(reason, "bundle lacks trees, plots, opportunity_source, meta, or embedded contract")))
   }
   meta <- bundle$meta
   contract <- bundle$contract
@@ -304,7 +305,10 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
   }
   if (!identical(as.character(contract$plant_key), VEG_CONTRACT$plant_key) ||
       !identical(as.character(contract$event_key), VEG_CONTRACT$event_key) ||
-      !identical(as.character(contract$stem_key), VEG_CONTRACT$stem_key) ||
+      !identical(.veg_scalar_chr(contract$source_record_key), VEG_CONTRACT$source_record_key) ||
+      !identical(as.character(contract$protocol_stem_locator), VEG_CONTRACT$protocol_stem_locator) ||
+      !identical(.veg_scalar_chr(contract$opportunity_source_record_key),
+                 VEG_CONTRACT$opportunity_source_record_key) ||
       !setequal(as.character(contract$support_status$supported), VEG_CONTRACT$supported_status) ||
       !identical(.veg_scalar_chr(contract$support_status$zero), VEG_CONTRACT$zero_status) ||
       !setequal(as.character(contract$support_status$held),
@@ -347,6 +351,24 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
         any(is.na(taxa$contract_id) | as.character(taxa$contract_id) != VEG_CONTRACT_ID)) {
       reason <- c(reason, "bundle embedded taxon rows are inconsistent with its site or contract")
     }
+  }
+  tree_identity <- c(
+    "source_uid", "protocol_stem_key", "protocol_key_group_n",
+    "protocol_key_conflict"
+  )
+  if (!all(tree_identity %in% names(bundle$trees)) ||
+      any(is.na(bundle$trees$source_uid) | !nzchar(trimws(as.character(bundle$trees$source_uid)))) ||
+      anyDuplicated(as.character(bundle$trees$source_uid))) {
+    reason <- c(reason, "bundle measurement source-row identity is missing or non-unique")
+  }
+  opportunity_identity <- c(
+    "source_record_key", "protocol_key_group_n", "protocol_key_conflict"
+  )
+  if (!all(opportunity_identity %in% names(bundle$opportunity_source)) ||
+      any(is.na(bundle$opportunity_source$source_record_key) |
+          !nzchar(trimws(as.character(bundle$opportunity_source$source_record_key)))) ||
+      anyDuplicated(as.character(bundle$opportunity_source$source_record_key))) {
+    reason <- c(reason, "bundle opportunity source-row identity is missing or non-unique")
   }
   receipt_check <- source_receipt_check(meta$source_receipt)
   if (!receipt_check$ok) reason <- c(reason, receipt_check$reason)

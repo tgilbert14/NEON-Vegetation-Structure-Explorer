@@ -46,20 +46,27 @@ requireText(/42 places/i, "cover must state its 42-place scope");
 requireText(/DP1\.10098\.001/i, "cover must identify the source data product");
 requireText(/Driver Cascade/i, "cover must identify the suite ambassador");
 requireText(/stand numbers describe the sampled plots/i,
-  "below-fold honesty note must identify sampled-plot support");
+  "compact honesty note must identify sampled-plot support");
 requireText(/not every tree across an entire landscape/i,
-  "below-fold honesty note must reject wall-to-wall census interpretation");
+  "compact honesty note must reject wall-to-wall census interpretation");
 
-const suiteUrls = [
-  "NEON-Driver-Cascade", "NEON-Small-Mammal-Tracker-App",
+const driverUrl = "https://tgilbert14.github.io/NEON-Driver-Cascade/";
+if (!html.includes(driverUrl)) fail("cover must hand the full suite to Driver Cascade");
+
+const companionUrls = [
+  "NEON-Small-Mammal-Tracker-App",
   "NEON-Plant-Phenology-Explorer", "NEON-Plant-Diversity",
   "NEON-Breeding-Birds", "NEON-Ground-Beetle-Tracker", "NEON-Mosquito-Pulse",
   "NEON-My-Little-Inverts", "NEON-WaterChemistry-Analyte-Viewer-App",
 ];
-for (const slug of suiteUrls) {
-  if (!html.includes(`https://tgilbert14.github.io/${slug}/`)) fail(`missing suite URL: ${slug}`);
+for (const slug of companionUrls) {
+  if (html.includes(`https://tgilbert14.github.io/${slug}/`)) {
+    fail(`companion cover should point to Driver, not reproduce its suite directory: ${slug}`);
+  }
 }
-if (!/aria-current=["']page["']/i.test(html)) fail("current suite app is not identified");
+for (const stalePattern of [/question-grid/i, /measure-card/i, /suite-rail/i]) {
+  if (stalePattern.test(html)) fail(`stale long-form cover block remains: ${stalePattern}`);
+}
 
 for (const forbidden of [
   /fonts\.googleapis\.com/i, /fonts\.gstatic\.com/i, /cdnjs\.cloudflare\.com/i,
@@ -98,4 +105,4 @@ for (const match of html.matchAll(/<a\b[^>]*target=["']_blank["'][^>]*>/gi)) {
 }
 
 if (failed) process.exit(1);
-console.log("Cover OK: Living Poster, scope/honesty, suite, local art, and 1200x630 social card passed.");
+console.log("Cover OK: concise Living Poster, Driver handoff, scope/honesty, local art, and 1200x630 social card passed.");

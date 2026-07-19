@@ -40,11 +40,12 @@ not fill these upstream fields.
 
 ## Known structural limitation
 
-The legacy bundler collapsed official measurement identity to a lossy
-`individualID × date` representation and did not preserve the complete official
-event × individual × temporary-stem key or the complete per-plot/per-year
-sampling-opportunity fields. That prevents a release-grade proof that every stem
-measurement is joined to its correct sampled-area denominator.
+The legacy bundler collapsed measurement identity to a lossy `individualID ×
+date` representation and did not preserve published source `uid`, event or
+temporary-stem fields, the plot-scoped stem-event locator, or complete
+per-plot/per-year sampling-opportunity source rows. That prevents a release-grade
+proof that every stem measurement is joined to its correct sampled-area
+denominator.
 
 The consequence is visible at WOOD: the current bundle contains qualifying live
 woody records, but their 14 unique measurement `plotID` values match none of the
@@ -62,8 +63,10 @@ sites. It must preserve:
 2. actual candidate build date and builder commit as separate repository fields;
 3. exact raw per-file and aggregate SHA-256 ledgers;
 4. `neonUtilities` version and query subset (or explicit full-release selection);
-5. official event, individual, and temporary-stem identity;
-6. per-plot/per-year protocol, plot type, and sampled-opportunity/area fields;
+5. every published source `uid`, plus the plot-scoped event × individual ×
+   temporary-stem locator and its conflict audit;
+6. every per-plot/per-year opportunity source row, plus protocol, plot type,
+   sampled-opportunity/area, and conflict fields;
 7. one identical receipt across every site bundle, both indexes, and durable
    source ledgers;
 8. strict 42-site accounting and hard failure on every missing table/site/key.

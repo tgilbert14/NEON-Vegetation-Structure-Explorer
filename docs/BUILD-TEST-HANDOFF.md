@@ -42,8 +42,9 @@ promotion is authorized.
 
 ### Findings that block legacy promotion
 
-1. The legacy canonical bundle discarded official event × individual ×
-   temporary-stem identity and complete per-plot/per-year sampling opportunity.
+1. The legacy canonical bundle discarded published source `uid`, event and
+   temporary-stem locator fields, and complete per-plot/per-year sampling
+   opportunity source rows.
 2. WOOD contains qualifying live woody measurement rows, but its 14 unique
    measurement plot IDs match zero of 36 denominator plot IDs. Legacy
    `stand_site()` returning `NULL` is an unmatched-denominator state, not evidence

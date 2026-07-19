@@ -176,23 +176,34 @@ vst_latest_mapping <- function(mapping) {
 
 vst_measurement_table <- function(apparent, identity) {
   apparent <- as.data.frame(apparent, stringsAsFactors = FALSE)
-  required <- c("eventID", "plotID", "individualID", "tempStemID")
+  required <- c("uid", "eventID", "plotID", "individualID", "tempStemID")
   missing <- setdiff(required, names(apparent))
   if (length(missing)) {
     stop("vst_apparentindividual lacks required fields: ",
          paste(missing, collapse = ", "), call. = FALSE)
   }
-  if (any(!vst_nonblank(apparent$eventID)) || any(!vst_nonblank(apparent$plotID)) ||
+  if (any(!vst_nonblank(apparent$uid)) || any(!vst_nonblank(apparent$eventID)) || any(!vst_nonblank(apparent$plotID)) ||
       any(!vst_nonblank(apparent$individualID))) {
-    stop("vst_apparentindividual has blank eventID, plotID, or individualID", call. = FALSE)
+    stop("vst_apparentindividual has blank uid, eventID, plotID, or individualID", call. = FALSE)
   }
-  # tempStemID is part of the official key. Historical records may encode a
-  # missing value, so NA is treated as a key value and still checked strictly.
-  vst_assert_unique(apparent, c("eventID", "individualID", "tempStemID"),
-                    "vst_apparentindividual")
+  # uid is the published source-row identity and must remain unique. NEON says
+  # eventID x individualID x tempStemID *should* be unique, but the official
+  # release also warns that protocol/data-entry anomalies can violate that
+  # locator. Preserve every uid, mark the conflicting locator, and let the
+  # channel opportunity fail closed rather than deleting a possible legacy
+  # bole or double-counting an ambiguous record.
+  vst_assert_unique(apparent, "uid", "vst_apparentindividual")
+  protocol_key <- vst_key(
+    apparent, c("plotID", "eventID", "individualID", "tempStemID")
+  )
+  protocol_group_n <- as.integer(table(protocol_key)[protocol_key])
 
   measured_date <- vst_date(vst_field(apparent, c("date", "collectDate", "eventDate")))
   table <- data.frame(
+    source_uid = vst_chr(apparent$uid),
+    protocol_stem_key = protocol_key,
+    protocol_key_group_n = protocol_group_n,
+    protocol_key_conflict = protocol_group_n > 1L,
     eventID = vst_chr(apparent$eventID),
     plotID = vst_chr(apparent$plotID),
     individualID = vst_chr(apparent$individualID),
@@ -223,7 +234,6 @@ vst_measurement_table <- function(apparent, identity) {
   table$permanent <- grepl("^NEON", table$individualID)
   table$plant_key <- paste(table$plotID, table$individualID, sep = "\r")
   table$event_key <- paste(table$plotID, table$eventID, sep = "\r")
-  table$stem_key <- vst_key(table, c("eventID", "individualID", "tempStemID"))
 
   # Preserve any additional published QC/qualifier/status columns verbatim.
   qc_names <- grep("(QF$|Qualifier$|Status$|Condition$|quality|flag)",
@@ -248,6 +258,53 @@ vst_measurement_table <- function(apparent, identity) {
     "species-level", "coarse-or-unresolved"
   )
   tibble::as_tibble(table)
+}
+
+vst_prepare_opportunities <- function(perplot) {
+  perplot <- as.data.frame(perplot, stringsAsFactors = FALSE)
+  required <- c("uid", "eventID", "plotID")
+  missing <- setdiff(required, names(perplot))
+  if (length(missing)) {
+    stop("vst_perplotperyear lacks required fields: ", paste(missing, collapse = ", "),
+         call. = FALSE)
+  }
+  if (any(!vst_nonblank(perplot$uid)) || any(!vst_nonblank(perplot$eventID)) ||
+      any(!vst_nonblank(perplot$plotID))) {
+    stop("vst_perplotperyear has blank uid, eventID, or plotID", call. = FALSE)
+  }
+  vst_assert_unique(perplot, "uid", "vst_perplotperyear")
+
+  event_key <- vst_key(perplot, c("eventID", "plotID"))
+  group_n <- as.integer(table(event_key)[event_key])
+  source <- perplot
+  source$source_record_key <- vst_chr(source$uid)
+  source$protocol_key_group_n <- group_n
+  source$protocol_key_conflict <- group_n > 1L
+
+  date_raw <- vst_field(perplot, c("date", "collectDate", "eventDate"), required = TRUE)
+  date_order <- vst_datetime_order(date_raw)
+  date_order[!is.finite(date_order)] <- -Inf
+  signature <- vst_row_signature(perplot)
+  source_uid <- vst_chr(perplot$uid)
+  ordered_rows <- order(event_key, -date_order, signature, source_uid, na.last = TRUE)
+  ordered <- perplot[ordered_rows, , drop = FALSE]
+  ordered_key <- event_key[ordered_rows]
+  selected_rows <- ordered_rows[!duplicated(ordered_key)]
+  selected <- perplot[selected_rows, , drop = FALSE]
+  selected_key <- event_key[selected_rows]
+
+  uid_sets <- tapply(source_uid, event_key, function(value) {
+    paste(sort(unique(value)), collapse = ";")
+  })
+  selected$opportunity_source_uid <- source_uid[selected_rows]
+  selected$opportunity_source_record_count <- as.integer(table(event_key)[selected_key])
+  selected$opportunity_key_conflict <- selected$opportunity_source_record_count > 1L
+  selected$opportunity_source_uids <- unname(uid_sets[selected_key])
+
+  list(
+    canonical = selected,
+    source = tibble::as_tibble(source)
+  )
 }
 
 vst_presence_state <- function(x) {
@@ -306,13 +363,37 @@ vst_count_invalid_metric_records <- function(trees, plots, forms, metric,
   result
 }
 
+vst_count_identity_conflict_keys <- function(trees, plots, forms) {
+  result <- integer(nrow(plots))
+  required <- c("growthForm", "protocol_key_conflict", "protocol_stem_key")
+  if (!nrow(trees) || !length(forms) || !all(required %in% names(trees))) return(result)
+  keep <- tolower(trimws(trees$growthForm)) %in% tolower(forms) &
+    trees$protocol_key_conflict %in% TRUE
+  if (!any(keep)) return(result)
+  conflicts <- unique(data.frame(
+    event_key = vst_key(trees[keep, , drop = FALSE], c("plotID", "eventID")),
+    protocol_stem_key = vst_chr(trees$protocol_stem_key[keep]),
+    stringsAsFactors = FALSE
+  ))
+  counts <- as.data.frame(table(conflicts$event_key), stringsAsFactors = FALSE)
+  names(counts) <- c("key", "n")
+  matched <- match(vst_key(plots, c("plotID", "eventID")), counts$key)
+  result[!is.na(matched)] <- as.integer(counts$n[matched[!is.na(matched)]])
+  result
+}
+
 vst_support_status <- function(area, sampling_impractical, data_collected,
-                               presence, records, invalid_metric) {
+                               presence, records, invalid_metric,
+                               identity_conflicts = integer(length(area)),
+                               opportunity_conflict = logical(length(area))) {
   sampling <- gsub("[^a-z]", "", tolower(trimws(vst_chr(sampling_impractical))))
   collected <- gsub("[^a-z]", "", tolower(trimws(vst_chr(data_collected))))
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
-    if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
+    if (isTRUE(opportunity_conflict[[i]])) {
+      status[[i]] <- "held_identity_conflict"
+      reason[[i]] <- "multiple published vst_perplotperyear rows share this plot-event key"
+    } else if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "samplingImpractical is missing"
     } else if (!identical(sampling[[i]], "ok")) {
@@ -331,6 +412,13 @@ vst_support_status <- function(area, sampling_impractical, data_collected,
     } else if (records[[i]] > 0L && identical(presence[[i]], "absent")) {
       status[[i]] <- "held_presence_record_conflict"
       reason[[i]] <- "presence says absent but measurement records exist"
+    } else if (is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
+      status[[i]] <- "held_identity_conflict"
+      reason[[i]] <- sprintf(
+        "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
+        identity_conflicts[[i]], if (identity_conflicts[[i]] == 1L) "" else "s",
+        if (identity_conflicts[[i]] == 1L) "s" else ""
+      )
     } else if (invalid_metric[[i]] > 0L) {
       status[[i]] <- "held_metric_invalid"
       reason[[i]] <- sprintf(
@@ -357,7 +445,11 @@ vst_support_status <- function(area, sampling_impractical, data_collected,
 
 vst_opportunity_table <- function(perplot, trees) {
   perplot <- as.data.frame(perplot, stringsAsFactors = FALSE)
-  required <- c("eventID", "plotID")
+  required <- c(
+    "eventID", "plotID", "opportunity_source_uid",
+    "opportunity_source_record_count", "opportunity_key_conflict",
+    "opportunity_source_uids"
+  )
   missing <- setdiff(required, names(perplot))
   if (length(missing)) {
     stop("vst_perplotperyear lacks required fields: ", paste(missing, collapse = ", "),
@@ -370,6 +462,10 @@ vst_opportunity_table <- function(perplot, trees) {
 
   event_date <- vst_date(vst_field(perplot, c("date", "collectDate", "eventDate")))
   plots <- data.frame(
+    opportunity_source_uid = vst_chr(perplot$opportunity_source_uid),
+    opportunity_source_record_count = as.integer(perplot$opportunity_source_record_count),
+    opportunity_key_conflict = perplot$opportunity_key_conflict %in% TRUE,
+    opportunity_source_uids = vst_chr(perplot$opportunity_source_uids),
     eventID = vst_chr(perplot$eventID),
     plotID = vst_chr(perplot$plotID),
     date = event_date,
@@ -400,15 +496,23 @@ vst_opportunity_table <- function(perplot, trees) {
   plots$shrub_invalid_metric_records <- vst_count_invalid_metric_records(
     trees, plots, VST_SHRUB_FORMS, "basalStemDiameter", 0
   )
+  plots$tree_identity_conflict_keys <- vst_count_identity_conflict_keys(
+    trees, plots, VST_TREE_FORMS
+  )
+  plots$shrub_identity_conflict_keys <- vst_count_identity_conflict_keys(
+    trees, plots, VST_SHRUB_FORMS
+  )
 
   tree_support <- vst_support_status(
     plots$area_trees, plots$samplingImpractical, plots$dataCollected,
-    plots$treePresence, plots$tree_records, plots$tree_invalid_metric_records
+    plots$treePresence, plots$tree_records, plots$tree_invalid_metric_records,
+    plots$tree_identity_conflict_keys, plots$opportunity_key_conflict
   )
   shrub_support <- vst_support_status(
     plots$area_shrub, plots$samplingImpractical, plots$dataCollected,
     plots$shrubSaplingPresence, plots$shrub_records,
-    plots$shrub_invalid_metric_records
+    plots$shrub_invalid_metric_records, plots$shrub_identity_conflict_keys,
+    plots$opportunity_key_conflict
   )
   plots$tree_support <- tree_support$status
   plots$tree_support_reason <- tree_support$reason
@@ -688,13 +792,16 @@ vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
     release = VST_RELEASE,
     plant_key = c("plotID", "individualID"),
     event_key = c("plotID", "eventID"),
-    stem_key = c("eventID", "individualID", "tempStemID"),
+    source_record_key = "source_uid",
+    protocol_stem_locator = c("plotID", "eventID", "individualID", "tempStemID"),
+    opportunity_source_record_key = "source_record_key",
     support_status = list(
       supported = VST_SUPPORTED_STATUS,
       zero = "sampled_absence",
       held = c("held_sampling_impractical", "held_dendrometer_only",
                "held_missing_area", "held_opportunity_unknown",
-               "held_presence_record_conflict", "held_metric_invalid")
+               "held_presence_record_conflict", "held_metric_invalid",
+               "held_identity_conflict")
     ),
     channel_summary = summaries,
     primary_channel_reason = "presentation default uses the channel represented in more latest supported record-bearing plots; if neither has records, it uses supported opportunity count with tree DBH as the deterministic tie-break; channels remain separate",
@@ -717,7 +824,8 @@ vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
   }
   identity <- vst_latest_mapping(raw$vst_mappingandtagging)
   trees <- vst_measurement_table(raw$vst_apparentindividual, identity)
-  plots <- vst_opportunity_table(raw$vst_perplotperyear, trees)
+  opportunity <- vst_prepare_opportunities(raw$vst_perplotperyear)
+  plots <- vst_opportunity_table(opportunity$canonical, trees)
   orphan_events <- setdiff(
     unique(vst_key(trees, c("plotID", "eventID"))),
     unique(vst_key(plots, c("plotID", "eventID")))
@@ -744,7 +852,13 @@ vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
     years = sort(unique(trees$year[is.finite(trees$year)]))
   )
   if (!is.null(source_receipt)) meta$source_receipt <- source_receipt
-  list(trees = trees, plots = plots, meta = meta, contract = contract)
+  list(
+    trees = trees,
+    plots = plots,
+    opportunity_source = opportunity$source,
+    meta = meta,
+    contract = contract
+  )
 }
 
 vst_bundle_main <- function() {

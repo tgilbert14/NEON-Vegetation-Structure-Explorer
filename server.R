@@ -1058,8 +1058,12 @@ server <- function(input, output, session) {
       tl <- tidy_trees_export(rv$trees, rv$meta)
       pl <- plots_export(rv$snap, rv$plots, sp, rv$meta)
       opportunities <- with_export_receipt(as.data.frame(rv$plots, stringsAsFactors = FALSE), rv$meta)
+      opportunity_source <- with_export_receipt(
+        as.data.frame(rv$bundle$opportunity_source, stringsAsFactors = FALSE), rv$meta
+      )
       exports <- list(trees_long = tl, plot_summary_latest = pl,
-                      plot_opportunities_all = opportunities)
+                      plot_opportunities_all = opportunities,
+                      plot_opportunity_source = opportunity_source)
       cb <- complete_veg_codebook(veg_codebook(), exports)
       assert_veg_codebook(cb, exports)
       q <- tree_qc_site(rv$trees, sp, rv$plots)
@@ -1078,9 +1082,10 @@ server <- function(input, output, session) {
         "License: NEON DP1.10098.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
         "",
         "FILES",
-        " trees_long.csv  · one preserved apparent-individual stem row; join keys include eventID, plotID, individualID, and tempStemID.",
+        " trees_long.csv  · every preserved apparent-individual source row; source_record_key is the published uid, while protocol_stem_key exposes plot-scoped eventID + individualID + tempStemID conflicts.",
         " plot_summary_latest.csv · one canonical latest plot-event summary for the active channel, including support state and derived values.",
-        " plot_opportunities_all.csv · every preserved plot-event sampling opportunity and its source-compatible opportunity/status fields.",
+        " plot_opportunities_all.csv · one deterministic plot-event row plus support/conflict fields; conflicting source keys are held, never treated as selected truth.",
+        " plot_opportunity_source.csv · every published vst_perplotperyear source row, including duplicate plot-event keys retained for audit.",
         " data_dictionary.csv · column definitions, types, units.",
         " qc_report.csv   · every data-quality flag; join plotID + individualID to trees_long.",
         " qc_dictionary.csv · column definitions for qc_report.csv.",
@@ -1089,13 +1094,14 @@ server <- function(input, output, session) {
         sprintf(" * Active presentation channel: %s; plants are sized by %s.", sp$channel_label, sp$size_full),
         " * Snapshot analyses use each plot + plant's latest supported event; the long table retains every event/stem row.",
         sprintf(" * Plot metrics scope to %s and are not a wall-to-wall inventory.", scope),
-        " * Sampled absence is zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-metric, and unmatched opportunity states are held/NA with reasons.",
+        " * Sampled absence is zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-metric, identity-conflict, and unmatched opportunity states are held/NA with reasons.",
         " * Tower and distributed designs remain labeled; pooled summaries are descriptive, not certified site-wide estimators.",
         if (!is.null(st)) sprintf(" * Supported sampled-plot mean: %s m2/ha (+/-%s plot SE), %s stems/ha, stem-weighted QMD %s cm, n=%d plots.",
                                   fmt_num(st$ba_ha), fmt_num(st$ba_se), fmt_count(st$density_ha), fmt_num(st$qmd), st$n_plots) else "")
       if (!is.null(tl)) utils::write.csv(tl, file.path(tmp, "trees_long.csv"), row.names = FALSE, na = "")
       if (!is.null(pl)) utils::write.csv(pl, file.path(tmp, "plot_summary_latest.csv"), row.names = FALSE, na = "")
       utils::write.csv(opportunities, file.path(tmp, "plot_opportunities_all.csv"), row.names = FALSE, na = "")
+      utils::write.csv(opportunity_source, file.path(tmp, "plot_opportunity_source.csv"), row.names = FALSE, na = "")
       utils::write.csv(cb, file.path(tmp, "data_dictionary.csv"), row.names = FALSE, na = "")
       # QC rows carry the full plant key and exact release receipt so they join
       # back to trees_long; the dictionary is checked against the emitted frame.
@@ -1167,8 +1173,10 @@ server <- function(input, output, session) {
       div(class = "about-card", h4(bs_icon("graph-up"), " Growth & status"),
         p("Comparable diameter increments require the same plot + plant identity, stable event order, and an unchanged measurement point. Multi-stem basal records whose temporary stem labels cannot be aligned are not forced into a growth rate. Lost/unknown fates are censored from mortality."),
         p(class = "caveat", bs_icon("exclamation-triangle"), " Size distributions are descriptive snapshots; they do not establish recruitment or regeneration. Above-ground biomass is deliberately ", tags$b("not"), " estimated.")),
-      div(class = "about-card", h4(bs_icon("diagram-3"), " A NEONize sibling"),
-        p("Built to the Desert Data Labs NEON quality bar, with the same flow, bundling, and pin-card interaction as its siblings, plus a ", tags$b("cross-biome"), " identity and woody-structure-native analyses that adapt from old-growth conifers to desert shrubs. See the NEONize playbook."),
+      div(class = "about-card", h4(bs_icon("diagram-3"), " Part of the suite"),
+        p("One doorway in the unofficial NEON Explorer Suite. This app keeps tree DBH and shrub/sapling basal measurements in their own supported physical channels; ",
+          tags$a(href = "https://tgilbert14.github.io/NEON-Driver-Cascade/", target = "_blank", rel = "noopener", "Driver Cascade"),
+          " links the full suite."),
         p(bs_icon("envelope"), " ", tags$a(href = "mailto:desertdatalabs@gmail.com", "desertdatalabs@gmail.com"),
           " · ", tags$a(href = "https://data.neonscience.org/data-products/DP1.10098.001", target = "_blank", "NEON data product"),
           " · ", tags$a(href = "https://doi.org/10.48443/pypa-qf12", target = "_blank", "RELEASE-2026 DOI"),
@@ -1504,7 +1512,7 @@ server <- function(input, output, session) {
         tags$li(HTML("<b>Size Lab</b>: every plant as a dot (size × height); <b>tap one</b> to pin its card, then “Open career” for its full growth history.")),
         tags$li(HTML("<b>Search and compare</b>: unlike measurement channels are context, never one ranking; record sizes and richness vary with effort.")),
         tags$li(HTML("<b>Download</b> the preserved records, plot-event support states, codebook, QC report, or sampled-plot PDF brief.")),
-        tags$li(HTML("Honesty rule: sampled absence is <b>zero</b>; impractical, dendrometer-only, invalid-area, invalid-required-diameter, or unmatched opportunities are <b>held/NA</b>."))),
+        tags$li(HTML("Honesty rule: sampled absence is <b>zero</b>; impractical, dendrometer-only, invalid-area, invalid-required-diameter, identity-conflict, or unmatched opportunities are <b>held/NA</b>."))),
       footer = tagList(tags$button(type = "button", class = "btn btn-outline-dark btn-sm",
         onclick = "(function(){var m=document.querySelector('.modal.show button[data-bs-dismiss=modal],.modal.show .btn-close');if(m)m.click();setTimeout(vegTour,250);})()",
         bsicons::bs_icon("signpost-2"), " Take the tour"), modalButton("Got it"))))

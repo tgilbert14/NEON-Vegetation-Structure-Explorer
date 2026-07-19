@@ -45,8 +45,9 @@ required <- list(
   ),
   "scripts/write_data_quality_audit.R" = c(
     "VST_SITE_DIR", "VST_DATA_QUALITY_AUDIT_OUT",
-    "vegetation-data-quality-audit.csv", "NEON-VST-data-quality-audit-v1",
+    "vegetation-data-quality-audit.csv", "NEON-VST-data-quality-audit-v2",
     "held_reason_counts", "dataQF",
+    "held_identity_conflict", "protocol_key_conflict",
     "tagStatus", "changedMeasurementLocation",
     "preserved_and_counted_not_excluded", "^--file=",
     "sys.nframe() == 0L"
@@ -103,7 +104,7 @@ stopifnot(
   identical(portable_result$count, portable_fixture$count),
   identical(portable_result$measured, portable_fixture$measured),
   identical(portable_result$status, portable_fixture$status),
-  identical(vapply(portable_result, length, integer(1)), rep(2L, 4L))
+  identical(unname(vapply(portable_result, length, integer(1))), rep(2L, 4L))
 )
 
 cat("Vegetation refresh/build portability contracts passed.\n")

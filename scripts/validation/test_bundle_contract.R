@@ -155,6 +155,9 @@ perplot <- rbind(perplot, data.frame(
   nestedSubplotAreaShrubSapling = 10, stringsAsFactors = FALSE
 ))
 
+apparent$uid <- sprintf("apparent-source-%02d", seq_len(nrow(apparent)))
+perplot$uid <- sprintf("opportunity-source-%02d", seq_len(nrow(perplot)))
+
 raw <- list(
   vst_mappingandtagging = mapping,
   vst_apparentindividual = apparent,
@@ -165,6 +168,11 @@ bundle <- vst_build_site_from_tables("TEST", raw)
 assert_equal(bundle$meta$contract_id, "NEON-VST-DP1.10098.001-v2",
              "contract ID changed")
 assert_equal(bundle$meta$release, "RELEASE-2026", "release is not explicit")
+assert_equal(bundle$contract$source_record_key, "source_uid",
+             "published source-row identity changed")
+assert_equal(bundle$contract$protocol_stem_locator,
+             c("plotID", "eventID", "individualID", "tempStemID"),
+             "plot-scoped protocol stem locator changed")
 assert_equal(nrow(bundle$trees[bundle$trees$eventID == "E1", ]), 2L,
              "multi-stem event was collapsed")
 assert_equal(sort(unique(bundle$trees$eventID[bundle$trees$plotID == "P1"])),
@@ -283,12 +291,170 @@ latest_p1 <- latest_p1[latest_p1$plotID == "P1", ]
 assert_equal(latest_p1$eventID, "E2", "latest event tie-break is not deterministic")
 assert_equal(latest_p1$area_trees, 40, "latest supported event did not retain its area")
 
+# The documented three-field locator can recur in another plot. Plot scope must
+# keep that tag reuse from creating a false within-event conflict.
+cross_plot_apparent <- apparent[c(1L, 4L), , drop = FALSE]
+cross_plot_apparent$eventID <- "E-CROSS"
+cross_plot_apparent$tempStemID <- "1"
+cross_plot_apparent$uid <- c("cross-plot-source-1", "cross-plot-source-2")
+cross_plot_table <- vst_measurement_table(
+  cross_plot_apparent, vst_latest_mapping(mapping)
+)
+assert_true(!any(cross_plot_table$protocol_key_conflict),
+            "cross-plot tag reuse was mislabeled as a within-plot identity conflict")
+
 duplicate_raw <- raw
-duplicate_raw$vst_apparentindividual <- rbind(apparent, apparent[1, ])
+duplicate_measurement <- apparent[1, , drop = FALSE]
+duplicate_measurement$uid <- "apparent-source-conflict"
+duplicate_raw$vst_apparentindividual <- rbind(apparent, duplicate_measurement)
+duplicate_bundle <- vst_build_site_from_tables("TEST", duplicate_raw)
+assert_equal(nrow(duplicate_bundle$trees), nrow(apparent) + 1L,
+             "conflicting apparent source row was silently deleted")
+assert_true(all(duplicate_bundle$trees$protocol_key_conflict[
+  duplicate_bundle$trees$eventID == "E1" &
+    duplicate_bundle$trees$individualID == "A" &
+    duplicate_bundle$trees$tempStemID == "1"
+]), "non-unique protocol stem locator was not flagged on every source row")
+assert_equal(duplicate_bundle$plots$tree_identity_conflict_keys[
+  duplicate_bundle$plots$eventID == "E1"
+], 1L, "tree-channel identity conflict was not counted by protocol locator")
+assert_equal(duplicate_bundle$plots$tree_support[
+  duplicate_bundle$plots$eventID == "E1"
+], "held_identity_conflict", "ambiguous measurement identity did not hold the channel event")
+assert_true(duplicate_bundle$plots$shrub_support[
+  duplicate_bundle$plots$eventID == "E1"
+] != "held_identity_conflict", "tree identity conflict leaked into the shrub channel")
+
+conflicting_measurement_raw <- raw
+conflicting_measurement <- apparent[1, , drop = FALSE]
+conflicting_measurement$uid <- "apparent-source-metric-conflict"
+conflicting_measurement$stemDiameter <- 99
+conflicting_measurement$plantStatus <- "Standing dead 5"
+conflicting_measurement_raw$vst_apparentindividual <- rbind(
+  apparent, conflicting_measurement
+)
+conflicting_measurement_bundle <- vst_build_site_from_tables(
+  "TEST", conflicting_measurement_raw
+)
+assert_equal(conflicting_measurement_bundle$plots$tree_support[
+  conflicting_measurement_bundle$plots$eventID == "E1"
+], "held_identity_conflict", "same-date metric/status conflict was adjudicated")
+
+different_date_raw <- raw
+different_date_measurement <- apparent[1, , drop = FALSE]
+different_date_measurement$uid <- "apparent-source-date-conflict"
+different_date_measurement$date <- as.Date("2025-06-01")
+different_date_raw$vst_apparentindividual <- rbind(apparent, different_date_measurement)
+different_date_bundle <- vst_build_site_from_tables("TEST", different_date_raw)
+assert_equal(different_date_bundle$plots$tree_support[
+  different_date_bundle$plots$eventID == "E1"
+], "held_identity_conflict", "different-date locator conflict was treated as a revision")
+
+shrub_duplicate_raw <- raw
+shrub_duplicate <- apparent[apparent$eventID == "E7", , drop = FALSE]
+shrub_duplicate$uid <- "shrub-source-conflict"
+shrub_duplicate_raw$vst_apparentindividual <- rbind(apparent, shrub_duplicate)
+shrub_duplicate_bundle <- vst_build_site_from_tables("TEST", shrub_duplicate_raw)
+assert_equal(shrub_duplicate_bundle$plots$shrub_support[
+  shrub_duplicate_bundle$plots$eventID == "E7"
+], "held_identity_conflict", "shrub identity conflict did not hold the shrub channel")
+assert_true(shrub_duplicate_bundle$plots$tree_support[
+  shrub_duplicate_bundle$plots$eventID == "E7"
+] != "held_identity_conflict", "shrub identity conflict leaked into the tree channel")
+
+# Measurement-identity conflict is recorded but does not obscure an earlier
+# protocol/presence reason; opportunity-source ambiguity always comes first.
+sampling_precedence_raw <- duplicate_raw
+sampling_precedence_raw$vst_perplotperyear$samplingImpractical[
+  sampling_precedence_raw$vst_perplotperyear$eventID == "E1"
+] <- "access denied"
+sampling_precedence_bundle <- vst_build_site_from_tables(
+  "TEST", sampling_precedence_raw
+)
+assert_equal(sampling_precedence_bundle$plots$tree_support[
+  sampling_precedence_bundle$plots$eventID == "E1"
+], "held_sampling_impractical", "measurement identity hid sampling impracticality")
+
+presence_precedence_raw <- duplicate_raw
+presence_precedence_raw$vst_perplotperyear$treesPresent[
+  presence_precedence_raw$vst_perplotperyear$eventID == "E1"
+] <- "not present"
+presence_precedence_bundle <- vst_build_site_from_tables(
+  "TEST", presence_precedence_raw
+)
+assert_equal(presence_precedence_bundle$plots$tree_support[
+  presence_precedence_bundle$plots$eventID == "E1"
+], "held_presence_record_conflict", "measurement identity hid a presence-record conflict")
+
+metric_precedence_raw <- raw
+metric_conflict <- apparent[1, , drop = FALSE]
+metric_conflict$uid <- "apparent-source-invalid-conflict"
+metric_conflict$stemDiameter <- NA_real_
+metric_precedence_raw$vst_apparentindividual <- rbind(apparent, metric_conflict)
+metric_precedence_bundle <- vst_build_site_from_tables("TEST", metric_precedence_raw)
+assert_equal(metric_precedence_bundle$plots$tree_support[
+  metric_precedence_bundle$plots$eventID == "E1"
+], "held_identity_conflict", "metric-invalid state improperly outranked identity conflict")
+
+duplicate_opportunity_raw <- raw
+duplicate_opportunity <- perplot[perplot$eventID == "E2", , drop = FALSE]
+duplicate_opportunity$uid <- "opportunity-source-conflict"
+duplicate_opportunity$totalSampledAreaTrees <- 999
+duplicate_opportunity_raw$vst_perplotperyear <- rbind(perplot, duplicate_opportunity)
+duplicate_opportunity_bundle <- vst_build_site_from_tables("TEST", duplicate_opportunity_raw)
+assert_equal(nrow(duplicate_opportunity_bundle$opportunity_source), nrow(perplot) + 1L,
+             "conflicting opportunity source row was silently deleted")
+assert_true(duplicate_opportunity_bundle$plots$opportunity_key_conflict[
+  duplicate_opportunity_bundle$plots$eventID == "E2"
+], "non-unique opportunity key was not flagged")
+assert_equal(duplicate_opportunity_bundle$plots$tree_support[
+  duplicate_opportunity_bundle$plots$eventID == "E2"
+], "held_identity_conflict", "ambiguous opportunity identity did not hold the channel event")
+assert_equal(duplicate_opportunity_bundle$plots$shrub_support[
+  duplicate_opportunity_bundle$plots$eventID == "E2"
+], "held_identity_conflict", "ambiguous opportunity identity did not hold both channels")
+
+opportunity_precedence_raw <- duplicate_opportunity_raw
+opportunity_precedence_raw$vst_perplotperyear$samplingImpractical[
+  opportunity_precedence_raw$vst_perplotperyear$eventID == "E2"
+] <- "access denied"
+opportunity_precedence_bundle <- vst_build_site_from_tables(
+  "TEST", opportunity_precedence_raw
+)
+assert_equal(opportunity_precedence_bundle$plots$tree_support[
+  opportunity_precedence_bundle$plots$eventID == "E2"
+], "held_identity_conflict", "opportunity ambiguity lost first-precedence hold status")
+
+duplicate_uid_raw <- raw
+duplicate_uid_raw$vst_apparentindividual <- rbind(apparent, apparent[1, ])
 assert_error(
-  vst_build_site_from_tables("TEST", duplicate_raw),
+  vst_build_site_from_tables("TEST", duplicate_uid_raw),
   "violates unique key",
-  "duplicate apparent-table primary key did not fail the build"
+  "duplicate published uid did not fail the build"
+)
+
+blank_uid_raw <- raw
+blank_uid_raw$vst_apparentindividual$uid[[1L]] <- ""
+assert_error(
+  vst_build_site_from_tables("TEST", blank_uid_raw),
+  "blank uid",
+  "blank apparent source uid did not fail the build"
+)
+
+duplicate_opportunity_uid_raw <- raw
+duplicate_opportunity_uid_raw$vst_perplotperyear <- rbind(perplot, perplot[1, ])
+assert_error(
+  vst_build_site_from_tables("TEST", duplicate_opportunity_uid_raw),
+  "violates unique key",
+  "duplicate opportunity source uid did not fail the build"
+)
+
+blank_opportunity_uid_raw <- raw
+blank_opportunity_uid_raw$vst_perplotperyear$uid[[1L]] <- ""
+assert_error(
+  vst_build_site_from_tables("TEST", blank_opportunity_uid_raw),
+  "blank uid",
+  "blank opportunity source uid did not fail the build"
 )
 
 cat("PASS: event-keyed bundle contract fixtures\n")

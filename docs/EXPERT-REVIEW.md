@@ -16,7 +16,11 @@ The certification and all WOOD “treeless” language are withdrawn.
 
 The three-table spine is necessary but must remain at its native grain:
 
-- `vst_apparentindividual`: `eventID × individualID × tempStemID`;
+- `vst_apparentindividual`: published `uid` is the preserved, unique source-row
+  identity. NEON documents `eventID × individualID × tempStemID` as the row
+  locator, but `RELEASE-2026` contains collisions on those three fields. The
+  operational locator therefore includes `plotID` to distinguish cross-plot tag
+  reuse;
 - `vst_mappingandtagging`: identity/taxonomy, resolved deterministically to the most recent created
   record when duplicated;
 - `vst_perplotperyear`: `plotID × eventID`, including exact event sampled areas and the fields that say
@@ -24,6 +28,23 @@ The three-table spine is necessary but must remain at its native grain:
 
 `individualID` alone is not a safe site-level plant key. A physical plant is scoped by
 `plotID × individualID`; events, not dates alone, order the observations.
+
+The official-release identity preflight found 527,000 apparent rows across all
+42 sites. The documented three-field locator has 1,275 collision groups covering
+2,688 rows across 37 sites. Twenty-two groups are cross-plot reuse; adding
+`plotID` leaves 1,253 true plot-scoped groups covering 2,644 rows. Of those,
+1,085 remain tied at the latest date and 845 conflict on metric or status fields.
+No scientifically defensible ranking chooses one row. Every distinct-`uid` row
+must remain preserved and the affected physical channel must remain held. Its
+conflict count stays explicit; the canonical status is
+`held_identity_conflict` unless an earlier protocol/presence hold applies. Only
+duplicate published `uid` is a hard identity failure.
+
+The opportunity table also contains 10 source rows forming five duplicate
+`plotID × eventID` groups across BLAN (two groups), DEJU, JERC, and JORN. Those
+rows must remain preserved, with both physical channels held as
+`held_identity_conflict`; neither row order nor a preferred area/status value
+may choose a winner.
 
 ## Measurement channels
 

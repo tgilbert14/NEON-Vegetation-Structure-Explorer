@@ -10,8 +10,23 @@ bundle family and does not authorize a Driver/Cascade data-byte change.
 ## Identity and support
 
 - Physical plant: `plotID × individualID`.
-- Sampling event: `plotID × eventID`.
-- Apparent-individual stem row: `eventID × individualID × tempStemID`.
+- Published source-row identity: `uid`. It is preserved and must be unique; a
+  duplicate source `uid` is a hard failure.
+- NEON's documented apparent-individual locator is
+  `eventID × individualID × tempStemID`. It has collisions in `RELEASE-2026` and
+  is not treated as unique.
+- Operational apparent-individual locator:
+  `plotID × eventID × individualID × tempStemID`. Adding `plotID` excludes
+  cross-plot reuse of the same tag from a within-plot identity conflict.
+- Sampling-opportunity locator: `plotID × eventID`.
+- Distinct-`uid` rows that collide on the operational locator are all preserved;
+  none is selected by row order, date, metric value, status, or any other
+  ranking. The affected physical channel is never supported. Its conflict
+  count stays explicit, and the status is `held_identity_conflict` unless an
+  earlier sampling, data-collected, area, or presence-record hold applies.
+- Colliding source rows for one `plotID × eventID` opportunity are likewise all
+  preserved. Because their opportunity state cannot be adjudicated without an
+  arbitrary winner, both physical channels are `held_identity_conflict`.
 - Current-state summaries select the latest supported event for each plot, then
   the matching latest event for each composite plant. Repeated events are not
   pooled as independent current observations.
@@ -125,10 +140,12 @@ nonmatching plot-ID families. Its correct state is held/unmatched, not “treele
 Release requires:
 
 1. an exact official-release source receipt and complete 42-site inventory;
-2. unique official stem rows and unique plot-event opportunities;
+2. unique published source `uid` values; complete preservation and fail-closed
+   handling of documented-locator, operational-locator, and plot-event source
+   collisions, with no arbitrary winner;
 3. exact support-state vocabulary, positive supported areas, exact invalid-metric
    counts recomputed from preserved live rows, and records/status consistency;
-4. deterministic snapshot, stand, growth, mortality, taxonomy, classification,
+4. deterministic snapshot, stand, growth, mortality, taxonomy, presentation-channel,
    index, search, report, and export fixtures;
 5. exact app/index/search/export parity from one canonical builder, including
    the 84-row site × physical-channel search grid;

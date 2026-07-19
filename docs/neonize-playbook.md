@@ -22,8 +22,18 @@ patterns, but never transplant an analysis merely because another app has it.
 
 - Product: NEON `DP1.10098.001`.
 - Plant identity: `plotID × individualID`.
-- Sampling event: `plotID × eventID`.
-- Stem row: `eventID × individualID × tempStemID`.
+- Published source-row identity: unique `uid`; duplicate source `uid` is a hard
+  failure.
+- Sampling-opportunity locator: `plotID × eventID`.
+- Documented apparent-individual locator:
+  `eventID × individualID × tempStemID`; the operational locator adds `plotID`
+  to distinguish cross-plot tag reuse.
+- Distinct-`uid` locator collisions are preserved without row-order, date,
+  metric, or status ranking; the affected physical channel remains held, with
+  an explicit conflict count and `held_identity_conflict` status unless an
+  earlier protocol/presence hold applies.
+- Duplicate opportunity-source rows are preserved without an arbitrary winner;
+  both channels for that `plotID × eventID` are `held_identity_conflict`.
 - Physical channels are disjoint:
   - `tree_dbh`: tree bole `stemDiameter` at breast height;
   - `shrub_sapling_basal`: shrub/sapling `basalStemDiameter` at the stem base.
@@ -45,8 +55,10 @@ The exact formulas, thresholds, support states, and release gates live in
    empty staging and preserve raw checksums and the release DOI.
 3. Build two isolated candidates under pinned R 4.5.2, the dated Jammy package
    repository, and verified one-thread Haswell OpenBLAS settings.
-4. Fail hard on any missing site, table, key, opportunity, denominator, source
-   receipt, validator, or exact-byte comparison.
+4. Fail hard on any missing site, table, published source `uid`, opportunity,
+   denominator, source receipt, validator, or exact-byte comparison. A duplicate
+   source `uid` fails; distinct-`uid` locator collisions remain visible and held
+   rather than being silently deduplicated.
 5. Keep the public app bundle-only (`VST_LIVE=0`). Missing or incompatible bytes
    produce a visible HOLD; there is no live-data fallback at runtime.
 6. Build the first candidate from an exact same-repository PR head by having the

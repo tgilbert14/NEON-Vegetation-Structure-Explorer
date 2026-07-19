@@ -16,7 +16,7 @@ VST_SUPPORTED <- c("sampled_with_records", "sampled_absence")
 VST_HELD <- c(
   "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
   "held_opportunity_unknown", "held_presence_record_conflict",
-  "held_metric_invalid"
+  "held_metric_invalid", "held_identity_conflict"
 )
 VST_STATUS <- c(VST_SUPPORTED, VST_HELD)
 
@@ -48,6 +48,25 @@ event_counts <- function(trees, plots, keep) {
   result[!is.na(matched)] <- as.integer(counts[matched[!is.na(matched)]])
   result
 }
+identity_conflict_counts <- function(trees, plots, keep) {
+  result <- integer(nrow(plots))
+  keep[is.na(keep)] <- FALSE
+  if (!nrow(trees) || !any(keep) ||
+      !all(c("protocol_key_conflict", "protocol_stem_key") %in% names(trees))) {
+    return(result)
+  }
+  keep <- keep & trees$protocol_key_conflict %in% TRUE
+  if (!any(keep)) return(result)
+  rows <- unique(data.frame(
+    event_key = release_key(trees[keep, , drop = FALSE], c("plotID", "eventID")),
+    protocol_stem_key = as.character(trees$protocol_stem_key[keep]),
+    stringsAsFactors = FALSE
+  ))
+  counts <- table(rows$event_key)
+  matched <- match(release_key(plots, c("plotID", "eventID")), names(counts))
+  result[!is.na(matched)] <- as.integer(counts[matched[!is.na(matched)]])
+  result
+}
 presence_state <- function(value) {
   value <- tolower(trimws(as.character(value)))
   result <- rep("unknown", length(value))
@@ -64,12 +83,16 @@ shrub_presence_state <- function(trees_present, shrubs_present) {
                 "absent", "unknown"))
 }
 expected_support_status <- function(area, sampling_impractical, data_collected,
-                                    presence, records, invalid_metric) {
+                                    presence, records, invalid_metric,
+                                    identity_conflicts,
+                                    opportunity_conflict) {
   sampling <- gsub("[^a-z]", "", tolower(trimws(as.character(sampling_impractical))))
   collected <- gsub("[^a-z]", "", tolower(trimws(as.character(data_collected))))
   result <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
-    if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
+    if (isTRUE(opportunity_conflict[[i]])) {
+      result[[i]] <- "held_identity_conflict"
+    } else if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
       result[[i]] <- "held_opportunity_unknown"
     } else if (!identical(sampling[[i]], "ok")) {
       result[[i]] <- "held_sampling_impractical"
@@ -81,6 +104,8 @@ expected_support_status <- function(area, sampling_impractical, data_collected,
       result[[i]] <- "held_missing_area"
     } else if (records[[i]] > 0L && identical(presence[[i]], "absent")) {
       result[[i]] <- "held_presence_record_conflict"
+    } else if (is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
+      result[[i]] <- "held_identity_conflict"
     } else if (invalid_metric[[i]] > 0L) {
       result[[i]] <- "held_metric_invalid"
     } else if (records[[i]] > 0L) {
@@ -151,14 +176,18 @@ v2_tree_required <- c(
   "growthForm", "plantStatus", "live", "stemDiameter", "basalStemDiameter",
   "measurementHeight", "basalMeasurementHeight", "changedMeasurementLocation",
   "tagStatus", "dendrometerCondition", "heightQualifier", "dataQF",
-  "plant_key", "event_key", "stem_key"
+  "source_uid", "protocol_stem_key", "protocol_key_group_n",
+  "protocol_key_conflict", "plant_key", "event_key"
 )
 v2_plot_required <- c(
+  "opportunity_source_uid", "opportunity_source_record_count",
+  "opportunity_key_conflict", "opportunity_source_uids",
   "plotID", "eventID", "date", "year", "eventType", "plotType",
   "samplingImpractical", "dataCollected", "treesPresent", "shrubsPresent",
   "treePresence", "shrubSaplingPresence", "area_trees", "area_shrub",
   "tree_records", "shrub_records", "tree_invalid_metric_records",
-  "shrub_invalid_metric_records", "tree_support", "tree_support_reason",
+  "shrub_invalid_metric_records", "tree_identity_conflict_keys",
+  "shrub_identity_conflict_keys", "tree_support", "tree_support_reason",
   "shrub_support", "shrub_support_reason", "tree_supported",
   "shrub_supported", "event_key"
 )
@@ -167,6 +196,8 @@ bundles <- list()
 receipts <- list()
 denominator_mismatches <- list()
 v2_sites <- character(0)
+apparent_source_inventory <- character(0)
+opportunity_source_inventory <- character(0)
 
 for (path in site_files) {
   site <- sub("[.]rds$", "", basename(path))
@@ -195,6 +226,12 @@ for (path in site_files) {
     note(sprintf("%s plots table is empty or not a data frame", site))
     next
   }
+  if (is_v2 && (!is.data.frame(bundle$opportunity_source) ||
+                !all(c("source_record_key", "protocol_key_group_n",
+                       "protocol_key_conflict") %in% names(bundle$opportunity_source)))) {
+    note(sprintf("%s opportunity_source is missing source identity fields", site))
+    next
+  }
   tree_required <- unique(c(legacy_tree_required, if (is_v2) v2_tree_required))
   plot_required <- unique(c(legacy_plot_required, if (is_v2) v2_plot_required))
   missing_trees <- setdiff(tree_required, names(bundle$trees))
@@ -215,9 +252,12 @@ for (path in site_files) {
         !identical(as.integer(contract$version), 2L)) {
       note(sprintf("%s lacks the exact embedded v2 contract", site))
     } else {
-      if (!identical(as.character(contract$stem_key),
-                     c("eventID", "individualID", "tempStemID")))
-        note(sprintf("%s contract changes the official stem key", site))
+      if (!identical(as.character(contract$source_record_key), "source_uid") ||
+          !identical(as.character(contract$protocol_stem_locator),
+                     c("plotID", "eventID", "individualID", "tempStemID")) ||
+          !identical(as.character(contract$opportunity_source_record_key),
+                     "source_record_key"))
+        note(sprintf("%s contract changes the source-row or protocol-locator identity", site))
       if (!identical(as.character(contract$event_key), c("plotID", "eventID")))
         note(sprintf("%s contract changes the opportunity-event key", site))
       if (!setequal(as.character(contract$support_status$supported), VST_SUPPORTED) ||
@@ -237,17 +277,61 @@ for (path in site_files) {
 
     trees <- bundle$trees
     plots <- bundle$plots
+    opportunity_source <- bundle$opportunity_source
     if (nrow(trees)) {
-      if (any(!nonblank(trees$eventID)) || any(!nonblank(trees$plotID)) ||
+      if (any(!nonblank(trees$source_uid)) || any(!nonblank(trees$eventID)) || any(!nonblank(trees$plotID)) ||
           any(!nonblank(trees$individualID)))
         note(sprintf("%s has blank measurement identity fields", site))
-      if (anyDuplicated(release_key(trees, c("eventID", "individualID", "tempStemID"))))
-        note(sprintf("%s duplicates eventID + individualID + tempStemID", site))
+      if (anyDuplicated(as.character(trees$source_uid)))
+        note(sprintf("%s duplicates published apparent-individual uid", site))
+      apparent_source_inventory <- c(
+        apparent_source_inventory,
+        stats::setNames(as.character(trees$source_uid), rep(site, nrow(trees)))
+      )
+      protocol_key <- release_key(
+        trees, c("plotID", "eventID", "individualID", "tempStemID")
+      )
+      expected_group_n <- as.integer(table(protocol_key)[protocol_key])
+      if (!identical(as.integer(trees$protocol_key_group_n), expected_group_n) ||
+          !identical(as.logical(trees$protocol_key_conflict), expected_group_n > 1L) ||
+          !identical(as.character(trees$protocol_stem_key), protocol_key))
+        note(sprintf("%s apparent-individual protocol locator audit is inconsistent", site))
     }
+    if (any(!nonblank(opportunity_source$source_record_key)) ||
+        anyDuplicated(as.character(opportunity_source$source_record_key)))
+      note(sprintf("%s opportunity source uids are blank or non-unique", site))
+    opportunity_source_inventory <- c(
+      opportunity_source_inventory,
+      stats::setNames(
+        as.character(opportunity_source$source_record_key),
+        rep(site, nrow(opportunity_source))
+      )
+    )
+    source_event_key <- release_key(opportunity_source, c("eventID", "plotID"))
+    expected_source_group_n <- as.integer(table(source_event_key)[source_event_key])
+    if (!identical(as.integer(opportunity_source$protocol_key_group_n),
+                   expected_source_group_n) ||
+        !identical(as.logical(opportunity_source$protocol_key_conflict),
+                   expected_source_group_n > 1L))
+      note(sprintf("%s opportunity source key audit is inconsistent", site))
     if (any(!nonblank(plots$eventID)) || any(!nonblank(plots$plotID)))
       note(sprintf("%s has blank opportunity identity fields", site))
     if (anyDuplicated(release_key(plots, c("eventID", "plotID"))))
       note(sprintf("%s duplicates eventID + plotID opportunity rows", site))
+    canonical_keys <- release_key(plots, c("eventID", "plotID"))
+    if (!setequal(unique(source_event_key), canonical_keys))
+      note(sprintf("%s source and canonical opportunity key inventories differ", site))
+    canonical_source_n <- as.integer(table(source_event_key)[canonical_keys])
+    source_uid_sets <- tapply(
+      as.character(opportunity_source$source_record_key), source_event_key,
+      function(value) paste(sort(unique(value)), collapse = ";")
+    )
+    canonical_uid_sets <- unname(source_uid_sets[canonical_keys])
+    if (any(is.na(canonical_source_n)) ||
+        !identical(as.integer(plots$opportunity_source_record_count), canonical_source_n) ||
+        !identical(as.logical(plots$opportunity_key_conflict), canonical_source_n > 1L) ||
+        !identical(as.character(plots$opportunity_source_uids), canonical_uid_sets))
+      note(sprintf("%s canonical opportunity conflict audit differs from source rows", site))
     if (nrow(trees)) {
       orphan <- setdiff(release_key(trees, c("plotID", "eventID")),
                         release_key(plots, c("plotID", "eventID")))
@@ -271,6 +355,7 @@ for (path in site_files) {
           tree_form & live & !(is.finite(tree_diameter) & tree_diameter > 0 &
                                tree_diameter >= 10)
         ),
+        identity_conflicts = identity_conflict_counts(trees, plots, tree_form),
         presence = presence_state(plots$treesPresent)
       ),
       shrub = list(
@@ -279,6 +364,7 @@ for (path in site_files) {
           trees, plots,
           shrub_form & live & !(is.finite(shrub_diameter) & shrub_diameter > 0)
         ),
+        identity_conflicts = identity_conflict_counts(trees, plots, shrub_form),
         presence = shrub_presence_state(plots$treesPresent, plots$shrubsPresent)
       )
     )
@@ -295,6 +381,7 @@ for (path in site_files) {
       area <- plots[[if (channel == "tree") "area_trees" else "area_shrub"]]
       records <- plots[[paste0(channel, "_records")]]
       invalid <- plots[[paste0(channel, "_invalid_metric_records")]]
+      identity_conflicts <- plots[[paste0(channel, "_identity_conflict_keys")]]
       if (any(is.na(status)) || any(!status %in% VST_STATUS))
         note(sprintf("%s %s channel uses an unknown support status", site, channel))
       if (any(!nonblank(reason)))
@@ -308,14 +395,22 @@ for (path in site_files) {
         note(sprintf("%s %s record counts are invalid", site, channel))
       if (any(!is.finite(invalid) | invalid < 0 | invalid != as.integer(invalid), na.rm = TRUE))
         note(sprintf("%s %s invalid-metric counts are invalid", site, channel))
+      if (any(!is.finite(identity_conflicts) | identity_conflicts < 0 |
+              identity_conflicts != as.integer(identity_conflicts), na.rm = TRUE))
+        note(sprintf("%s %s identity-conflict counts are invalid", site, channel))
       if (!identical(as.integer(records), recomputed[[channel]]$records))
         note(sprintf("%s %s record counts differ from preserved measurement rows", site, channel))
       if (!identical(as.integer(invalid), recomputed[[channel]]$invalid))
         note(sprintf("%s %s invalid-metric counts differ from preserved live measurement rows", site, channel))
+      if (!identical(as.integer(identity_conflicts),
+                     recomputed[[channel]]$identity_conflicts))
+        note(sprintf("%s %s identity-conflict counts differ from preserved source rows", site, channel))
       expected_status <- expected_support_status(
         area, plots$samplingImpractical, plots$dataCollected,
         recomputed[[channel]]$presence, recomputed[[channel]]$records,
-        recomputed[[channel]]$invalid
+        recomputed[[channel]]$invalid,
+        recomputed[[channel]]$identity_conflicts,
+        plots$opportunity_key_conflict
       )
       if (!identical(as.character(status), expected_status))
         note(sprintf("%s %s support states violate fail-closed precedence", site, channel))
@@ -323,6 +418,10 @@ for (path in site_files) {
         note(sprintf("%s %s supported rows contain invalid required metrics", site, channel))
       if (any(status == "held_metric_invalid" & invalid <= 0L, na.rm = TRUE))
         note(sprintf("%s %s held_metric_invalid rows contain no invalid required metrics", site, channel))
+      if (any(status == "held_identity_conflict" &
+              identity_conflicts <= 0L & !plots$opportunity_key_conflict,
+              na.rm = TRUE))
+        note(sprintf("%s %s held_identity_conflict rows contain no source-key conflict", site, channel))
       if (any(status == "sampled_absence" & records != 0L, na.rm = TRUE))
         note(sprintf("%s %s sampled_absence rows contain records", site, channel))
       if (any(status == "sampled_with_records" & records <= 0L, na.rm = TRUE))
@@ -337,6 +436,24 @@ for (path in site_files) {
     denominator_plots <- sort(unique(as.character(bundle$plots$plotID[!is.na(bundle$plots$plotID)])))
     unmatched <- setdiff(record_plots, denominator_plots)
     if (length(unmatched)) denominator_mismatches[[site]] <- unmatched
+  }
+}
+
+source_inventories <- list(
+  `apparent-individual` = apparent_source_inventory,
+  `plot-opportunity` = opportunity_source_inventory
+)
+for (label in names(source_inventories)) {
+  inventory <- source_inventories[[label]]
+  duplicate <- duplicated(unname(inventory)) |
+    duplicated(unname(inventory), fromLast = TRUE)
+  if (any(duplicate)) {
+    values <- unique(unname(inventory[duplicate]))
+    examples <- values[seq_len(min(3L, length(values)))]
+    note(sprintf(
+      "published %s uid is reused across site bundles; examples: %s",
+      label, paste(examples, collapse = ",")
+    ))
   }
 }
 

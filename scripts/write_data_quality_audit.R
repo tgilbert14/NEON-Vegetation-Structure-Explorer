@@ -9,7 +9,7 @@ suppressPackageStartupMessages(library(jsonlite))
 source("scripts/vegetation_inventory.R", local = TRUE)
 
 VST_DQA_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
-VST_DQA_SCHEMA <- "NEON-VST-data-quality-audit-v1"
+VST_DQA_SCHEMA <- "NEON-VST-data-quality-audit-v2"
 VST_DQA_PRODUCT <- "DP1.10098.001"
 VST_DQA_RELEASE <- "RELEASE-2026"
 VST_DQA_RELEASE_DOI <- "https://doi.org/10.48443/pypa-qf12"
@@ -17,7 +17,7 @@ VST_DQA_SUPPORTED <- c("sampled_with_records", "sampled_absence")
 VST_DQA_HELD <- c(
   "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
   "held_opportunity_unknown", "held_presence_record_conflict",
-  "held_metric_invalid"
+  "held_metric_invalid", "held_identity_conflict"
 )
 VST_DQA_STATUS <- c(VST_DQA_SUPPORTED, VST_DQA_HELD)
 VST_DQA_CHANNELS <- list(
@@ -26,6 +26,7 @@ VST_DQA_CHANNELS <- list(
     support = "tree_support",
     reason = "tree_support_reason",
     invalid = "tree_invalid_metric_records",
+    identity = "tree_identity_conflict_keys",
     metric = "stemDiameter",
     minimum = 10
   ),
@@ -34,6 +35,7 @@ VST_DQA_CHANNELS <- list(
     support = "shrub_support",
     reason = "shrub_support_reason",
     invalid = "shrub_invalid_metric_records",
+    identity = "shrub_identity_conflict_keys",
     metric = "basalStemDiameter",
     minimum = 0
   )
@@ -54,6 +56,15 @@ vst_dqa_scalar <- function(value, label) {
 vst_dqa_byte_order <- function(...) {
   values <- lapply(list(...), function(value) enc2utf8(as.character(value)))
   do.call(order, c(values, list(method = "radix", na.last = TRUE)))
+}
+
+vst_dqa_key <- function(data, columns) {
+  parts <- lapply(columns, function(column) {
+    value <- as.character(data[[column]])
+    value[is.na(value)] <- "<NA>"
+    paste0(nchar(value), ":", value)
+  })
+  do.call(paste, c(parts, sep = "\u001f"))
 }
 
 vst_dqa_value_counts_json <- function(value) {
@@ -107,6 +118,17 @@ vst_dqa_validate_receipt <- function(bundle, site) {
       !identical(as.integer(contract$version %||% NA_integer_), 2L)) {
     stop(site, " lacks the exact embedded v2 contract", call. = FALSE)
   }
+  if (!identical(as.character(contract$source_record_key %||% ""),
+                 "source_uid") ||
+      !identical(as.character(contract$protocol_stem_locator %||% character()),
+                 c("plotID", "eventID", "individualID", "tempStemID")) ||
+      !identical(as.character(contract$opportunity_source_record_key %||% ""),
+                 "source_record_key") ||
+      !setequal(as.character(contract$support_status$held %||% character()),
+                VST_DQA_HELD)) {
+    stop(site, " embedded identity or held-status contract differs from v2",
+         call. = FALSE)
+  }
   receipt <- bundle$meta$source_receipt %||% NULL
   if (!is.list(receipt)) {
     stop(site, " lacks an official source receipt", call. = FALSE)
@@ -133,31 +155,110 @@ vst_dqa_validate_receipt <- function(bundle, site) {
 }
 
 vst_dqa_site_rows <- function(bundle, site) {
-  if (!is.list(bundle) || !all(c("trees", "plots", "meta", "contract") %in%
+  if (!is.list(bundle) || !all(c("trees", "plots", "opportunity_source", "meta", "contract") %in%
                                names(bundle))) {
     stop(site, " is not a complete v2 bundle", call. = FALSE)
   }
   if (!is.data.frame(bundle$trees) || !is.data.frame(bundle$plots) ||
+      !is.data.frame(bundle$opportunity_source) ||
       !nrow(bundle$plots)) {
     stop(site, " lacks preserved measurement/opportunity tables", call. = FALSE)
   }
   receipt <- vst_dqa_validate_receipt(bundle, site)
   trees <- bundle$trees
   plots <- bundle$plots
+  opportunity_source <- bundle$opportunity_source
   required_tree <- c(
     "growthForm", "live", "stemDiameter", "basalStemDiameter", "dataQF",
-    "tagStatus", "changedMeasurementLocation"
+    "tagStatus", "changedMeasurementLocation", "source_uid",
+    "plotID", "eventID", "individualID", "tempStemID",
+    "protocol_stem_key", "protocol_key_group_n", "protocol_key_conflict"
   )
   required_plot <- unique(unlist(lapply(VST_DQA_CHANNELS, function(spec) {
-    c(spec$support, spec$reason, spec$invalid)
+    c(spec$support, spec$reason, spec$invalid, spec$identity)
   }), use.names = FALSE))
+  required_plot <- unique(c(
+    required_plot, "plotID", "eventID", "opportunity_source_record_count",
+    "opportunity_key_conflict", "opportunity_source_uids"
+  ))
   missing_tree <- setdiff(required_tree, names(trees))
   missing_plot <- setdiff(required_plot, names(plots))
-  if (length(missing_tree) || length(missing_plot)) {
+  missing_source <- setdiff(
+    c("source_record_key", "plotID", "eventID", "protocol_key_group_n",
+      "protocol_key_conflict"),
+    names(opportunity_source)
+  )
+  if (length(missing_tree) || length(missing_plot) || length(missing_source)) {
     stop(sprintf(
-      "%s lacks audit fields: trees=[%s]; plots=[%s]", site,
-      paste(missing_tree, collapse = ","), paste(missing_plot, collapse = ",")
+      "%s lacks audit fields: trees=[%s]; plots=[%s]; opportunity_source=[%s]", site,
+      paste(missing_tree, collapse = ","), paste(missing_plot, collapse = ","),
+      paste(missing_source, collapse = ",")
     ), call. = FALSE)
+  }
+  if (any(!vst_dqa_nonblank(trees$source_uid)) ||
+      anyDuplicated(as.character(trees$source_uid))) {
+    stop(site, " has blank or duplicate apparent-individual source uids",
+         call. = FALSE)
+  }
+  if (any(!vst_dqa_nonblank(trees$plotID)) ||
+      any(!vst_dqa_nonblank(trees$eventID)) ||
+      any(!vst_dqa_nonblank(trees$individualID))) {
+    stop(site, " has blank apparent-individual locator fields", call. = FALSE)
+  }
+  if (any(!vst_dqa_nonblank(opportunity_source$source_record_key)) ||
+      anyDuplicated(as.character(opportunity_source$source_record_key))) {
+    stop(site, " has blank or duplicate opportunity source uids",
+         call. = FALSE)
+  }
+  if (any(!vst_dqa_nonblank(opportunity_source$plotID)) ||
+      any(!vst_dqa_nonblank(opportunity_source$eventID))) {
+    stop(site, " has blank opportunity-source locator fields", call. = FALSE)
+  }
+
+  protocol_key <- vst_dqa_key(
+    trees, c("plotID", "eventID", "individualID", "tempStemID")
+  )
+  protocol_group_n <- as.integer(table(protocol_key)[protocol_key])
+  if (any(!vst_dqa_nonblank(protocol_key)) ||
+      !identical(as.character(trees$protocol_stem_key), protocol_key) ||
+      !identical(as.integer(trees$protocol_key_group_n), protocol_group_n) ||
+      !identical(as.logical(trees$protocol_key_conflict), protocol_group_n > 1L)) {
+    stop(site, " has inconsistent apparent-individual locator audit fields",
+         call. = FALSE)
+  }
+
+  source_event_key <- vst_dqa_key(opportunity_source, c("plotID", "eventID"))
+  source_group_n <- as.integer(table(source_event_key)[source_event_key])
+  if (!identical(as.integer(opportunity_source$protocol_key_group_n),
+                 source_group_n) ||
+      !identical(as.logical(opportunity_source$protocol_key_conflict),
+                 source_group_n > 1L)) {
+    stop(site, " has inconsistent opportunity-source locator audit fields",
+         call. = FALSE)
+  }
+  canonical_event_key <- vst_dqa_key(plots, c("plotID", "eventID"))
+  if (anyDuplicated(canonical_event_key)) {
+    stop(site, " has duplicate canonical plot-event rows", call. = FALSE)
+  }
+  if (!setequal(unique(source_event_key), canonical_event_key)) {
+    stop(site, " source and canonical opportunity key inventories differ",
+         call. = FALSE)
+  }
+  matched_source_n <- as.integer(table(source_event_key)[canonical_event_key])
+  source_uid_sets <- tapply(
+    as.character(opportunity_source$source_record_key), source_event_key,
+    function(value) paste(sort(unique(value)), collapse = ";")
+  )
+  matched_source_uids <- unname(source_uid_sets[canonical_event_key])
+  if (any(is.na(matched_source_n)) ||
+      !identical(as.integer(plots$opportunity_source_record_count),
+                 matched_source_n) ||
+      !identical(as.logical(plots$opportunity_key_conflict),
+                 matched_source_n > 1L) ||
+      !identical(as.character(plots$opportunity_source_uids),
+                 matched_source_uids)) {
+    stop(site, " canonical opportunity conflicts differ from preserved source rows",
+         call. = FALSE)
   }
 
   growth_form <- tolower(trimws(as.character(trees$growthForm)))
@@ -181,6 +282,14 @@ vst_dqa_site_rows <- function(bundle, site) {
            call. = FALSE)
     }
     invalid_by_opportunity <- as.integer(invalid_value)
+    identity_value <- suppressWarnings(as.numeric(plots[[spec$identity]]))
+    if (any(!is.finite(identity_value)) || any(identity_value < 0) ||
+        any(identity_value != floor(identity_value)) ||
+        any(identity_value > .Machine$integer.max)) {
+      stop(site, " ", channel, " contains invalid identity-conflict counts",
+           call. = FALSE)
+    }
+    identity_by_opportunity <- as.integer(identity_value)
 
     channel_rows <- trees[
       growth_form %in% tolower(spec$forms), , drop = FALSE
@@ -193,6 +302,18 @@ vst_dqa_site_rows <- function(bundle, site) {
     if (!identical(stored_invalid, recomputed_invalid)) {
       stop(site, " ", channel,
            " invalid metric-row total differs from preserved live rows",
+           call. = FALSE)
+    }
+    conflict_rows <- channel_rows$protocol_key_conflict %in% TRUE
+    recomputed_identity <- if (any(conflict_rows)) {
+      length(unique(as.character(channel_rows$protocol_stem_key[conflict_rows])))
+    } else {
+      0L
+    }
+    stored_identity <- as.integer(sum(identity_by_opportunity))
+    if (!identical(stored_identity, as.integer(recomputed_identity))) {
+      stop(site, " ", channel,
+           " identity-conflict total differs from preserved source rows",
            call. = FALSE)
     }
 
@@ -220,6 +341,8 @@ vst_dqa_site_rows <- function(bundle, site) {
       source_receipt_id = as.character(receipt$source_receipt_id),
       raw_source_digest = as.character(receipt$raw_source_digest),
       n_opportunities = as.integer(length(status)),
+      n_opportunity_source_records = as.integer(nrow(opportunity_source)),
+      n_opportunity_key_conflict_groups = as.integer(sum(plots$opportunity_key_conflict %in% TRUE)),
       n_supported_opportunities = as.integer(sum(status %in% VST_DQA_SUPPORTED)),
       n_explicit_absences = as.integer(sum(status == "sampled_absence")),
       n_held_opportunities = as.integer(sum(status %in% VST_DQA_HELD)),
@@ -231,10 +354,13 @@ vst_dqa_site_rows <- function(bundle, site) {
       n_held_opportunity_unknown = as.integer(status_counts[["held_opportunity_unknown"]]),
       n_held_presence_record_conflict = as.integer(status_counts[["held_presence_record_conflict"]]),
       n_held_metric_invalid = as.integer(status_counts[["held_metric_invalid"]]),
+      n_held_identity_conflict = as.integer(status_counts[["held_identity_conflict"]]),
       held_reason_counts = vst_dqa_held_reasons_json(status, reason),
       n_measurement_records = as.integer(nrow(channel_rows)),
       n_live_measurement_records = as.integer(sum(live)),
       n_invalid_metric_records = stored_invalid,
+      n_protocol_identity_conflict_keys = stored_identity,
+      n_protocol_identity_conflict_records = as.integer(sum(conflict_rows)),
       n_nonblank_dataqf_records = as.integer(sum(vst_dqa_nonblank(data_qf))),
       dataqf_value_counts = vst_dqa_value_counts_json(data_qf),
       dataqf_handling = "preserved_and_counted_not_excluded",

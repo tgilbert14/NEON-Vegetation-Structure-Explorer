@@ -11,7 +11,7 @@ Release status: **HOLD**. Check a box only with an attached exact receipt.
 - [ ] No silent measurement-to-denominator mismatch; partial-match policy reviewed.
 - [ ] `tree_dbh` and `shrub_sapling_basal` estimands, physical labels, and
       thresholds registered.
-- [ ] Snapshot, growth, mortality, classification, support, and missingness fixtures pass.
+- [ ] Snapshot, growth, mortality, deterministic presentation-channel, support, and missingness fixtures pass.
 - [ ] App, indexes, CSV/ZIP/PDF, and fixtures match exactly.
 - [ ] Data Takeaways and Expert Review recomputed from the candidate.
 

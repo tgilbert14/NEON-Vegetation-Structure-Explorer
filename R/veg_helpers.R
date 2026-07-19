@@ -3,7 +3,12 @@
 # Science core for NEON DP1.10098.001. The contract keeps three identities apart:
 #   * plant: plotID x individualID (individualID is not site-globally unique),
 #   * event: plotID x eventID (date alone is not an event key), and
-#   * stem row: eventID x individualID x tempStemID (the apparent-table PK).
+#   * source row: uid (the published record identity), and
+#   * protocol stem locator: plotID x eventID x individualID x tempStemID.
+#
+# The protocol locator should be unique, but official releases can contain
+# documented anomaly rows. Those source uids are preserved and the affected
+# physical channel is held rather than silently deduplicated or double-counted.
 #
 # Forest DBH basal area and shrub/sapling basal-diameter cover are separate
 # physical channels with separate sampled-area denominators. They may be shown
@@ -27,12 +32,14 @@ VEG_CONTRACT <- list(
   release = "RELEASE-2026",
   plant_key = c("plotID", "individualID"),
   event_key = c("plotID", "eventID"),
-  stem_key = c("eventID", "individualID", "tempStemID"),
+  source_record_key = "source_uid",
+  protocol_stem_locator = c("plotID", "eventID", "individualID", "tempStemID"),
+  opportunity_source_record_key = "source_record_key",
   supported_status = c("sampled_with_records", "sampled_absence"),
   held_status = c("held_sampling_impractical", "held_dendrometer_only",
                   "held_missing_area", "held_opportunity_unknown",
                   "held_presence_record_conflict", "held_metric_invalid",
-                  "held_snapshot_event_mismatch"),
+                  "held_identity_conflict", "held_snapshot_event_mismatch"),
   zero_status = "sampled_absence"
 )
 
@@ -678,7 +685,8 @@ plot_summary_veg <- function(snap, plots, spec = SIZE_FOREST) {
 # ---------------------------------------------------------------------------
 # Analysis-ready exports: tidy, typed, unit-bearing column names, self-identifying
 # (a downloaded record joins with no app context). One row per preserved
-# apparent-individual stem record, keyed by event x individual x temporary stem.
+# apparent-individual source uid, with the plot-scoped stem-event locator and
+# its conflict audit retained separately.
 # ---------------------------------------------------------------------------
 col_or_na <- function(d, nm) if (nm %in% names(d)) d[[nm]] else NA
 .receipt_value <- function(meta, field, fallback = "unverified / legacy HOLD") {
@@ -710,7 +718,13 @@ tidy_trees_export <- function(trees, meta = NULL) {
   d <- d[order(d$plotID, d$individualID, .date_num(d$date), .chr(d$eventID), .chr(d$tempStemID)), , drop = FALSE]
   out <- data.frame(
     contract_id = VEG_CONTRACT_ID,
-    apparent_record_key = paste(.chr(d$eventID), .chr(d$individualID), .chr(d$tempStemID), sep = "::"),
+    source_record_key = col_or_na(d, "source_uid"),
+    protocol_stem_key = paste(
+      .chr(d$plotID), .chr(d$eventID), .chr(d$individualID),
+      .chr(d$tempStemID), sep = "::"
+    ),
+    protocol_key_group_n = col_or_na(d, "protocol_key_group_n"),
+    protocol_key_conflict = col_or_na(d, "protocol_key_conflict"),
     plant_key = paste(.chr(d$plotID), .chr(d$individualID), sep = "::"),
     plotID = d$plotID,
     eventID = d$eventID,
@@ -788,12 +802,15 @@ veg_codebook <- function() {
     c("source_release","all exports","character","RELEASE-2026","Exact official source release; any unverified fallback is a release failure."),
     c("source_digest","all exports","character","SHA-256","Digest of the staged raw official-release source family."),
     c("contract_id","trees_long/plot_summary_latest","character",VEG_CONTRACT_ID,"Versioned metric and export contract. Join or compare outputs only when this value agrees."),
-    c("apparent_record_key","trees_long","character","eventID::individualID::tempStemID","Display form of the official vst_apparentindividual primary key. Duplicate keys are a build failure."),
+    c("source_record_key","trees_long/plot_opportunity_source","character","published uid","Unique published source-row identity. It is preserved even when a protocol locator conflicts."),
+    c("protocol_stem_key","trees_long","character","plotID::eventID::individualID::tempStemID","Plot-scoped display of the protocol stem locator. The published three-field locator should be unique, but plot scoping prevents known cross-plot tag collisions from contaminating another plot; true within-plot anomalies are preserved and flagged."),
+    c("protocol_key_group_n","trees_long/plot_opportunity_source","integer","records","Number of published source records sharing the relevant protocol locator."),
+    c("protocol_key_conflict","trees_long/plot_opportunity_source","logical","TRUE/FALSE","TRUE when the protocol locator is not unique; affected physical-channel summaries are held."),
     c("plant_key","trees_long","character","plotID::individualID","Canonical plant identity in this app. individualID alone is not unique across plots."),
     c("plotID","trees_long/plot_summary_latest/plot_opportunities_all","character","","NEON plot identifier; part of the plant and plot-event keys."),
     c("eventID","trees_long/plot_summary_latest/plot_opportunities_all","character","","NEON sampling event identifier. Plot-event identity is plotID x eventID; date alone is never used as the event key."),
     c("individualID","trees_long","character","","NEON plant tag. Always pair with plotID; TEMP.PLA ids are not stable remeasurement identities."),
-    c("tempStemID","trees_long","character","","Stem-within-event identifier and part of the apparent-table key. It is not stable across years for multi-bole shrubs/saplings."),
+    c("tempStemID","trees_long","character","","Stem-within-event locator. It is not stable across years for multi-bole shrubs/saplings and can be missing or conflicting in documented source anomalies."),
     c("subplotID","trees_long","character","","Nested subplot within the plot."),
     c("mapping_eventID","trees_long","character","","Mapping/tagging event chosen by the deterministic latest-created identity join."),
     c("mapping_created_date","trees_long","date (ISO)","YYYY-MM-DD","Creation date used to select the mapping/tagging identity record."),
@@ -852,6 +869,10 @@ veg_codebook <- function() {
     c("biggest_diam_cm","plots","numeric","cm","Largest eligible live stem diameter in the plot: DBH for tree_dbh, basal stem diameter for shrub_sapling_basal."),
     c("largest_stem_taxon","plot_summary_latest","character","","Taxon label attached to the largest eligible live stem in the selected plot event; not an ecological-dominance estimate."),
     c("date","plot_opportunities_all","date (ISO)","YYYY-MM-DD","Published plot-event measurement date; ordering context, not the event identity."),
+    c("opportunity_source_uid","plot_opportunities_all","character","published uid","Deterministically selected source row retained only to carry nominal fields when a plot-event has multiple source records; a conflict is always held."),
+    c("opportunity_source_record_count","plot_opportunities_all","integer","records","Number of published vst_perplotperyear source rows sharing the plotID + eventID key."),
+    c("opportunity_key_conflict","plot_opportunities_all","logical","TRUE/FALSE","TRUE when multiple published opportunity rows share one plot-event key. Both physical channels are held rather than selecting a denominator as truth."),
+    c("opportunity_source_uids","plot_opportunities_all","character","semicolon-separated published uids","Complete uid inventory for source rows sharing this plot-event key."),
     c("year","plot_opportunities_all","integer","calendar year","Calendar year of the plot-event opportunity."),
     c("eventType","plot_opportunities_all","character","published event type","Published NEON event classification retained for protocol review."),
     c("samplingImpractical","plot_opportunities_all","character","ok / protocol reason","Published opportunity field. Values other than protocol-supported ok can cause a held state."),
@@ -872,6 +893,8 @@ veg_codebook <- function() {
     c("shrub_records","plot_opportunities_all","integer records","≥0","Apparent-individual rows matched to this plot event in the shrub/sapling basal channel."),
     c("tree_invalid_metric_records","plot_opportunities_all","integer records","≥0","Eligible live tree-channel rows whose DBH is missing, non-finite, non-positive, or below 10 cm. Any such row holds the event unless an earlier protocol or presence-conflict state takes precedence."),
     c("shrub_invalid_metric_records","plot_opportunities_all","integer records","≥0","Eligible live shrub/sapling-channel rows whose basal stem diameter is missing, non-finite, or non-positive. Any such row holds the event unless an earlier protocol or presence-conflict state takes precedence."),
+    c("tree_identity_conflict_keys","plot_opportunities_all","integer protocol locators","≥0","Count of non-unique plotID + eventID + individualID + tempStemID locators involving the tree-DBH channel. Any positive count holds that channel event."),
+    c("shrub_identity_conflict_keys","plot_opportunities_all","integer protocol locators","≥0","Count of non-unique plotID + eventID + individualID + tempStemID locators involving the shrub/sapling basal channel. Any positive count holds that channel event."),
     c("event_key","plot_opportunities_all","character","plotID::eventID","Deterministic display form of the opportunity key; the source fields remain authoritative."))
   out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
   names(out) <- c("column", "table", "type", "allowed_values", "definition")
