@@ -16,6 +16,50 @@ VST_EXPECTED_SITES <- c(
   if (is.null(left) || !length(left)) right else left
 }
 
+# Materialize a fetched table as portable base-R vectors before serializing it.
+# neonUtilities can return Arrow ALTREP character columns; saving those objects
+# directly makes the raw RDS family depend on Arrow being loaded when it is read.
+# Subsetting every column forces the same plain-vector conversion used by the
+# repository's proven one-time ALTREP repair without changing values or classes
+# that the builder relies on.
+vst_plain_vector <- function(value) {
+  if (inherits(value, "Date")) {
+    return(structure(as.numeric(value[seq_along(value)]), class = "Date"))
+  }
+  if (inherits(value, "POSIXct")) {
+    return(structure(
+      as.numeric(value[seq_along(value)]),
+      class = class(value), tzone = attr(value, "tzone")
+    ))
+  }
+  if (is.factor(value)) {
+    return(factor(
+      as.character(value[seq_along(value)]),
+      levels = levels(value), ordered = is.ordered(value)
+    ))
+  }
+  value[seq_along(value)]
+}
+
+vst_portable_table <- function(table, label = "fetched table") {
+  if (!is.data.frame(table)) {
+    stop(label, " must be a data frame", call. = FALSE)
+  }
+  expected_rows <- nrow(table)
+  expected_names <- names(table)
+  portable <- as.data.frame(table, stringsAsFactors = FALSE, optional = TRUE)
+  for (name in names(portable)) {
+    portable[[name]] <- vst_plain_vector(portable[[name]])
+  }
+  lengths <- vapply(portable, length, integer(1))
+  if (!identical(names(portable), expected_names) ||
+      any(lengths != expected_rows)) {
+    stop(label, " did not materialize to a rectangular portable table",
+         call. = FALSE)
+  }
+  portable
+}
+
 vst_site_codes <- function(directory, suffix = ".rds") {
   if (!dir.exists(directory)) return(character(0))
   escaped <- gsub("[.]", "\\\\.", suffix)

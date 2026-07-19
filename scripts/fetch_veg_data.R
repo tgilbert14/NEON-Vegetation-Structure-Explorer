@@ -122,7 +122,10 @@ fetch_site <- function(site) {
     ))
     return(invisible(FALSE))
   }
-  saveRDS(result[required_tables], file.path(OUT_DIR, paste0(site, "_raw.rds")))
+  portable <- stats::setNames(lapply(required_tables, function(table) {
+    vst_portable_table(result[[table]], paste(site, table))
+  }), required_tables)
+  saveRDS(portable, file.path(OUT_DIR, paste0(site, "_raw.rds")), compress = "xz")
   cat(sprintf("%s: mapping=%d apparent=%d plots=%d\n", site,
               nrow(result$vst_mappingandtagging),
               nrow(result$vst_apparentindividual),
