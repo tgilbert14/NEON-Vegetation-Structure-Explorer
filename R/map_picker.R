@@ -65,7 +65,7 @@ mapPickerServer <- function(id, site_table, radius_metric, color_fn, label_fn, p
           weight = 1.4, opacity = 1, fillColor = color_fn(st), fillOpacity = 0.85,
           label = labs, popup = pops, popupOptions = pop_opts,
           labelOptions = leaflet::labelOptions(direction = "auto", textsize = "13px",
-            style = list("font-family" = "Rubik, sans-serif", "box-shadow" = "0 3px 12px rgba(0,0,0,.18)")),
+            style = list("font-family" = "Aptos, Segoe UI, system-ui, sans-serif", "box-shadow" = "0 3px 12px rgba(0,0,0,.18)")),
           options = leaflet::markerOptions(riseOnHover = TRUE)) %>%
         # Self-fix sizing: the splash leaflet binds before its container has a width
         # (the map has no intrinsic width, so the container can resolve to 0 until a

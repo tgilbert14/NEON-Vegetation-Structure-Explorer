@@ -1,144 +1,98 @@
-# The NEONize Playbook
+# The NEONize playbook
 
-**How to build (or remake) a NEON data-product app to the Small Mammal Tracker quality bar.**
+This app-local playbook records the current quality and release pattern for a
+NEON Explorer. The Driver repository's `docs/neonize-playbook.md` is the suite
+catalog; this file adds Vegetation Structure's product-specific rules.
 
-"NEONize a product" = take any NEON data product and ship an R/Shiny app that is the
-small-mammal flagship's equal in **flow, UI, statistics, creativity, QC, and honesty** —
-but with insights *native to that product*, not a reskin. The flagship is the
-**NEON Small Mammal Tracker** (`App-NEON-Small-Mammal-Tracker/`, DP1.10072.001); the
-recruiting-analytics ancestor is the **Big 12 Girth Index**
-(`arizona-basketball-talent/`, see `docs/girth-index-patterns.md`).
+## Quality bar
 
-This doc is the contract. It has three layers:
-1. **The quality bar** — the dimensions every NEONized app must hit.
-2. **The reusable full stack** — what ports wholesale (design system, data bundling, shared helpers, the pin-card system, report PDF).
-3. **The NEONize procedure** — the agent-driven research → design → build → adversarially-verify → ship loop, run fresh per product.
-
----
-
-## 1. The quality bar (the six dimensions)
-
-Every NEONized app is judged on the same axes the flagship nails:
-
-| Dimension | What "flagship quality" means |
+| Dimension | Required result |
 |---|---|
-| **Flow** | A splash/site-picker → instant demo-on-startup → an Overview that leads with the answer → progressive tabs. One global "selected entity" reactive every tab reads. No dead ends; every empty state offers the next action. |
-| **UI** | DDL light "Girth Index" house style: warm paper bg, white cards w/ 3px colored top borders, Rubik, the navy/cardinal/gold triad. bslib `page_sidebar`. `info_pop()` ⓘ on every card. Mobile-first. Dark-mode via one toggle that every chart honors. |
-| **Statistics** | Defensible, cited methods (Hill/Chao1/rarefaction/Schnabel/etc.). Every headline number has an `insight_banner()` "answer up front". n-gates before reporting. De-pseudoreplication. The right effort/scale fixed before any comparison. |
-| **Creativity** | Playful framing with real science underneath — emoji, rarity tiers, celebratory confetti on standouts, a shareable "trading card", a signature interactive (the Size Lab pin-card scatter). Show-off, not gimmick. |
-| **QC** | The app is *useful to the people who collect the data*. Click-to-inspect flag→modal/record patterns. Honest outlier flags that are KEPT not deleted, phrased "verify, not wrong". A downloadable per-entity QC record. |
-| **Honesty** | The non-negotiable. Every claim is stated where it lives (on the chart, screenshot-safe). Caveats for what the method can't say. No false precision. "Not detected ≠ absent." Match rates published for joins. Deliberately-omitted analyses stay omitted (e.g. SMI). |
+| Flow | A brief, inviting entry; one place-selection path; progressive questions; useful empty/HOLD states. |
+| UI/UX | Mobile-first, accessible controls, vendored essential assets, coherent art and app chrome, and no startup font/network dependency. |
+| Science | One registered unit, observation key, opportunity model, estimator, support vocabulary, and point-of-use caveat for every headline value. |
+| Creativity | One product-native interaction and a Living Poster that is artistic, legible, and openly illustrative rather than simulated evidence. |
+| QC | Inspectable records and neutral review flags that preserve rather than silently delete measurements. |
+| Honesty | Zeros, missing values, held states, incompatible channels, uncertainty, and source vintage remain distinct everywhere. |
 
-If a feature can't be done honestly on the product's data, it doesn't ship — it gets a caveat or a "why not" note instead.
+Product-native design comes first. Reuse suite interaction and accessibility
+patterns, but never transplant an analysis merely because another app has it.
 
----
+## Vegetation Structure contract
 
-## 2. The reusable full stack (ports wholesale)
+- Product: NEON `DP1.10098.001`.
+- Plant identity: `plotID × individualID`.
+- Sampling event: `plotID × eventID`.
+- Stem row: `eventID × individualID × tempStemID`.
+- Physical channels are disjoint:
+  - `tree_dbh`: tree bole `stemDiameter` at breast height;
+  - `shrub_sapling_basal`: shrub/sapling `basalStemDiameter` at the stem base.
+- A plot-event opportunity and its finite positive channel-compatible sampled
+  area must exist before any per-hectare value is eligible.
+- `sampled_absence` is a supported zero. Every `held_*` state remains unknown
+  and carries a reason.
+- Standing structure is a slow sampled-plot state, not annual productivity,
+  biomass, carbon, wall-to-wall inventory, or a causal driver response.
 
-A NEONized app is a **lean independent sibling directory** (copy-with-attribution, like the
-mammal/beetle apps — NOT a shared package; independent deploys must stay self-contained). Copy
-these from the flagship and adapt the data layer:
+The exact formulas, thresholds, support states, and release gates live in
+`SCIENCE-CONTRACT.md`; they must not be inferred from the interface.
 
-### 2a. Design system & chrome — copy verbatim
-- `global.R`: the `DDL` token list (navy `#0C234B`, navy2 `#16386e`, cardinal `#AB0520`, gold `#FFD200`, gold2 `#c9a300`, sky, green, ink, muted, bg, paper, line); `app_theme` (bslib bs5 + Rubik); `asset_url()` (mtime cache-bust); `spin()`, `info_pop()`, `insight_banner(icon, ..., tone)`, `glow_badge()`.
-- `ui.R`: `page_sidebar`, the `<head>` library block (Rubik, sweetalert2, canvas-confetti, driver.js, **html-to-image@1.11.11**, styles.css, app.js), the splash/national-site-picker (STATIC `leafletOutput`, never inside a `renderUI` — the Connect Cloud re-bind race), the loading overlay, the DDL business footer.
-- `server.R`: `plotly_theme(p)` (theme-aware, the navy+gold hoverlabel, `displayModeBar=FALSE`), `note_plot()` empty-state, `ctx_anno()` (BUT see gotcha #5), the `is_dark()` reactive.
-- `www/styles.css` `:root` tokens + dark-theme block; `www/app.js` (count-up engine, confetti, loading overlay, the custom-message handlers).
+## Build and release pattern
 
-### 2b. Data bundling — copy the pattern, swap the product
-- `scripts/refresh_data.R`: per-site `loadByProduct` → trim to a `keep` column vector → xz-compress → `data/sites/<SITE>.rds`. Build with **R-4.1.1** (neonUtilities; R-4.5.2 crashes on `loadByProduct`). Token in gitignored `.neon_token` (env `NEON_TOKEN`).
-- `read_bundle()` (defensive — NULL on missing/corrupt, never crash boot), `load_site_bundle()`, `data/site_index.rds` (one row/site for the picker), the manifest→republish discipline (Connect Cloud serves the *published* snapshot — rebuilt bundles aren't live until `writeManifest()` + commit + republish). See `docs/data-bundling-pattern.md`.
-- A committed `data-sample/` demo so the app runs bundle-only with no network (demo-on-startup).
+1. Read the source, science, build/test, Driver, and suite handoffs before
+   changing analysis or release bytes.
+2. Select an explicit official NEON release. Fetch every registered site into
+   empty staging and preserve raw checksums and the release DOI.
+3. Build two isolated candidates under pinned R 4.5.2, the dated Jammy package
+   repository, and verified one-thread Haswell OpenBLAS settings.
+4. Fail hard on any missing site, table, key, opportunity, denominator, source
+   receipt, validator, or exact-byte comparison.
+5. Keep the public app bundle-only (`VST_LIVE=0`). Missing or incompatible bytes
+   produce a visible HOLD; there is no live-data fallback at runtime.
+6. Build the first candidate from an exact same-repository PR head by having the
+   repository owner apply `build-vegetation-candidate`.
+7. Review the exact artifact
+   `vegetation-release-candidate-<head_sha>-<run_id>`, verify its checksum
+   ledger, and promote the complete family onto that same PR.
+8. Merge only after exact-head CI, source/science review, exports, cover, and
+   browser gates pass. Then verify the exact deployed Connect and Pages commits.
 
-### 2c. Shared analysis helpers — port the defensible ones
-From `R/helpers.R`: `species_level_only()` (drop genus-only/morphospecies before any richness), `make_species_pal()` (one color per species across all charts), Hill numbers / `species_accum()` (rarefaction + Chao1 w/ CI), `mode_chr()`, `safe_*()` NA-safe reducers, the n-gate idioms. The diversity family ports to almost any taxon product.
+Scheduled and manual refreshes upload read-only diagnostic artifacts. They do
+not create branches, open PRs, publish to `main`, or alter a source receipt.
+`skip_download=true` is only for an already-promoted v2 family.
 
-### 2d. The Size Lab pin-card system — the signature interactive
-`www/pincards.js` + the plotly `customdata` pattern (see `size-lab-feature` memory). Tap a dot →
-pin a draggable/resizable card with a gold leader line; download the chart with pins baked in
-(html-to-image); a chip on the card opens a downloadable per-entity QC record. **It is plotly,
-not ggiraph.** Reusable for any "position entities in a 2-D space, pick one, inspect it" view.
-Carry the hard-won gotchas (§4).
+## App and cover process
 
-### 2e. Report PDF — `R/report_pdf.R`
-Base `grid`/`grDevices` `cairo_pdf` (no LaTeX/Chrome), streamed by a `downloadHandler`. Re-theme
-the page geometry from `DDL`; swap the per-product content renderers.
+1. Research the official product schema and protocol before deciding the unit
+   or interface.
+2. Lock the observation identity, sampling opportunity, zero/missing semantics,
+   physical channel, and claim boundary before building charts.
+3. Design the Living Poster as a short invitation: one field action, a compact
+   hook, one promise, and one CTA. Put method detail below the first screen.
+4. Keep generated art visibly editorial, disclose its provenance beside the
+   image, and keep all factual text in accessible HTML.
+5. Exercise every interactive surface, empty state, held state, export, and
+   breakpoint in a running app. HTTP 200 alone is not semantic health.
+6. Run an independent diff review for R correctness, science, JS, charts,
+   accessibility, field-user failure modes, and release integrity.
+7. Close with exact hashes, run URLs, deployment identities, residual risks, and
+   an explicit Driver disposition in durable repository docs.
 
-### 2f. What does NOT port (product-specific — design fresh every time)
-The **entire data model and its "unit of analysis."** For small mammals the unit is the
-*tagged individual* and its mark-recapture career — so the dossier, Hall of Fame, MNKA detection,
-age/lifespan, tag-identity QC, home-range/trap-grid, body-measurement outliers are all
-mark-recapture-specific and port to **nothing** without individuals. Before building, answer:
-**what is this product's unit, and what is its capture career analog?** (For count/cover products
-there are no individuals — the unit is the plot, the species, or the trap×bout. See the beetle
-app note in `revamp-design` memory and the plant-app research.)
+## Reusable lessons
 
----
+- Preserve observation opportunity before deriving an occurrence or zero.
+- Never pool repeated visits as independent spatial samples.
+- Scope every area-scaled metric to the population sampled over that exact area.
+- Keep physical measurement channels visible at every point of use.
+- Build headline and index values from the same canonical functions.
+- Reattach Plotly listeners after every render; anchor pinned annotations in
+  data coordinates; keep exportable charts in SVG when raster capture requires
+  it.
+- Vend essential browser dependencies and keep server startup free of remote
+  font or data downloads.
+- A content hash proves bytes, not upstream vintage. Unknown provenance stays
+  explicitly unknown until a complete source receipt exists.
 
-## 3. The NEONize procedure (run fresh per product)
-
-A repeatable loop, each phase an agent fan-out (Workflow), staying in the loop between phases.
-This is exactly how the Size Lab and the plant-diversity sibling were built.
-
-**Phase 0 — Understand the flagship + the ancestor.** Deep-read the reference apps so the port map is accurate (what's reusable vs product-specific).
-
-**Phase 1 — Research the product (the gated step — REQUIRED EVERY TIME).** A workflow fanning out:
-- A **schema agent** (WebFetch the NEON product page + neonUtilities docs): exact tables, field names, sampling design, data volume, gotchas.
-- A **domain agent** (Jornada for plants/rangeland; Fauna for wildlife; Aquatics for water): the scientifically-meaningful, *cited* product-native insights + their honest caveats + what to AVOID over-claiming.
-- A **stats agent** (Quinn): the statistically-correct computation of each metric + the pseudoreplication/scale/effort traps + the analysis-ready export shape.
-- An **architecture agent** (Tim): the port map — reuse/adapt/skip/net-new, file-by-file.
-- An **innovation agent** (Sarah): the flagship interactive + the dossier/QC-card analog + one novel-but-grounded idea, evidence-based.
-
-**Phase 2 — Design.** Synthesize the research. Lock: the unit of analysis; the tab structure; the flagship interactive; the "select an entity → profile + downloadable QC card" funnel; the data/bundling strategy (which demo site, the `keep` vector). Confirm the one genuine fork with the user if close; otherwise proceed.
-
-**Phase 3 — Build.** Scaffold the sibling directory. Reuse §2 wholesale; build the product-specific data layer (`helpers.R`), the renders (`server.R`), the tabs (`ui.R`), the interactive (`pincards.js` adaptation), the styles. Author the cohesive core yourself (tight coupling), parallelize only genuinely-independent pieces.
-
-**Phase 4 — Adversarially verify (the discipline that repeatedly pays).** A review workflow over the **git diff** with fresh eyes per lens (Wes/JS, Vera/chart, the domain+Quinn/honesty, Aaron/chaos-field-user, a pure R-correctness hunter). It WILL find real regressions you introduced — the Size Lab review caught a blocker (a dead-after-re-render scatter) the happy-path tests missed. Triage by severity, fix blocker+high+certain, run again.
-
-**Phase 5 — Verify in the running app.** `preview_start`, load the demo (the `setInputValue('demoBtn', …, {priority:'event'})` trick), exercise every new surface headlessly (real interactions, not synthetic `.click()` lies — drive plotly via `gd.emit('plotly_click', …)` with a full point object incl. `data:{}` so the binding doesn't choke), screenshot proof, fix, repeat until zero server + console errors.
-
-**Phase 6 — Ship hygiene.** Memory entry (what it is + the gotchas). Manifest→republish. A landing/og card if public.
-
----
-
-## 4. The gotcha catalog (carry into every NEONize)
-
-- **R version:** R-4.5.2 runs the app but **crashes on `neonUtilities::loadByProduct`** (access violation). Pull/bundle data with **R-4.1.1**. Launch R via **PowerShell**, not git-bash (git-bash segfaults R here). Reference neonUtilities by a *computed* package name so the rsconnect scanner doesn't pin it into the manifest (the deploy is bundle-only + lean).
-- **Never set a bslib theme font via `font_google(...)` on Connect Cloud — it is a cold-start network landmine.** `font_google()` defaults to `local = TRUE`, which **downloads the font from Google's servers and compiles it into the theme AT APP STARTUP (server-side)**. Connect Cloud idles the worker after ~6 min and **wipes the cache on recycle**, so this live fetch runs on **every** cold start against an empty cache; when Google Fonts is slow/unreachable the Sass compile blocks/fails during boot -> black screen + "start-up error", and a manual republish only re-primes the cache until the next recycle (the classic "worked fine, spontaneously broke, republish fixes it, recurs" loop — confirmed in the Connect logs: `Downloading google font Rubik to local cache` immediately before `Stopping server...`). **Fix:** name web fonts as PLAIN CSS families via `bslib::font_collection("Rubik", "system-ui", ..., "sans-serif")` (a serif fallback stack — `"Fraunces","Georgia","Cambria","Times New Roman","serif"` — for Fraunces headings) so the theme compiles offline with ZERO network at boot, and deliver the real glyphs client-side via a non-blocking `tags$link(rel="stylesheet", ...fonts.googleapis.com... &display=swap)` in ui.R. Bit the WHOLE suite at once (SMT, Driver Cascade, Plant Diversity, Phenology, Veg Structure) because every app inherited the same `font_google` chrome — audit any new NEONize for it.
-- **plotly re-render kills event handlers:** a Shiny+plotly re-render runs `Plotly.purge`+`newPlot` on the SAME div, silently wiping `gd.on()` listeners. **Never** gate binding on a persistent expando — re-attach `plotly_click` on every render (rAF-debounced MutationObserver scan). This was the Size Lab blocker.
-- **plotly pin anchors must be DATA coords**, recomputed via `gd._fullLayout.xaxis.l2p()+_offset` on `plotly_relayout` + a `ResizeObserver` — frozen pixels drift on resize/fullscreen/rotate. Anchor from the data point, not the click event (touch has no `clientX`).
-- **`ctx_anno()`/`add_annotations` accumulates** across reactive re-renders (the binding doesn't clear it) — fold the caption into the `layout(annotations=...)` list instead, so it's replaced wholesale. (Invisible when copies overlap, but real.)
-- **Named-vector `updateSelectInput`** spams console warnings — wrap choices as `as.list(setNames(...))`. Build filter choices from the *plotted* subset so a choice can't land on an empty chart.
-- **selectize fires `change` via jQuery `.trigger()`** — a native `addEventListener('change')` never sees it. Listen on `shiny:inputchanged` (jQuery) or the widget's own event.
-- **`validate(need())` doesn't display in some widget outputs** (stale output persists) — return a real message-chart/empty-state instead.
-- **`asset_url()` bakes the cache-bust version at app start** (ui is an object, built once) — a running server serves the old `?v=` after you edit a `www/` file; **restart** to pick up JS/CSS changes in preview.
-- **html-to-image over WebGL fails** — force SVG (`scatter`, not `scattergl`/`toWebGL`) for any chart you want to export; `Plotly.Plots.resize(gd)` before `toPng` (a tab that rendered hidden can be 0-sized); strip live animation classes before capture.
-- **Never pool repeated visits as independent samples.** NEON re-surveys the same plots/quadrats yearly. Pooling years into a richness / rarefaction / Chao estimate treats one quadrat's 7 visits as 7 spatial samples — it inflates richness ~2× and the incidence-unit count several-fold, and conflates spatial with temporal turnover. Compute snapshot metrics on **one survey per unit** (a `latest_snapshot()`); reserve the multi-year table for the explicit time-series. (Caught by the plant-app review.)
-- **Cover/percentage SHARES need a structural-zero denominator** (divide by all sampled units, not only where-present) — present-only means inflate patchy categories and distort the share. And a headline metric must use **one shared function** in the bundler and the app, or the picker and the hero will show different numbers for the same thing.
-- **dplyr `summarise()` sees earlier newly-created columns** — `richness = mean(richness)` then `sd = sd(richness)` makes sd operate on the scalar mean (→ NA). Compute the spread before the reassignment.
-- **Adversarially verify the DIFF with a fresh agent** every time — it has caught real regressions on every session it was run (incl. the plant app's year-pooling blocker and the Size Lab's dead-after-re-render blocker).
-
----
-
-## 5. The flagship feature inventory (steal the best, per product)
-
-From the **Small Mammal Tracker**: the splash national picker (by-site / by-species), demo-on-startup,
-the hero stat band (clickable → ranked-breakdown modal), the species-first Overview with an
-auto-written narrative (`site_insights()` compute→rank→glue), the Population tab (MNKA+CPUE,
-detection-corrected abundance, species accumulation+Chao1, env-driver correlation overlays with the
-driver-semantic color system), the Community Pulse (sex/age, Hill profile, per-plot trends,
-body-size profile, lifespan, phenology), the **Hall of Fame** leaderboard (rarity tiers, re-sortable),
-the **Dossier** trading card (+ downloadable PNG), the **Size Lab** (pin-card scatter + QC card),
-the click-to-inspect QC modals, the report-card PDF, the two-site compare.
-
-From the **Girth Index**: highlight-one-in-a-grey-cloud, named-quadrant scatter, violin+jitter+mean
-"position DNA", before/after arrow chart, percentile-band trend, the holographic trading card, the
-reusable hover-card builder, the narrative-insight generator, the config-driven entity picker.
-
-For each new product, map these to the product's unit and KEEP the ones that stay honest;
-invent the product-native ones the research surfaces.
-
----
-
-*Living doc. The plant-diversity sibling (DP1.10058.001) is the first full NEONize built against
-this playbook; its research + design decisions are folded into §2f and §3 above.*
+The current working family remains on scientific HOLD until an official-release
+candidate completes every empirical and public gate. This document does not
+claim that those checks have run.

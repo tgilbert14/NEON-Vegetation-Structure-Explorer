@@ -274,7 +274,11 @@
   }
   var saving = false;
   function snap(node, name, beforeEl) {
-    if (!node || typeof htmlToImage === "undefined" || saving) return;
+    if (!node || saving) return;
+    if (typeof htmlToImage === "undefined") {
+      toastDone("Image export is unavailable in this build", true);
+      return;
+    }
     saving = true;
     // force the plotly chart to its current size first (a tab that rendered while
     // hidden, or a just-toggled fullscreen, can leave a 0-sized / stale SVG)
@@ -384,7 +388,7 @@
   (function registerReveal() {
     try {
       if (window.Shiny && Shiny.addCustomMessageHandler) {
-        Shiny.addCustomMessageHandler("smtRevealQc", function () { revealQcCard(); });
+        Shiny.addCustomMessageHandler("smtRevealQc", function (_msg) { revealQcCard(); });
         return;
       }
     } catch (e) { return; }

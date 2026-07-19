@@ -11,8 +11,8 @@
 # deploy lean (no wasm build; live-pull-on-cold-worker is a hang risk). The
 # deployed app is bundle-only; the optional live-fetch still works in local dev.
 #
-# Run with an R that has the app's runtime packages (R 4.3.1 here has them all):
-#   "C:\Program Files\R\R-4.3.1\bin\Rscript.exe" scripts/write_manifest.R
+# Run only in the pinned validator (R 4.5.2 + the dated Jammy repository):
+#   Rscript --vanilla scripts/write_manifest.R
 # Re-run whenever runtime dependencies change, then commit manifest.json.
 # ===========================================================================
 suppressMessages(library(rsconnect))
@@ -45,6 +45,12 @@ rsconnect::writeManifest(appDir = ".", appFiles = appFiles)
 # substitution touches only terra's Version/RemoteSha and repo URLs, leaving the
 # canonical structure and app-file checksums intact.
 local({
+  repository <- Sys.getenv(
+    "VST_RSPM",
+    unset = "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
+  )
+  if (!grepl("^https://", repository))
+    stop("VST_RSPM must be a complete HTTPS repository URL")
   mtxt <- readLines("manifest.json", warn = FALSE)
   in_terra <- FALSE
   for (i in seq_along(mtxt)) {
@@ -55,10 +61,17 @@ local({
       if (grepl('^\\s*\\},?\\s*$', mtxt[i])) in_terra <- FALSE
     }
   }
-  mtxt <- gsub("https://cloud.r-project.org", "https://packagemanager.posit.co/cran/__linux__/jammy/latest", mtxt, fixed = TRUE)
-  mtxt <- gsub("https://packagemanager.posit.co/cran/latest", "https://packagemanager.posit.co/cran/__linux__/jammy/latest", mtxt, fixed = TRUE)
+  repositories <- c(
+    "https://cloud.r-project.org",
+    "https://cran.r-project.org",
+    "https://cran.rstudio.com",
+    "https://packagemanager.posit.co/cran/latest",
+    "https://packagemanager.posit.co/cran/__linux__/jammy/latest"
+  )
+  for (old in repositories) mtxt <- gsub(old, repository, mtxt, fixed = TRUE)
   writeLines(mtxt, "manifest.json")
-  cat("Pinned terra to 1.8-50 + RSPM jammy repo (text-level; canonical format preserved).\n")
+  cat(sprintf("Pinned terra to 1.8-50 + RSPM %s (text-level; canonical format preserved).\n",
+              repository))
 })
 
 # ---- HARD GATE (CHECK-ONLY — never re-serialize the manifest) --------------

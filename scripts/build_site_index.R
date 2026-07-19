@@ -1,43 +1,48 @@
-# ===========================================================================
-# build_site_index.R — rebuild data/site_index.rds from the committed per-site
-# bundles, using the SAME definitions the app's hero uses, so the picker site
-# cards and the in-app headline numbers always agree.
-#
-# ADAPTIVE per site: forest sites count live trees >=10 cm DBH and report biggest
-# DBH; shrubland sites count live shrubs (any basal diameter) and report biggest
-# basal diameter. structure_type + size_metric are stored so the picker cards and
-# hero can label each site correctly.
-#
-# No raw NEON pull needed — derives from data/sites/<SITE>.rds. Run with any R
-# (readRDS/saveRDS + dplyr), e.g. via PowerShell:
-#   & "C:\Program Files\R\R-4.5.2\bin\Rscript.exe" scripts/build_site_index.R
-# ===========================================================================
-suppressWarnings(suppressMessages({ library(dplyr) }))
-source("R/veg_helpers.R")
+#!/usr/bin/env Rscript
 
-sites <- sub("\\.rds$", "", list.files("data/sites", pattern = "\\.rds$"))
-rows <- lapply(sites, function(s) {
-  b <- tryCatch(readRDS(file.path("data/sites", paste0(s, ".rds"))), error = function(e) NULL)
-  if (is.null(b) || is.null(b$trees) || !nrow(b$trees)) return(NULL)
-  stype <- b$meta$structure_type %||% classify_structure(tree_snapshot(b$trees))
-  spec  <- size_spec(stype)
-  snap <- tree_snapshot(b$trees)
-  one  <- one_per_tree(live_only(snap), spec)
-  woody <- woody_only(one, spec)                                   # live plants at/above threshold
-  woody_sp <- species_level_only(woody)
-  data.frame(
-    site = s,
-    structure_type = stype,
-    size_metric = if (identical(stype, "shrubland")) "basal ø" else "DBH",
-    n_trees = nrow(woody),                                         # live plants (trees or shrubs)
-    n_plots = dplyr::n_distinct(woody$plotID[!is.na(woody$plotID)]),  # sampling effort (plots w/ live woody)
-    n_species = dplyr::n_distinct(woody_sp$scientificName),        # species among them
-    tallest_m = round(smax(live_only(snap)$height), 1),
-    biggest_diam_cm = round(smax(woody_only(live_only(snap), spec)[[spec$col]]), 1),
-    lat = b$meta$lat %||% NA_real_, lng = b$meta$lng %||% NA_real_,
-    stringsAsFactors = FALSE)
+# Copy the canonical site rows embedded by bundle_veg_data.R. This script does
+# not own a second stand definition; a missing/mismatched v2 contract is fatal.
+
+suppressWarnings(suppressMessages(library(dplyr)))
+source("scripts/vegetation_inventory.R")
+
+VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+SITE_DIR <- Sys.getenv("VST_SITE_DIR", unset = "data/sites")
+SITE_INDEX_OUT <- Sys.getenv("VST_SITE_INDEX_OUT", unset = "data/site_index.rds")
+sites <- vst_assert_site_inventory(SITE_DIR)
+receipts <- list()
+
+rows <- lapply(sites, function(site) {
+  path <- file.path(SITE_DIR, paste0(site, ".rds"))
+  bundle <- readRDS(path)
+  if (is.null(bundle$contract) || !identical(bundle$contract$id, VST_CONTRACT_ID)) {
+    stop(site, " bundle lacks canonical contract ", VST_CONTRACT_ID, call. = FALSE)
+  }
+  row <- bundle$contract$index$site
+  if (!is.data.frame(row) || nrow(row) != 1L || !identical(row$site[[1L]], site) ||
+      !identical(row$contract_id[[1L]], VST_CONTRACT_ID)) {
+    stop(site, " bundle has an invalid canonical site-index payload", call. = FALSE)
+  }
+  receipts[[site]] <<- bundle$meta$source_receipt %||% NULL
+  row
 })
-idx <- dplyr::bind_rows(rows)
-saveRDS(idx, "data/site_index.rds", compress = "xz")
-cat("site_index rebuilt (adaptive forest/shrubland defs, matched to the app hero):\n")
-print(idx[, c("site","structure_type","n_trees","n_species","tallest_m","biggest_diam_cm")]); cat("DONE\n")
+
+index <- dplyr::bind_rows(rows)
+if (nrow(index) != length(VST_EXPECTED_SITES) ||
+    !identical(sort(as.character(index$site)), sort(VST_EXPECTED_SITES))) {
+  stop("site index did not account for the complete registered site family",
+       call. = FALSE)
+}
+attr(index, "contract_id") <- VST_CONTRACT_ID
+if (any(vapply(receipts, Negate(is.null), logical(1)))) {
+  if (length(receipts) != length(VST_EXPECTED_SITES) ||
+      !all(vapply(receipts, Negate(is.null), logical(1)))) {
+    stop("source receipt is present on only part of the site family", call. = FALSE)
+  }
+  attr(index, "source_receipt") <- vst_receipts_identical(receipts)
+}
+
+dir.create(dirname(SITE_INDEX_OUT), recursive = TRUE, showWarnings = FALSE)
+saveRDS(index, SITE_INDEX_OUT, compress = "xz")
+cat(sprintf("site_index copied from %d canonical %s bundles\n",
+            nrow(index), VST_CONTRACT_ID))

@@ -1,93 +1,95 @@
 # NEON Vegetation Structure Explorer
 
-An (unofficial) R/Shiny explorer for NEON's **Vegetation structure** product
-(**DP1.10098.001**) — a *NEONize* sibling of the [NEON Small Mammal Tracker][smt] and
-[NEON Plant Diversity Explorer][pde], built to the same Desert Data Labs quality bar.
+> **Tagged. Measured. Still changing.**
 
-> NEON tags individual woody plants, maps them, and **remeasures** their diameter, height,
-> and status over the years — so each has a *growth career*. The unit is the individual plant
-> (closer to the mammal app's marked individuals than to plant cover).
+An unofficial R/Shiny explorer for NEON's **Vegetation structure** product
+([DP1.10098.001](https://data.neonscience.org/data-products/DP1.10098.001)). It is a NEONize suite
+companion built around one approachable idea: field crews tag woody plants, map them, and return to
+measure what changed.
 
-Covers **all 42 NEON sites that publish veg structure, across every biome**. The app is
-**adaptive**: **forest** sites size plants by tree **DBH** (≥10 cm, over the sampled tree area);
-**desert / shrubland** sites — where shrubs are too short for a breast-height diameter — size them
-by **basal stem diameter** (what NEON records for ~96–99% of desert stems), over the shrub-sapling
-sampled area. Each site is auto-classified by basal-area dominance, and every label, metric, and
-the Size Lab axes adapt accordingly.
+[Open the Living Poster](https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/) ·
+[Open the app](https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/)
 
-## What it shows
+## Pass 4 status
 
-| Tab | Content |
+The Living Poster and app experience are being rebuilt around the `NEON-VST-DP1.10098.001-v2` contract. The
+legacy committed bundles remain **HOLD / CONTEXT ONLY** until an official RELEASE-2026 refresh passes
+the source, key, opportunity-state, parity, browser, and export gates. This repository does not certify
+a new Driver/Cascade metric.
+
+See:
+
+- [`docs/DATA-TAKEAWAYS.md`](docs/DATA-TAKEAWAYS.md) — measured audit findings and disposition;
+- [`docs/SCIENCE-CONTRACT.md`](docs/SCIENCE-CONTRACT.md) — release-blocking science contract;
+- [`docs/VEGETATION-SOURCE-RECEIPT.md`](docs/VEGETATION-SOURCE-RECEIPT.md) — source/release receipt;
+- [`docs/BUILD-TEST-HANDOFF.md`](docs/BUILD-TEST-HANDOFF.md) — exact build and verification path.
+
+## Experience
+
+| Surface | Question it answers |
 |---|---|
-| **Overview** | Composition by basal area, an auto-written "story", the stand's headline numbers. |
-| **Stand Structure** | The **size-class distribution** (forester's reverse-J for trees, basal classes for shrubs), the height profile, and per-hectare **basal area + stem density + QMD**. |
-| **Growth & Mortality** | Diameter **growth rates** between remeasurements, the fastest-growing plants, and the live / standing-dead split. |
-| **Size Lab** | The flagship: every plant as a dot in **size × height** space (DBH or basal ø), **tap-to-pin** cards, adaptive named quadrants, export-with-pins. |
-| **Champions** | The record-holders — biggest, tallest, fastest-growing, longest-tracked — a re-sortable leaderboard + podium; tap a row to open its career. |
-| **Plant Career** | The drill-down: a shareable holographic **plant card** (PNG) + a QC record (PNG) + raw per-bout data (CSV) — size/height/status, the **growth trajectory**, size-for-species percentile, and QC flags. |
-| **Map** | Plot markers sized by basal area, coloured by your chosen metric. |
-| **About** | Methods + caveats. |
+| **Place** | Who and what was measured at one NEON place? |
+| **Sampled Structure** | What size, height, measured area, and stem-density patterns occur in supported sampled plots? |
+| **Change** | Which plot + plant records have comparable remeasurements, and how did their diameter or status change? |
+| **Plant** | Where does one tagged plant sit in size × height space, and what does its preserved record show? |
+| **Search / Compare** | Where was a species recorded, and how do compatible sampled contexts differ? |
+| **Quality / Exports** | Which records need review, what was held, and can every number be traced to keys and support state? |
 
-Plus: a clickable hero band (→ ranked modals), **Compare two stands** head-to-head, a full-dataset **CSV/zip export + codebook**, and a one-page **stand report PDF**.
+The interface includes a map-first place gateway, searchable site and plant pickers, accessible loading
+and focus behavior, responsive 320 px layouts, local/offline UI dependencies, pin-and-download cards,
+CSV/codebook/QC exports, and a sampled-plot PDF brief.
 
-## Run it
+## Science contract in plain language
 
-R 4.5.x, bundle-only (no network):
+- A physical plant is `plotID + individualID`; `individualID` alone is not site-unique.
+- An apparent-individual stem row is keyed by `eventID + individualID + tempStemID`.
+- Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, and unmatched
+  opportunities are held/NA.
+- Sampled areas remain event-specific; every finite positive compatible area—including a 40 m² nested
+  area—is retained.
+- Large-tree DBH area and shrub/sapling basal-cover area are separate physical channels. They are not
+  one cross-biome ranking.
+- Small-tree DBH rows remain in the preserved download but are withheld from summaries until their
+  own nested-area DBH channel is registered and tested.
+- Density counts stems. QMD is `sqrt(sum(d²) / n_stems)`.
+- Growth requires comparable event order and measurement point. Unalignable multi-stem basal records
+  are held rather than forced into a trajectory.
+- Mortality reduces each event to any-live/all-dead, censors lost/unknown fates, and uses plot + plant
+  identity.
+- Size-class shape is descriptive; it does not prove recruitment, regeneration, or stand age.
+- Biomass and whole-site inventory claims are intentionally absent.
+
+## Data and release
+
+The v2 build targets official **RELEASE-2026**, provisional data excluded, with source DOI
+[10.48443/pypa-qf12](https://doi.org/10.48443/pypa-qf12). Per-site artifacts remain
+`data/sites/<SITE>.rds = list(trees, plots, meta)` for app compatibility:
+
+- `trees` preserves the apparent-individual key, plot + plant identity, event/date, taxonomy, growth
+  form, status, diameter/height, measurement-point, and available QC fields;
+- `plots` preserves event-specific opportunity, sampled-area, design, presence, impractical, and
+  data-collected state plus canonical derived summaries;
+- `meta` declares site, release, contract ID, source, and build provenance.
+
+Search, app, PDF, and export values must be produced by the same canonical builder before presentation
+rounding. No separate search proxy is allowed.
+
+## Run locally
+
+The app is bundle-only at runtime and makes no data-network request:
 
 ```r
 shiny::runApp(".", port = 8191)
 ```
 
-The Harvard Forest (**HARV**) demo loads instantly. **All 42 NEON veg-structure sites** are
-bundled (35 forest, 7 shrubland) — from WREF (Wind River old-growth, 60 m Douglas-firs, 146 cm
-trunks) and PUUM (Hawaiian tropical wet forest) to SRER & JORN (Sonoran/Chihuahuan desert
-shrublands), ONAQ (Great Basin sage), and CPER (shortgrass steppe) — spanning temperate &
-boreal forest, desert, grassland, alpine, and tropical biomes.
+Use the build/test handoff for the supported refresh and release commands. Do not hand-edit
+`manifest.json`, promote a partial site family, or overwrite `data/` before the candidate artifact has
+passed the full gate.
 
-## Data
+## Attribution
 
-Per-site bundles in `data/sites/<SITE>.rds` as `list(trees, plots, meta)`:
+Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science
+Foundation program operated by Battelle. NEON data are licensed CC BY 4.0. This independent explorer
+is not endorsed by NEON, Battelle, or the NSF.
 
-- **`trees`** — one row per individual × measurement bout (the growth career): `individualID,
-  plotID, year, date, scientificName, family, growthForm, plantStatus, live, stemDiameter`
-  (DBH cm @130), `basalStemDiameter, height` (m), `canopyPosition, measurementHeight, permanent`.
-- **`plots`** — per plot: `plotType, nlcdClass, lat, lng, area_trees` (the per-ha denominator).
-
-### Rebuild
-
-NEON pulls need **R-4.1.1** (neonUtilities; R-4.5.2 crashes on `loadByProduct`) + a `.neon_token`:
-
-1. Fetch: `Rscript-4.1.1 scripts/fetch_veg_data.R` (pulls **every** site NEON publishes from the
-   API, skipping ones already in `../veg-data-fetch/`)
-2. Bundle: `Rscript scripts/bundle_veg_data.R` (auto-detects every `*_raw.rds`; classifies each
-   site forest/shrubland and carries the basal-diameter + crown columns)
-3. Index: `Rscript scripts/build_site_index.R` (adaptive per-site headline numbers)
-
-## Honesty notes
-
-- **Two size paradigms, the right one per site:** forests are sized by tree DBH (≥10 cm); deserts
-  & shrublands by basal stem diameter (shrubs are too short for a breast-height measurement). The
-  app classifies each site by which growth form dominates *basal area* — so a mature forest with a
-  dense shrub understory stays a forest.
-- **Snapshot, not pooled:** stand metrics use each plant's *latest* measurement (NEON remeasures
-  most plots every ~5 years; pooling bouts would count one many times). Growth is the explicit
-  multi-bout metric, annualised between visits.
-- **No biomass:** above-ground biomass needs an allometric model whose error compounds; basal
-  area (directly measured) is the honest stand measure shown instead.
-- Diameter *decreases* between visits are common and usually real (bark sloughing, drought, a
-  changed measurement height) — kept and flagged, not deleted. Live/dead is a snapshot ratio,
-  not an annual mortality rate. Size-Lab dots need both diameter and height; diameter-only stems
-  are counted and noted, not silently dropped.
-
-## Deploy & live
-
-Hosted on **Posit Connect Cloud** (deployed from this repo via `manifest.json`), with a
-**GitHub Pages** landing page + og card + cold-start pre-warm at
-<https://tgilbert14.github.io/NEON-Vegetation-Structure-Explorer/>, and an automatic monthly
-data-refresh GitHub Action. Full steps in [`DEPLOY.md`](DEPLOY.md).
-
-Built by Desert Data Labs · desertdatalabs@gmail.com. Not affiliated with NEON, Battelle, or the
-NSF. An educational data-exploration tool. See [`docs/neonize-playbook.md`](docs/neonize-playbook.md).
-
-[smt]: ../App-NEON-Small-Mammal-Tracker
-[pde]: ../NEON-Plant-Diversity
+Built by Desert Data Labs · desertdatalabs@gmail.com
