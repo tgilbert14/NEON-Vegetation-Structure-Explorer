@@ -108,10 +108,11 @@ vst_is_species_rank <- function(rank, scientific_name) {
   accepted <- !is.na(rank) & rank %in% tolower(c(
     "species", "subspecies", "variety", "form"
   ))
+  named <- vst_nonblank(scientific_name)
   ambiguous <- grepl("\\bsp\\.?$", ifelse(is.na(scientific_name), "", scientific_name),
                      ignore.case = TRUE) |
     grepl("/", ifelse(is.na(scientific_name), "", scientific_name), fixed = TRUE)
-  accepted & !ambiguous
+  accepted & named & !ambiguous
 }
 
 vst_row_signature <- function(data) {

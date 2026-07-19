@@ -217,6 +217,8 @@ assert_true("Unresolved taxon (SHRUB)" %in% bundle$contract$index$taxa$taxon_lab
             "coarse or unidentified taxa were dropped from the canonical index")
 assert_true(!vst_is_species_rank(NA_character_, "Acer rubrum"),
             "missing taxon rank was incorrectly promoted to species-level")
+assert_true(!vst_is_species_rank("species", NA_character_),
+            "missing scientific name was incorrectly promoted to species-level")
 assert_true(!vst_is_species_rank("speciesGroup", "Acer rubrum group"),
             "a species-group identification was incorrectly counted as species-or-finer")
 assert_true(!"Invalidus metricus" %in% bundle$contract$index$taxa$taxon_label,

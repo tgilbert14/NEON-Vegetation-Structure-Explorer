@@ -146,9 +146,10 @@ species_level_only <- function(d) {
   rank <- tolower(trimws(.chr(d$taxonRank)))
   name <- if ("scientificName" %in% names(d)) .chr(d$scientificName) else rep(NA_character_, nrow(d))
   ok <- !is.na(rank) & rank %in% c("species", "subspecies", "variety", "form")
+  named <- !is.na(name) & nzchar(trimws(name))
   ambiguous <- grepl("\\bsp\\.?$", ifelse(is.na(name), "", name), ignore.case = TRUE) |
     grepl("/", ifelse(is.na(name), "", name), fixed = TRUE)
-  d[ok & !ambiguous, , drop = FALSE]
+  d[ok & named & !ambiguous, , drop = FALSE]
 }
 # CVD-safe categorical palette tuned to the cross-biome chrome (Okabe-Ito spine;
 # distinct under deutan/protan vision). First five are maximally separated; none
