@@ -2,9 +2,9 @@
 
 Release status: **PRODUCTION VERIFIED at PR #8 merge `d566b30` / Connect #59;
 official-release bytes, runtime, science states, reset, responsive,
-repeated-click, and split-log gates passed. Only docs-only publication and the
-central Driver documentation publication remain pending.** Check a box only
-with an attached exact receipt.
+repeated-click, split-log, and app-local documentation-publication gates passed.
+Only the central Driver documentation publication remains pending.** Check a
+box only with an attached exact receipt.
 
 ## Source and science
 
@@ -136,7 +136,7 @@ with an attached exact receipt.
       commands, runs, hashes, failures, and residual risk.
 - [x] Source, science, art, app-local Driver package, suite-learning, Data
       Takeaways, and Expert Review agree.
-- [ ] Docs-only closeout PR published with unchanged-runtime main CI, Pages,
+- [x] Docs-only closeout PR published with unchanged-runtime main CI, Pages,
       Connect, and public landing identities recorded.
 - [ ] Central Driver evidence register/backlog/revamp plan/playbook published as
       a separate documentation-only identity.

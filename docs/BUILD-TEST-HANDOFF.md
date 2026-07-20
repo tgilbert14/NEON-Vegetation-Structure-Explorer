@@ -773,10 +773,42 @@ Status: **PUBLISHED / PRODUCTION VERIFIED / CLEAN SPLIT-LOG PASS**.
   PR #8 changed only the Plotly event observer/static contract and the #59 main
   artifact preserved the exact promoted manifest/search bytes.
 
-**PENDING DOCS-ONLY PUBLICATION RECEIPT:** merge one docs-only closeout PR and
-verify its unchanged-runtime main CI, Pages, Connect, and public landing
-identity. Then publish the central Driver learning record as its own
-documentation-only identity.
+### PR #9 — docs-only publication receipt
+
+- Docs-only PR
+  [#9](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/9)
+  changed only `README.md` and eight app-local documentation files. Exact head
+  `68497de328b2723aa997e7016397bfd266e22337` passed PR CI
+  [29724891796](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29724891796).
+  Validator artifact `8453930434` is 92,307 bytes with digest
+  `sha256:f92b5a9fc3d7eb1e9dbb70b894bed6882eff9c94d22a5907d3ec0207225684ce`.
+- PR #9 merged as `3391e702e7be80a3f049c905782661f043be8db8`.
+  Main CI
+  [29725238531](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29725238531)
+  passed. Artifact `8454053110`,
+  `vegetation-structure-derived-3391e702e7be80a3f049c905782661f043be8db8-29725238531`,
+  is 92,307 bytes with digest
+  `sha256:71ec40bdfe63c2e2987a622c0759ad6c31bf3a749ef6c10a008a82afc1b9ef7f`.
+  Downloaded `manifest.json` and `data/search_index.rds` are byte-identical to
+  the PR #8 release at SHA-256
+  `b497f2e9f4228d772745b220da3f2ba6e9da00b8af4fec61af4272103d2e330c`
+  and `c4d145046d9486d7c7cf2c85339200ba1eaad3cf7e0de22bb2e378c7c944fc4b`.
+- Pages run
+  [29725237988](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29725237988)
+  passed. Artifact `8453952616` is 3,902,344 bytes with digest
+  `sha256:d871b82ae790998f03d8228981bcce3921be5724a97b52eabd27d72ee0948265`;
+  deployment `5518345576` succeeded.
+- Connect #60 published exact docs merge `3391e70`, R 4.5.2, and all 91
+  packages in four seconds. Its logs retain only the two benign
+  package-built-under-R-4.5.3 warnings and contain no `baBar`, `event_data`,
+  source-not-registered, `undefined`, or Shiny error.
+- Fresh public smoke proved the Pages Living Poster still had its artistic H1,
+  Connect CTA, Driver suite link, illustration disclosure, and zero overflow.
+  The Connect landing retained the artistic H1, CTA, searchable picker, splash,
+  hidden tabs, zero overflow, and no visible failure.
+
+The app-local runtime and documentation closeout is complete. Publish the
+central Driver learning record as its own documentation-only identity.
 
 Stop before the next companion app. The scientific disposition remains **HOLD /
 CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE** throughout.
