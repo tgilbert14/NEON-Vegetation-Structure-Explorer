@@ -28,6 +28,9 @@ const server = readFileSync("server.R", "utf8");
 const mapPicker = readFileSync("R/map_picker.R", "utf8");
 const styles = readFileSync("www/styles.css", "utf8");
 const vegStyles = readFileSync("www/veg.css", "utf8");
+const requireText = (source, needle, message) => {
+  if (!source.includes(needle)) throw new Error(message);
+};
 for (const forbidden of [
   /fonts\.googleapis\.com/i, /fonts\.gstatic\.com/i, /cdnjs\.cloudflare\.com/i,
   /unpkg\.com/i, /cdn\.jsdelivr\.net/i,
@@ -49,6 +52,24 @@ if (!/id\s*=\s*["']loadOverlay["']/.test(ui) ||
 if (/setTimeout\([^)]*smtLoadDone/s.test(app)) {
   throw new Error("loading overlay must not auto-dismiss before the server reports completion");
 }
+for (const token of [
+  "smtSetLoadBoundary(true)", "smtSetLoadBoundary(false)",
+  "if (smtInertState.length) return",
+  "if (!wasOpen && !smtInertState.length) return",
+  'e.key !== "Tab"', "smtCanReceiveFocus(smtLastFocus)",
+  "node !== document.body", "function smtDismissModalForLoad()",
+]) {
+  requireText(app, token, `loading modal focus boundary is missing ${token}`);
+}
+if (!/querySelectorAll\("\.app-skip-link, \.top-bar, #appMain, \.modal, \.modal-backdrop"\)/.test(app) ||
+    !/setAttribute\("inert",\s*""\)/.test(app)) {
+  throw new Error("loading dialog must make every background application region inert");
+}
+if (!/animate:\s*!reduceMotion/.test(app) ||
+    !/prefers-reduced-motion:\s*reduce/.test(app) ||
+    !/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.driver-fade \.driver-overlay,[\s\S]*?animation:\s*none\s*!important/.test(styles)) {
+  throw new Error("guided-tour motion must be disabled when reduced motion is requested");
+}
 if (/lpa-trust|real tagged plants|public measurements/i.test(ui)) {
   throw new Error("in-app Living Poster must not carry an above-fold metric/trust strip");
 }
@@ -63,10 +84,6 @@ for (const asset of [
   if (!ui.includes(asset)) throw new Error(`in-app Living Poster is missing responsive art asset ${asset}`);
 }
 
-const requireText = (source, needle, message) => {
-  if (!source.includes(needle)) throw new Error(message);
-};
-
 // Evidence and non-scientist pathways are release contracts, not optional copy.
 for (const field of [
   "n_measurement_only_contexts",
@@ -77,6 +94,12 @@ for (const field of [
   requireText(server, field, `site-wide source-gap evidence is missing ${field}`);
 }
 requireText(server, 'output$sourceGapCsv', "source-gap notice lacks its exact CSV evidence path");
+requireText(server, 'output$plotSummaryCsv', "active-channel plot summary lacks a standalone CSV evidence path");
+requireText(ui, 'downloadButton("plotSummaryCsv"', "standalone plot-summary CSV is missing from the Place tools");
+requireText(server, "plots_export(rv$snap, rv$plots, SP(), rv$meta)", "plot export frame must use the active physical channel");
+if ((server.match(/active_plots_export\(\)/g) || []).length !== 2) {
+  throw new Error("standalone and ZIP plot CSVs must consume the same active_plots_export frame");
+}
 requireText(server, "every recorded plant form", "source-gap notice must state its all-growth-form scope");
 requireText(server, "never read as zero or plant absence", "source-gap notice must reject zero/absence inference");
 if (/sidebar picker/i.test(server)) throw new Error("visible plant-picker guidance still refers to the removed sidebar");
@@ -124,11 +147,33 @@ if (!/\[data-bs-theme="dark"\]\s+\.dataTables_wrapper\s+\.dataTables_filter\s+in
 if (!/--pine:\s*#256f41/.test(styles) || !/--green:\s*#256f41/.test(styles)) {
   throw new Error("normal green text must use the AA-safe canopy token");
 }
-for (const selector of [".tc-save-btn", ".smt-pin .smt-open", ".smt-snap-btn"]) {
+for (const selector of [".tc-save-btn", ".smt-pin .smt-open", ".smt-pin-key-btn", ".smt-snap-btn"]) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!new RegExp(`${escaped}[^}]*min-height:\\s*44px`, "s").test(styles)) {
     throw new Error(`${selector} must expose a 44px touch target`);
   }
+}
+const pinCards = readFileSync("www/pincards.js", "utf8");
+for (const token of [
+  "window.smtPinViewed", 'item.name === "★ viewing"',
+  "pin.tabIndex = 0", 'document.createElement("button")', 'grip.type = "button"',
+  'grip.setAttribute("role", "slider")', 'grip.setAttribute("aria-valuenow"',
+  '"Pinned plant card for " + plantIdentity', "pin.__returnFocus", "pin.focus()",
+  'grip.addEventListener("keydown"', 'pin.setAttribute("role", "group")',
+  'pin.addEventListener("keydown"', "applyPinScale(pin",
+]) {
+  requireText(pinCards, token, `keyboard pin creation/move/resize contract is missing ${token}`);
+}
+requireText(ui, 'onclick = "smtPinViewed(\'labScatter\')"',
+  "Size Lab needs a keyboard-operable Pin viewed plant control");
+requireText(ui, 'selectizeInput("labTreeSel"', "Size Lab needs its own keyboard plant selector");
+requireText(server, "size_lab_rows(one, rv$spec)", "Size Lab selector must use the chart's exact eligible plants");
+requireText(server, "size_lab_rows(one, sp)", "Size Lab chart must share the selector eligibility helper");
+requireText(server, 'observeEvent(input$labTreeSel', "Size Lab plant selection must not navigate away");
+requireText(server, "smtDismissModalForLoad();smtLoadStart", "modal-footer loading must deactivate its focus trap first");
+if (!/\.smt-pin-picker\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*420px/s.test(styles) ||
+    !/@media\s*\(max-width:\s*400px\)[\s\S]*?\.smt-pin-picker\s*\{[^}]*width:\s*100%/s.test(styles)) {
+  throw new Error("Size Lab keyboard picker must shrink and stack at compact widths");
 }
 if (!/\.dropdown-menu\s+\.dropdown-item\s*\{[^}]*min-height:\s*44px/s.test(vegStyles) ||
     !/\.pg-actions\s+a\s*\{[^}]*min-height:\s*44px/s.test(vegStyles)) {
@@ -147,7 +192,7 @@ if (/\.leader-cats\s+input\[type=radio\]\s*\{[^}]*display:\s*none/s.test(styles)
   throw new Error("Champion radios must remain keyboard-focusable with a visible focus state");
 }
 for (const token of ["cloneNode(true)", "smt-export-card", "fixedWidth: 340"]) {
-  requireText(readFileSync("www/pincards.js", "utf8"), token,
+  requireText(pinCards, token,
     `Tree Card export lacks stable 340px source contract: ${token}`);
 }
 for (const token of ["function clampPin", "boxRect.width - pinRect.width - 4", "fitScale", "clampPin(pin, pin.offsetLeft, pin.offsetTop)"]) {

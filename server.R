@@ -44,7 +44,7 @@ server <- function(input, output, session) {
   rv <- reactiveValues(trees = NULL, snap = NULL, one = NULL, plots = NULL, meta = NULL, lb = NULL,
                        pal = NULL, label = NULL, site = NULL, tree = NULL, ctx = NULL, is_demo = FALSE,
                        stype = NULL, spec = NULL, bundle = NULL,
-                       available_channels = character())
+                       available_channels = character(), lab_keys = character())
   SP <- function() { req(rv$spec); rv$spec }     # exact v2 active physical channel
 
   # Site-wide source-gap evidence is intentionally separate from the active
@@ -114,6 +114,13 @@ server <- function(input, output, session) {
   plant_rows <- function(d, key = rv$tree) {
     if (is.null(d) || !nrow(d) || is.null(key) || !nzchar(key)) return(d[0, , drop = FALSE])
     d[plant_key_vec(d) %in% key, , drop = FALSE]
+  }
+  size_lab_rows <- function(one, sp) {
+    if (is.null(one)) return(data.frame())
+    if (!nrow(one)) return(one)
+    size <- one[[sp$col]]
+    one[is.finite(size) & size > 0 & is.finite(one$height) & one$height > 0 &
+          !is.na(one$scientificName), , drop = FALSE]
   }
   growth_key_vec <- function(d) {
     if (is.null(d) || !nrow(d)) return(character())
@@ -202,13 +209,19 @@ server <- function(input, output, session) {
     ch <- setNames(plant_key_vec(one), sprintf("%s · %s · %s · %s",
             short_tree(one$individualID), one$plotID,
             ifelse(is.na(one$scientificName), "—", one$scientificName), lab_meas))
+    lab_one <- size_lab_rows(one, rv$spec)
+    rv$lab_keys <- plant_key_vec(lab_one)
+    lab_ch <- ch[plant_key_vec(one) %in% rv$lab_keys]
     updateSelectizeInput(session, "treeSel", choices = c("Pick a plant…" = "", ch), selected = "", server = TRUE)
+    updateSelectizeInput(session, "labTreeSel", choices = c("Choose a plant..." = "", lab_ch), selected = "", server = TRUE)
     plant_controls <- c("treeSel", "pickBiggest", "pickTallest", "pickFastest", "surpriseBtn")
     if (nrow(one) > 0L) {
       lapply(plant_controls, shinyjs::enable)
     } else {
       lapply(plant_controls, shinyjs::disable)
     }
+    lab_controls <- c("labTreeSel", "pinViewedBtn")
+    if (length(rv$lab_keys)) lapply(lab_controls, shinyjs::enable) else lapply(lab_controls, shinyjs::disable)
     session$sendCustomMessage("siteCtx", list(site = rv$site %||% "site"))
     nav_select("tabs", "overview"); session$sendCustomMessage("countUp", list()); session$sendCustomMessage("loadDone", list())
     invisible(TRUE)
@@ -271,7 +284,7 @@ server <- function(input, output, session) {
   reset_to_places <- function() {
     rv$trees <- NULL; rv$snap <- NULL; rv$one <- NULL; rv$plots <- NULL; rv$meta <- NULL; rv$lb <- NULL
     rv$site <- NULL; rv$label <- NULL; rv$tree <- NULL; rv$bundle <- NULL
-    rv$available_channels <- character()
+    rv$available_channels <- character(); rv$lab_keys <- character()
     shinyjs::hide("mainTabsWrap"); shinyjs::hide("treePickerWrap"); shinyjs::show("splash")
     session$sendCustomMessage("kickMaps", list())
   }
@@ -349,7 +362,7 @@ server <- function(input, output, session) {
       footer = tagList(
         modalButton("Close"),
         if (supported) tags$button(type = "button", class = "btn btn-primary",
-            onclick = sprintf("smtLoadStart('%s \\u00b7 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});",
+            onclick = sprintf("smtDismissModalForLoad();smtLoadStart('%s \\u00b7 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});",
                               gsub("'", "\\\\'", dash(row$name[1])), code),
             HTML("Explore this site&rsquo;s data &rarr;"))),
       div(class = "site-info",
@@ -423,10 +436,25 @@ server <- function(input, output, session) {
     }
     if (!nrow(plant_rows(rv$snap, key))) return()
     rv$tree <- key
-    if (!identical(input$treeSel, key)) updateSelectizeInput(session, "treeSel", selected = key)
+    if (!identical(input$treeSel, key)) {
+      shiny::freezeReactiveValue(input, "treeSel")
+      updateSelectizeInput(session, "treeSel", selected = key)
+    }
+    lab_selected <- if (key %in% rv$lab_keys) key else ""
+    if (!identical(input$labTreeSel, lab_selected)) {
+      shiny::freezeReactiveValue(input, "labTreeSel")
+      updateSelectizeInput(session, "labTreeSel", selected = lab_selected)
+    }
     if (navigate) nav_select("tabs", "tree")
   }
-  observeEvent(input$treeSel, if (nzchar(input$treeSel %||% "")) pick_tree(input$treeSel, navigate = TRUE), ignoreInit = TRUE)
+  observeEvent(input$treeSel, {
+    key <- input$treeSel %||% ""
+    if (nzchar(key) && !identical(key, rv$tree)) pick_tree(key, navigate = TRUE)
+  }, ignoreInit = TRUE)
+  observeEvent(input$labTreeSel, {
+    key <- input$labTreeSel %||% ""
+    if (nzchar(key) && !identical(key, rv$tree)) pick_tree(key)
+  }, ignoreInit = TRUE)
   observeEvent(input$qcCardRequest, if (nzchar(input$qcCardRequest %||% "")) pick_tree(input$qcCardRequest, navigate = TRUE), ignoreInit = TRUE)
   observeEvent(input$surpriseBtn, {
     one <- rv$one
@@ -873,9 +901,8 @@ server <- function(input, output, session) {
   # ---- SIZE LAB (flagship) -----------------------------------------------
   output$labScatter <- renderPlotly({
     one <- rv$one; req(one); sp <- SP()
-    one$size <- one[[sp$col]]
-    pts <- one[is.finite(one$size) & one$size > 0 & is.finite(one$height) & one$height > 0 &
-                 !is.na(one$scientificName), , drop = FALSE]
+    pts <- size_lab_rows(one, sp)
+    pts$size <- pts[[sp$col]]
     if (!nrow(pts)) return(note_plot(sprintf("No %s with both a %s and a height to map", sp$nouns, sp$size_lab)))
     pts$short <- short_tree(pts$individualID)
     if (nrow(pts) > 1800) {
@@ -1190,6 +1217,27 @@ server <- function(input, output, session) {
       d <- tidy_trees_export(plant_rows(rv$trees, rv$tree), rv$meta); req(!is.null(d), nrow(d) > 0)
       utils::write.csv(d, file, row.names = FALSE, na = "") }, contentType = "text/csv")
 
+  active_plots_export <- reactive({
+    req(rv$snap, rv$plots, rv$meta)
+    plots_export(rv$snap, rv$plots, SP(), rv$meta)
+  })
+
+  # A direct, reviewable plot-level export for the active physical channel.
+  # The full ZIP carries the same frame as plot_summary_latest.csv; keeping this
+  # standalone path avoids making nontechnical users unpack an archive first.
+  output$plotSummaryCsv <- downloadHandler(
+    filename = function() sprintf(
+      "NEON-VegStructure_%s_%s_plot-summary_%s.csv",
+      rv$site %||% "site", SP()$channel, format(Sys.Date(), "%Y%m%d")
+    ),
+    content = function(file) {
+      plots <- active_plots_export()
+      req(!is.null(plots), nrow(plots) > 0)
+      utils::write.csv(plots, file, row.names = FALSE, na = "")
+    },
+    contentType = "text/csv"
+  )
+
   # ---- FULL-SITE DATA EXPORT (tidy CSVs + codebook, zipped) ---------------
   output$allDataZip <- downloadHandler(
     filename = function() sprintf("NEON-VegStructure_%s_data_%s.zip", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
@@ -1200,7 +1248,7 @@ server <- function(input, output, session) {
       on.exit(unlink(tmp, recursive = TRUE, force = TRUE), add = TRUE)
       site <- rv$site %||% "site"; sp <- SP()
       tl <- tidy_trees_export(rv$trees, rv$meta)
-      pl <- plots_export(rv$snap, rv$plots, sp, rv$meta)
+      pl <- active_plots_export()
       contexts <- with_export_receipt(as.data.frame(rv$plots, stringsAsFactors = FALSE), rv$meta)
       opportunity_source <- with_export_receipt(
         as.data.frame(rv$bundle$opportunity_source, stringsAsFactors = FALSE), rv$meta
