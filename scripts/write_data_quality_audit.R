@@ -675,10 +675,40 @@ vst_dqa_site_rows <- function(bundle, site) {
     date_distinct_n = !identical(stored_measurement_date_n, expected_date_n)
   )
   if (any(measurement_summary_mismatch)) {
+    mismatch_detail <- character(0)
+    for (field in c("date_min", "date_max")) {
+      if (!measurement_summary_mismatch[[field]]) next
+      stored <- if (identical(field, "date_min")) {
+        vst_dqa_date_number(plots$measurement_date_min)
+      } else {
+        vst_dqa_date_number(plots$measurement_date_max)
+      }
+      expected <- if (identical(field, "date_min")) {
+        expected_date_min
+      } else {
+        expected_date_max
+      }
+      differs <- (is.na(stored) != is.na(expected)) |
+        (!is.na(stored) & !is.na(expected) & stored != expected)
+      rows <- utils::head(which(differs), 8L)
+      if (length(rows)) {
+        mismatch_detail <- c(mismatch_detail, paste0(
+          field, "[",
+          paste0(
+            as.character(plots$plotID[rows]), "/",
+            as.character(plots$eventID[rows]), " stored=",
+            stored[rows], " expected=", expected[rows],
+            collapse = ";"
+          ),
+          "]"
+        ))
+      }
+    }
     stop(
       site, " context measurement summaries differ from preserved rows: ",
       paste(names(measurement_summary_mismatch)[measurement_summary_mismatch],
             collapse = ","),
+      if (length(mismatch_detail)) paste0("; ", paste(mismatch_detail, collapse = "; ")) else "",
       call. = FALSE
     )
   }
