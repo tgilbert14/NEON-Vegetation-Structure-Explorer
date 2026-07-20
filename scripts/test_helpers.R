@@ -72,7 +72,7 @@ export_fixture <- list(
                           dataQF = "legacyData", stringsAsFactors = FALSE),
   plot_summary_latest = data.frame(site = "HARV", plotID = "HARV_001",
                                    n_taxa = 1L, stringsAsFactors = FALSE),
-  plot_opportunities_all = data.frame(site = "HARV", plotID = "HARV_001",
+  plot_event_contexts_all = data.frame(site = "HARV", plotID = "HARV_001",
                                       eventID = "EV1", customOpportunityFlag = "ok",
                                       stringsAsFactors = FALSE),
   plot_opportunity_source = data.frame(
@@ -85,14 +85,16 @@ check(isTRUE(assert_veg_codebook(cb, export_fixture)),
       "data dictionary covers every emitted canonical and preserved source field")
 check(any(cb$column == "dataQF" & cb$table == "trees_long"),
       "preserved QF fields receive explicit dictionary rows")
-check(any(cb$column == "customOpportunityFlag" & cb$table == "plot_opportunities_all"),
+check(any(cb$column == "customOpportunityFlag" & cb$table == "plot_event_contexts_all"),
       "new opportunity fields receive explicit dictionary rows")
 check(any(cb$column == "customSourceFlag" & cb$table == "plot_opportunity_source"),
       "preserved opportunity-source fields receive explicit dictionary rows")
 
 tree_export_fixture <- data.frame(
   source_uid = "apparent-uid-1", protocol_stem_key = "fixture",
+  mapping_source_uid = "mapping-uid-1",
   protocol_key_group_n = 1L, protocol_key_conflict = FALSE,
+  opportunity_source_missing = TRUE,
   eventID = "EV1", plotID = "HARV_001", individualID = "NEON.PLA.D01.1",
   tempStemID = "1", date = as.Date("2025-01-01"), year = 2025L,
   taxonRank = "species", scientificName = "Acer rubrum", growthForm = "single bole tree",
@@ -109,13 +111,18 @@ tree_export_result <- tidy_trees_export(tree_export_fixture, list(
   source_receipt = list(raw_source_digest = paste(rep("a", 64), collapse = ""))
 ))
 required_review_fields <- c(
-  "source_record_key", "protocol_stem_key", "protocol_key_group_n",
-  "protocol_key_conflict",
+  "source_record_key", "mapping_source_record_key", "protocol_stem_key",
+  "protocol_key_group_n",
+  "protocol_key_conflict", "opportunity_source_missing",
   "recordType", "identificationQualifier", "mappingDataQF", "tagStatus",
   "dendrometerCondition", "heightQualifier", "dataQF", "measurementErrorQF"
 )
 check(all(required_review_fields %in% names(tree_export_result)),
       "trees_long preserves every registered identity and measurement review field")
+check(identical(tree_export_result$opportunity_source_missing, TRUE),
+      "trees_long preserves the measurement-row opportunity-source flag")
+check(identical(tree_export_result$mapping_source_record_key, "mapping-uid-1"),
+      "trees_long preserves the selected mapping/tagging source uid")
 
 qc_fixture <- data.frame(site = "HARV", source_digest = paste(rep("a", 64), collapse = ""),
                          contract_id = VEG_CONTRACT_ID, level = "info",

@@ -32,7 +32,7 @@ required <- c(
   "schema_version", "provenance_class", "product", "neon_release", "release_doi",
   "query_start", "query_end",
   "source_receipt_id", "raw_source_digest", "neon_utilities_version",
-  "built_at", "builder_commit"
+  "source_normalization", "built_at", "builder_commit"
 )
 missing <- required[!vapply(required, function(field) {
   value <- receipt[[field]]
@@ -46,6 +46,21 @@ raw_family_path <- file.path(RAW_DIR, "SOURCE-FAMILY-SHA256.txt")
 raw_runtime_path <- file.path(RAW_DIR, "FETCH-RUNTIME.txt")
 if (!all(file.exists(c(raw_inventory_path, raw_family_path, raw_runtime_path))))
   stop("raw checksum/runtime receipt files are incomplete", call. = FALSE)
+fetch_runtime <- vst_read_fetch_runtime(raw_runtime_path)
+expected_runtime <- list(
+  product = as.character(receipt$product),
+  officialNeonRelease = as.character(receipt$neon_release),
+  releaseDoi = as.character(receipt$release_doi),
+  queryStart = as.character(receipt$query_start),
+  queryEnd = as.character(receipt$query_end),
+  neonUtilities = as.character(receipt$neon_utilities_version),
+  sourceNormalization = as.character(receipt$source_normalization)
+)
+if (!identical(fetch_runtime, expected_runtime) ||
+    !identical(fetch_runtime$sourceNormalization, VST_SOURCE_NORMALIZATION)) {
+  stop("fetch runtime receipt differs from the embedded source receipt",
+       call. = FALSE)
+}
 raw_inventory <- readLines(raw_inventory_path, warn = FALSE)
 if (length(raw_inventory) != length(VST_EXPECTED_SITES))
   stop("raw checksum inventory must contain exactly 42 entries", call. = FALSE)
@@ -83,13 +98,34 @@ actual_audit_keys <- sort(paste(audit$site, audit$channel, sep = "\r"),
                           method = "radix")
 if (nrow(audit) != expected_audit_rows ||
     !all(c("site", "channel", "audit_schema", "contract_id",
-           "raw_source_digest") %in% names(audit)) ||
+           "raw_source_digest", "source_normalization") %in% names(audit)) ||
     anyDuplicated(actual_audit_keys) ||
     !identical(actual_audit_keys, expected_audit_keys) ||
     any(audit$audit_schema != "NEON-VST-data-quality-audit-v2") ||
     any(audit$contract_id != "NEON-VST-DP1.10098.001-v2") ||
-    any(audit$raw_source_digest != receipt$raw_source_digest)) {
+    any(audit$raw_source_digest != receipt$raw_source_digest) ||
+    any(audit$source_normalization != receipt$source_normalization)) {
   stop("deterministic data-quality audit is incomplete or has mixed provenance",
+       call. = FALSE)
+}
+site_audit <- audit[match(sort(VST_EXPECTED_SITES), audit$site), , drop = FALSE]
+strict_count <- function(value, label) {
+  if (any(!grepl("^(0|[1-9][0-9]*)$", value))) {
+    stop(label, " must contain canonical nonnegative integers", call. = FALSE)
+  }
+  as.integer(value)
+}
+measurement_only_n <- strict_count(
+  site_audit$n_measurement_only_contexts, "measurement-only context audit"
+)
+measurement_without_source_n <- strict_count(
+  site_audit$n_measurement_records_without_opportunity_source,
+  "measurement-without-source audit"
+)
+if (sum(measurement_only_n) != 49L ||
+    sum(measurement_without_source_n) != 4365L ||
+    sum(measurement_only_n > 0L) != 11L) {
+  stop("RELEASE-2026 measurement-only inventory differs from 49 contexts / 4365 records / 11 sites",
        call. = FALSE)
 }
 audit_hash <- digest::digest(AUDIT_PATH, algo = "sha256", file = TRUE)
@@ -137,17 +173,19 @@ lines <- c(
   sprintf("- Actual candidate bundle build date: `%s`.", receipt$built_at),
   sprintf("- Builder commit: `%s`.", receipt$builder_commit),
   sprintf("- `neonUtilities` fetch version: `%s`.", receipt$neon_utilities_version),
+  sprintf("- Source normalization: `%s` (portable vectors, then published-`uid` byte order).", receipt$source_normalization),
   sprintf("- Immutable release-snapshot label: `%s`.", receipt$source_receipt_id),
   sprintf("- Raw source family SHA-256: `%s`.", receipt$raw_source_digest),
   sprintf("- Bundled 42-site family SHA-256: `%s`.", bundle_family),
   sprintf("- Deterministic 42-site × two-channel data-quality audit SHA-256: `%s`.", audit_hash),
   sprintf("- Refresh workflow evidence: `%s`.", RUN_URL),
+  "- Reviewed RELEASE-2026 linkage gap: `49` measurement-only plot-event contexts containing `4,365` preserved measurement rows across `11` sites.",
   "",
   "Both family hashes use basename-ordered inventory lines in the exact form `<sha256> <basename>\\n`. The raw and bundled per-file ledgers, aggregate hashes, fetch runtime, deterministic site × channel data-quality audit, and its checksum are preserved under `data/source/`. The raw response artifact is retained with the workflow run; the ledgers remain durable in the repository.",
   "",
   "## Promotion contract",
   "",
-  "Promotion requires all 42 bundles, `data/site_index.rds`, `data/search_index.rds`, the source ledgers, science contract, user-facing claims, Driver package, suite handoff, and manifest to agree on this candidate. Bundles must preserve every published source `uid`, audit the plot-scoped event × individual × temporary-stem locator without choosing a winner, and preserve every plot-opportunity source row needed to review the denominator. Any missing site, mixed receipt, unmatched source digest, unreviewed identity or denominator condition, dropped support field, or stale empirical claim blocks promotion.",
+  "Promotion requires all 42 bundles, `data/site_index.rds`, `data/search_index.rds`, the source ledgers, science contract, user-facing claims, Driver package, suite handoff, and manifest to agree on this candidate. Bundles must preserve every published source `uid`, audit the plot-scoped event × individual × temporary-stem locator without choosing a winner, and preserve every plot-opportunity source row needed to review the denominator. Measurement-only contexts remain visible but carry no invented effort, absence, sampled area, or opportunity metadata; both analytical channels must hold them as `held_opportunity_source_missing`. Any missing site, mixed receipt, unmatched source digest, changed 49/4,365/11 linkage inventory, unreviewed identity or denominator condition, dropped support field, or stale empirical claim blocks promotion.",
   "",
   "`skip_download=true` accepts only an already-promoted v2 family and revalidates its committed inputs. It must not change this receipt, stamp a new build date, invent a NEON release, or treat a repository/manifest time as upstream vintage."
 )

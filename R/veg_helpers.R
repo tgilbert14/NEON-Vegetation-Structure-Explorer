@@ -33,13 +33,15 @@ VEG_CONTRACT <- list(
   plant_key = c("plotID", "individualID"),
   event_key = c("plotID", "eventID"),
   source_record_key = "source_uid",
+  mapping_source_record_key = "mapping_source_uid",
   protocol_stem_locator = c("plotID", "eventID", "individualID", "tempStemID"),
   opportunity_source_record_key = "source_record_key",
   supported_status = c("sampled_with_records", "sampled_absence"),
   held_status = c("held_sampling_impractical", "held_dendrometer_only",
                   "held_missing_area", "held_opportunity_unknown",
                   "held_presence_record_conflict", "held_metric_invalid",
-                  "held_identity_conflict", "held_snapshot_event_mismatch"),
+                  "held_identity_conflict", "held_opportunity_source_missing",
+                  "held_snapshot_event_mismatch"),
   zero_status = "sampled_absence"
 )
 
@@ -208,11 +210,27 @@ tree_snapshot <- function(trees, plots = NULL, spec = NULL) {
     attr(trees, "contract_id") <- VEG_CONTRACT_ID
     return(trees)
   }
-  out <- trees %>%
+  # Select the latest EVENT first, then bring every source row from that event
+  # back into the snapshot. Filtering source rows directly by their measurement
+  # date drops legitimate stems when one multi-stem field event spans more than
+  # one day. The event is the analytical unit; its rows are atomic.
+  event_rows <- trees %>%
+    dplyr::group_by(.data$.plant_key, .data$eventID) %>%
+    dplyr::summarise(
+      .event_date = max(.data$.event_date, na.rm = TRUE),
+      .event_sort = .first_known(.data$.event_sort),
+      .groups = "drop"
+    )
+  event_rows$.event_sort[is.na(event_rows$.event_sort)] <- ""
+  selected <- event_rows %>%
     dplyr::group_by(.data$.plant_key) %>%
     dplyr::filter(.data$.event_date == max(.data$.event_date, na.rm = TRUE)) %>%
     dplyr::filter(.data$.event_sort == max(.data$.event_sort, na.rm = TRUE)) %>%
+    dplyr::slice_tail(n = 1) %>%
     dplyr::ungroup()
+  selected_key <- paste(selected$.plant_key, .chr(selected$eventID), sep = "\r")
+  tree_key <- paste(trees$.plant_key, .chr(trees$eventID), sep = "\r")
+  out <- trees[tree_key %in% selected_key, , drop = FALSE]
   out$.plant_key <- NULL; out$.event_date <- NULL; out$.event_sort <- NULL
   attr(out, "contract_id") <- VEG_CONTRACT_ID
   out
@@ -531,31 +549,45 @@ tree_growth <- function(trees, spec = SIZE_FOREST, plots = NULL) {
 # one plant's full preserved measurement history (shown as records on the card)
 tree_history <- function(trees, id, plotID = NULL) {
   if (is.null(trees) || is.null(id)) return(NULL)
-  h <- trees[trees$individualID == id & !is.na(trees$date), , drop = FALSE]
+  h <- trees[!is.na(trees$individualID) & trees$individualID == id, , drop = FALSE]
   if (!is.null(plotID)) h <- h[h$plotID == plotID, , drop = FALSE]
   if (!nrow(h)) return(NULL)
   if (length(unique(stats::na.omit(h$plotID))) > 1) return(NULL)
   h <- .ensure_event_columns(h)
   keep <- intersect(c("plotID", "eventID", "individualID", "tempStemID", "date", "year", "scientificName",
                       "stemDiameter", "basalStemDiameter", "height", "plantStatus", "live", "permanent", "growthForm", "canopyPosition",
-                      "measurementHeight", "basalMeasurementHeight", "changedMeasurementLocation"), names(h))
+                      "measurementHeight", "basalMeasurementHeight", "changedMeasurementLocation",
+                      "opportunity_source_missing"), names(h))
   h[order(.date_num(h$date), .chr(h$eventID), .chr(h$tempStemID)), keep, drop = FALSE]
 }
 
 # One plant's event-aware diameter trajectory. Full-plot multi-bole tree events
 # use equivalent diameter sqrt(sum(d^2)). Multi-stem basal trajectories are
 # withheld because shrub/sapling tempStemID cannot be aligned across years.
-tree_trajectory <- function(trees, id, col) {
+tree_trajectory <- function(trees, id, col, plots = NULL) {
   if (is.null(trees) || is.null(id) || is.null(col)) return(NULL)
-  h <- trees[trees$individualID == id & !is.na(trees$date), , drop = FALSE]
+  h <- trees[!is.na(trees$individualID) & trees$individualID == id &
+               !is.na(trees$date), , drop = FALSE]
   if (!nrow(h) || !(col %in% names(h))) return(NULL)
   if (length(unique(stats::na.omit(h$plotID))) > 1) return(NULL)
   h <- .ensure_event_columns(h)
   spec <- if (identical(col, "basalStemDiameter")) SIZE_SHRUB else SIZE_FOREST
+  if (!is.null(plots)) {
+    h <- .supported_history(h, plots, spec)
+    if (is.null(h) || !nrow(h)) return(NULL)
+  }
   h$.d <- h[[col]]
   live_ok <- if ("live" %in% names(h)) h$live %in% TRUE else rep(TRUE, nrow(h))
   g <- h[h$growthForm %in% spec$forms & is.finite(h$.d) & h$.d > 0 & h$.d >= spec$min & live_ok, , drop = FALSE]
   if (!nrow(g)) return(NULL)
+  # A line is itself a change claim. Apply the same point-of-measurement guard
+  # used by tree_growth(), not merely its numeric rate filter, so the chart and
+  # evidence chips cannot imply like-for-like change after the field point moved.
+  if (!is.null(plots)) {
+    point_check <- tree_growth(h, spec, plots)
+    if (!is.null(point_check) && nrow(point_check) &&
+        any(point_check$mh_change %in% TRUE)) return(NULL)
+  }
   per_date <- g %>% dplyr::group_by(.data$eventID) %>%
     dplyr::summarise(dbh = sqrt(sum(.data$.d^2, na.rm = TRUE)),
                      date = as.Date(min(.date_num(.data$date)), origin = "1970-01-01"),
@@ -574,9 +606,39 @@ tree_trajectory <- function(trees, id, col) {
 # ---------------------------------------------------------------------------
 tree_qc_flags <- function(hist, spec = SIZE_FOREST, plots = NULL) {
   flags <- list(); add <- function(level, text) flags[[length(flags) + 1L]] <<- list(level = level, text = text)
+  if (!is.null(hist) && nrow(hist) &&
+      "opportunity_source_missing" %in% names(hist)) {
+    missing <- hist$opportunity_source_missing %in% TRUE
+    if (any(missing)) {
+      held_events <- if ("eventID" %in% names(hist)) {
+        dplyr::n_distinct(hist$eventID[missing])
+      } else {
+        sum(missing)
+      }
+      add("info", sprintf(
+        "%d recorded event%s %s preserved but held from comparisons because no published plot-opportunity row accompanies it.",
+        held_events, if (held_events == 1L) "" else "s",
+        if (held_events == 1L) "is" else "are"
+      ))
+    }
+  }
   h <- .supported_history(hist, plots, spec)
   if (is.null(h) || !nrow(h)) {
     add("info", "No supported measurement-bearing event is available for a longitudinal check.")
+    return(flags)
+  }
+  dated <- is.finite(.date_num(h$date))
+  if (any(!dated)) {
+    add("info", sprintf(
+      "%d supported measurement row%s lack%s a usable date and %s excluded from longitudinal ordering.",
+      sum(!dated), if (sum(!dated) == 1L) "" else "s",
+      if (sum(!dated) == 1L) "s" else "",
+      if (sum(!dated) == 1L) "is" else "are"
+    ))
+    h <- h[dated, , drop = FALSE]
+  }
+  if (!nrow(h)) {
+    add("info", "No dated supported event is available for a longitudinal check.")
     return(flags)
   }
   if (dplyr::n_distinct(h$eventID) < 2) {
@@ -696,6 +758,11 @@ col_or_na <- function(d, nm) if (nm %in% names(d)) d[[nm]] else NA
 }
 with_export_receipt <- function(data, meta = NULL) {
   if (is.null(data)) return(NULL)
+  # Receipt identity is canonical and must occur exactly once. Some preserved
+  # source/context tables already carry a site column; replace reserved receipt
+  # fields instead of emitting duplicate CSV headers with check.names = FALSE.
+  reserved <- c("site", "source_product", "source_release", "source_digest")
+  data <- data[, !(names(data) %in% reserved), drop = FALSE]
   n <- nrow(data)
   receipt <- if (!is.null(meta)) meta$source_receipt else NULL
   digest <- if (!is.null(receipt)) receipt$raw_source_digest else NULL
@@ -720,12 +787,14 @@ tidy_trees_export <- function(trees, meta = NULL) {
   out <- data.frame(
     contract_id = VEG_CONTRACT_ID,
     source_record_key = col_or_na(d, "source_uid"),
+    mapping_source_record_key = col_or_na(d, "mapping_source_uid"),
     protocol_stem_key = paste(
       .chr(d$plotID), .chr(d$eventID), .chr(d$individualID),
       .chr(d$tempStemID), sep = "::"
     ),
     protocol_key_group_n = col_or_na(d, "protocol_key_group_n"),
     protocol_key_conflict = col_or_na(d, "protocol_key_conflict"),
+    opportunity_source_missing = col_or_na(d, "opportunity_source_missing"),
     plant_key = paste(.chr(d$plotID), .chr(d$individualID), sep = "::"),
     plotID = d$plotID,
     eventID = d$eventID,
@@ -804,12 +873,14 @@ veg_codebook <- function() {
     c("source_digest","all exports","character","SHA-256","Digest of the staged raw official-release source family."),
     c("contract_id","trees_long/plot_summary_latest","character",VEG_CONTRACT_ID,"Versioned metric and export contract. Join or compare outputs only when this value agrees."),
     c("source_record_key","trees_long/plot_opportunity_source","character","published uid","Unique published source-row identity. It is preserved even when a protocol locator conflicts."),
+    c("mapping_source_record_key","trees_long","character","published uid","Published mapping/tagging source-row identity used for the selected taxonomic identity. Blank only when no mapping/tagging row matched the physical plant."),
     c("protocol_stem_key","trees_long","character","plotID::eventID::individualID::tempStemID","Plot-scoped display of the protocol stem locator. The published three-field locator should be unique, but plot scoping prevents known cross-plot tag collisions from contaminating another plot; true within-plot anomalies are preserved and flagged."),
     c("protocol_key_group_n","trees_long/plot_opportunity_source","integer","records","Number of published source records sharing the relevant protocol locator."),
     c("protocol_key_conflict","trees_long/plot_opportunity_source","logical","TRUE/FALSE","TRUE when the protocol locator is not unique; affected physical-channel summaries are held."),
+    c("opportunity_source_missing","trees_long/plot_event_contexts_all","logical","TRUE/FALSE","TRUE when this measurement event has no matching published vst_perplotperyear plotID + eventID row. It is always held from absence, area scaling, and derived summaries."),
     c("plant_key","trees_long","character","plotID::individualID","Canonical plant identity in this app. individualID alone is not unique across plots."),
-    c("plotID","trees_long/plot_summary_latest/plot_opportunities_all","character","","NEON plot identifier; part of the plant and plot-event keys."),
-    c("eventID","trees_long/plot_summary_latest/plot_opportunities_all","character","","NEON sampling event identifier. Plot-event identity is plotID x eventID; date alone is never used as the event key."),
+    c("plotID","trees_long/plot_summary_latest/plot_event_contexts_all","character","","NEON plot identifier; part of the plant and plot-event keys."),
+    c("eventID","trees_long/plot_summary_latest/plot_event_contexts_all","character","","NEON sampling event identifier. Plot-event identity is plotID x eventID; date alone is never used as the event key."),
     c("individualID","trees_long","character","","NEON plant tag. Always pair with plotID; TEMP.PLA ids are not stable remeasurement identities."),
     c("tempStemID","trees_long","character","","Stem-within-event locator. It is not stable across years for multi-bole shrubs/saplings and can be missing or conflicting in documented source anomalies."),
     c("subplotID","trees_long","character","","Nested subplot within the plot."),
@@ -853,9 +924,9 @@ veg_codebook <- function() {
     c("sampled_area_m2","plots","numeric","m^2","Positive event-specific sampled area for this channel. No temporal median or minimum-area cutoff is applied; valid 40 m2 areas are retained."),
     c("support_status","plots","character",paste(c(VEG_CONTRACT$supported_status, VEG_CONTRACT$held_status), collapse = "/"),"Sampling-opportunity disposition. sampled_absence is an observed zero; every held_* value is unsupported, not zero."),
     c("support_reason","plots","character","","Human-readable reason for the support disposition."),
-    c("n_held_events","plots","integer","events","Count of held opportunities for this plot across the preserved event history."),
+    c("n_held_events","plots","integer","events","Count of held plot-event contexts for this plot across the preserved event history."),
     c("n_later_held","plots","integer","events","Count of held attempts later than the selected latest supported census."),
-    c("held_reasons","plots","character","","Distinct reasons across held opportunities for this plot."),
+    c("held_reasons","plots","character","","Distinct reasons across held plot-event contexts for this plot."),
     c("later_held_reasons","plots","character","","Distinct reasons for held attempts later than the selected census."),
     c("supported","plots","logical","TRUE/FALSE","TRUE only for sampled_with_records or sampled_absence with a positive event-specific area."),
     c("sampled_absence","plots","logical","TRUE/FALSE","Explicit protocol-supported absence. Metric values are zero. FALSE with supported=FALSE must remain NA."),
@@ -869,34 +940,38 @@ veg_codebook <- function() {
     c("tallest_m","plots","numeric","m","Height of the tallest live plant in the plot."),
     c("biggest_diam_cm","plots","numeric","cm","Largest eligible live stem diameter in the plot: DBH for tree_dbh, basal stem diameter for shrub_sapling_basal."),
     c("largest_stem_taxon","plot_summary_latest","character","","Taxon label attached to the largest eligible live stem in the selected plot event; not an ecological-dominance estimate."),
-    c("date","plot_opportunities_all","date (ISO)","YYYY-MM-DD","Published plot-event measurement date; ordering context, not the event identity."),
-    c("opportunity_source_uid","plot_opportunities_all","character","published uid","Deterministically selected source row retained only to carry nominal fields when a plot-event has multiple source records; a conflict is always held."),
-    c("opportunity_source_record_count","plot_opportunities_all","integer","records","Number of published vst_perplotperyear source rows sharing the plotID + eventID key."),
-    c("opportunity_key_conflict","plot_opportunities_all","logical","TRUE/FALSE","TRUE when multiple published opportunity rows share one plot-event key. Both physical channels are held rather than selecting a denominator as truth."),
-    c("opportunity_source_uids","plot_opportunities_all","character","semicolon-separated published uids","Complete uid inventory for source rows sharing this plot-event key."),
-    c("year","plot_opportunities_all","integer","calendar year","Calendar year of the plot-event opportunity."),
-    c("eventType","plot_opportunities_all","character","published event type","Published NEON event classification retained for protocol review."),
-    c("samplingImpractical","plot_opportunities_all","character","ok / protocol reason","Published opportunity field. Values other than protocol-supported ok can cause a held state."),
-    c("dataCollected","plot_opportunities_all","character","allGrowthForms/dendrometerOnly/...","Published collection-scope field; dendrometer-only events are not scaled as census measurements."),
-    c("treesPresent","plot_opportunities_all","character","published presence state","Published tree-channel presence/absence evidence used with record consistency checks."),
-    c("shrubsPresent","plot_opportunities_all","character","published presence state","Published shrub/sapling-channel presence/absence evidence used with record consistency checks."),
-    c("treePresence","plot_opportunities_all","character","normalized present/absent/unknown","Normalized tree-channel presence evidence derived from the published opportunity fields."),
-    c("shrubSaplingPresence","plot_opportunities_all","character","normalized present/absent/unknown","Normalized shrub/sapling-channel presence evidence derived from the published opportunity fields."),
-    c("area_trees","plot_opportunities_all","numeric m^2",">0 or NA","Exact event-specific tree sampled area; NA is not zero."),
-    c("area_shrub","plot_opportunities_all","numeric m^2",">0 or NA","Exact event-specific shrub/sapling sampled area; NA is not zero."),
-    c("tree_support","plot_opportunities_all","character",paste(c(VEG_CONTRACT$supported_status, setdiff(VEG_CONTRACT$held_status, "held_snapshot_event_mismatch")), collapse = "/"),"Tree-channel opportunity state. Only sampled_absence is zero."),
-    c("tree_support_reason","plot_opportunities_all","character","","Reason for the tree-channel opportunity state."),
-    c("tree_supported","plot_opportunities_all","logical","TRUE/FALSE","TRUE only when tree_support is sampled_with_records or sampled_absence; positive area is separately required at point of use."),
-    c("shrub_support","plot_opportunities_all","character",paste(c(VEG_CONTRACT$supported_status, setdiff(VEG_CONTRACT$held_status, "held_snapshot_event_mismatch")), collapse = "/"),"Shrub/sapling-channel opportunity state. Only sampled_absence is zero."),
-    c("shrub_support_reason","plot_opportunities_all","character","","Reason for the shrub/sapling-channel opportunity state."),
-    c("shrub_supported","plot_opportunities_all","logical","TRUE/FALSE","TRUE only when shrub_support is sampled_with_records or sampled_absence; positive area is separately required at point of use."),
-    c("tree_records","plot_opportunities_all","integer records","≥0","Apparent-individual rows matched to this plot event in the tree channel."),
-    c("shrub_records","plot_opportunities_all","integer records","≥0","Apparent-individual rows matched to this plot event in the shrub/sapling basal channel."),
-    c("tree_invalid_metric_records","plot_opportunities_all","integer records","≥0","Eligible live tree-channel rows whose DBH is missing, non-finite, non-positive, or below 10 cm. Any such row holds the event unless an earlier protocol or presence-conflict state takes precedence."),
-    c("shrub_invalid_metric_records","plot_opportunities_all","integer records","≥0","Eligible live shrub/sapling-channel rows whose basal stem diameter is missing, non-finite, or non-positive. Any such row holds the event unless an earlier protocol or presence-conflict state takes precedence."),
-    c("tree_identity_conflict_keys","plot_opportunities_all","integer protocol locators","≥0","Count of non-unique plotID + eventID + individualID + tempStemID locators involving the tree-DBH channel. Any positive count holds that channel event."),
-    c("shrub_identity_conflict_keys","plot_opportunities_all","integer protocol locators","≥0","Count of non-unique plotID + eventID + individualID + tempStemID locators involving the shrub/sapling basal channel. Any positive count holds that channel event."),
-    c("event_key","plot_opportunities_all","character","plotID::eventID","Deterministic display form of the opportunity key; the source fields remain authoritative."))
+    c("date","plot_event_contexts_all","date (ISO)","YYYY-MM-DD","Published vst_perplotperyear date for a source-backed context; NA for a measurement-only context. It is ordering context, not event identity."),
+    c("opportunity_source_uid","plot_event_contexts_all","character","published uid","Deterministically selected source row retained only to carry nominal fields when a plot-event has multiple source records; a conflict is always held. NA for measurement-only contexts."),
+    c("opportunity_source_record_count","plot_event_contexts_all","integer","records","Number of published vst_perplotperyear source rows sharing the plotID + eventID key."),
+    c("opportunity_key_conflict","plot_event_contexts_all","logical","TRUE/FALSE","TRUE when multiple published opportunity rows share one plot-event key. Both physical channels are held rather than selecting a denominator as truth."),
+    c("opportunity_source_uids","plot_event_contexts_all","character","semicolon-separated published uids","Complete uid inventory for source rows sharing this plot-event key; NA when no published opportunity source row exists."),
+    c("measurement_record_count_all","plot_event_contexts_all","integer","records","Count of all preserved vst_apparentindividual rows sharing this plotID + eventID, including growth forms outside the two registered summary channels."),
+    c("measurement_date_min","plot_event_contexts_all","date (ISO)","YYYY-MM-DD","Earliest published apparent-individual measurement date in this context; explicitly measurement-sourced and not an opportunity date."),
+    c("measurement_date_max","plot_event_contexts_all","date (ISO)","YYYY-MM-DD","Latest published apparent-individual measurement date in this context; explicitly measurement-sourced and not an opportunity date."),
+    c("measurement_date_distinct_n","plot_event_contexts_all","integer","dates","Number of distinct nonmissing apparent-individual measurement dates in this context."),
+    c("year","plot_event_contexts_all","integer","calendar year","Calendar year of the published opportunity row; NA for a measurement-only context."),
+    c("eventType","plot_event_contexts_all","character","published event type","Published NEON event classification retained for protocol review."),
+    c("samplingImpractical","plot_event_contexts_all","character","ok / protocol reason","Published opportunity field. Values other than protocol-supported ok can cause a held state."),
+    c("dataCollected","plot_event_contexts_all","character","allGrowthForms/dendrometerOnly/...","Published collection-scope field; dendrometer-only events are not scaled as census measurements."),
+    c("treesPresent","plot_event_contexts_all","character","published presence state","Published tree-channel presence/absence evidence used with record consistency checks."),
+    c("shrubsPresent","plot_event_contexts_all","character","published presence state","Published shrub/sapling-channel presence/absence evidence used with record consistency checks."),
+    c("treePresence","plot_event_contexts_all","character","normalized present/absent/unknown","Normalized tree-channel presence evidence derived from the published opportunity fields."),
+    c("shrubSaplingPresence","plot_event_contexts_all","character","normalized present/absent/unknown","Normalized shrub/sapling-channel presence evidence derived from the published opportunity fields."),
+    c("area_trees","plot_event_contexts_all","numeric m^2",">0 or NA","Exact event-specific tree sampled area; NA is not zero."),
+    c("area_shrub","plot_event_contexts_all","numeric m^2",">0 or NA","Exact event-specific shrub/sapling sampled area; NA is not zero."),
+    c("tree_support","plot_event_contexts_all","character",paste(c(VEG_CONTRACT$supported_status, setdiff(VEG_CONTRACT$held_status, "held_snapshot_event_mismatch")), collapse = "/"),"Tree-channel plot-event context state. Only sampled_absence is zero; source-missing contexts are held."),
+    c("tree_support_reason","plot_event_contexts_all","character","","Reason for the tree-channel opportunity state."),
+    c("tree_supported","plot_event_contexts_all","logical","TRUE/FALSE","TRUE only when tree_support is sampled_with_records or sampled_absence; positive area is separately required at point of use."),
+    c("shrub_support","plot_event_contexts_all","character",paste(c(VEG_CONTRACT$supported_status, setdiff(VEG_CONTRACT$held_status, "held_snapshot_event_mismatch")), collapse = "/"),"Shrub/sapling-channel plot-event context state. Only sampled_absence is zero; source-missing contexts are held."),
+    c("shrub_support_reason","plot_event_contexts_all","character","","Reason for the shrub/sapling-channel opportunity state."),
+    c("shrub_supported","plot_event_contexts_all","logical","TRUE/FALSE","TRUE only when shrub_support is sampled_with_records or sampled_absence; positive area is separately required at point of use."),
+    c("tree_records","plot_event_contexts_all","integer records","≥0","Apparent-individual rows matched to this plot event in the tree channel."),
+    c("shrub_records","plot_event_contexts_all","integer records","≥0","Apparent-individual rows matched to this plot event in the shrub/sapling basal channel."),
+    c("tree_invalid_metric_records","plot_event_contexts_all","integer records","≥0","Eligible live tree-channel rows whose DBH is missing, non-finite, non-positive, or below 10 cm. Any such row holds the event unless an earlier protocol or presence-conflict state takes precedence."),
+    c("shrub_invalid_metric_records","plot_event_contexts_all","integer records","≥0","Eligible live shrub/sapling-channel rows whose basal stem diameter is missing, non-finite, or non-positive. Any such row holds the event unless an earlier protocol or presence-conflict state takes precedence."),
+    c("tree_identity_conflict_keys","plot_event_contexts_all","integer protocol locators","≥0","Count of non-unique plotID + eventID + individualID + tempStemID locators involving the tree-DBH channel. Any positive count holds that channel event."),
+    c("shrub_identity_conflict_keys","plot_event_contexts_all","integer protocol locators","≥0","Count of non-unique plotID + eventID + individualID + tempStemID locators involving the shrub/sapling basal channel. Any positive count holds that channel event."),
+    c("event_key","plot_event_contexts_all","character","plotID::eventID","Deterministic display form of the plot-event context key; published source fields remain authoritative where present."))
   out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
   names(out) <- c("column", "table", "type", "allowed_values", "definition")
   out$table[out$table == "plots"] <- "plot_summary_latest"

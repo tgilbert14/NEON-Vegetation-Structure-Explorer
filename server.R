@@ -47,6 +47,52 @@ server <- function(input, output, session) {
                        available_channels = character())
   SP <- function() { req(rv$spec); rv$spec }     # exact v2 active physical channel
 
+  # Site-wide source-gap evidence is intentionally separate from the active
+  # physical channel. RELEASE-2026 includes measurement rows for some plot
+  # visits that have no matching published plot-opportunity row. They remain in
+  # the preserved download, but are ineligible for every zero, denominator, and
+  # derived summary. Keep that coverage fact visible beside the summaries rather
+  # than making a user discover it one plant record at a time.
+  site_source_gap <- reactive({
+    req(rv$meta)
+    one_nonnegative_int <- function(x) {
+      value <- suppressWarnings(as.integer(x))
+      if (length(value) != 1L || is.na(value) || value < 0L) 0L else value
+    }
+    contexts <- one_nonnegative_int(rv$meta$n_measurement_only_contexts)
+    records <- one_nonnegative_int(rv$meta$n_measurement_records_without_opportunity_source)
+    if (contexts == 0L && records == 0L) return(NULL)
+    list(contexts = contexts, records = records)
+  })
+
+  source_gap_notice <- function() {
+    gap <- site_source_gap()
+    if (is.null(gap)) return(NULL)
+    channel <- SP()$channel_label
+    div(id = "siteSourceGap", class = "source-gap-note", role = "note",
+      div(class = "source-gap-icon", bs_icon("exclamation-diamond-fill")),
+      div(class = "source-gap-copy",
+        div(class = "source-gap-title", "Coverage note · all plant forms at this place"),
+        p(HTML(sprintf(
+          "NEON has <b>%s preserved measurement records</b> from <b>%s plot visit%s</b> without the matching plot sampling record. They are not used in the active <b>%s</b> summary and are never read as zero or plant absence.",
+          fmt_count(gap$records), fmt_count(gap$contexts),
+          if (gap$contexts == 1L) "" else "s", channel))),
+        p(class = "source-gap-scope",
+          "These site-wide counts cover every recorded plant form, including forms outside this measurement view. The ledger gives the exact plot and visit keys; the full data download contains every matching measurement row.")),
+      downloadButton("sourceGapCsv", tagList(bs_icon("download"), " Download gap ledger (CSV)"),
+                     class = "btn-outline-dark btn-sm source-gap-download"))
+  }
+
+  source_gap_inline <- function() {
+    gap <- site_source_gap()
+    if (is.null(gap)) return(NULL)
+    div(class = "source-gap-inline", bs_icon("exclamation-diamond-fill"),
+      HTML(sprintf(
+        " Separately, the all-plant-form coverage note holds <b>%s records from %s plot visit%s</b> that lack a matching sampling record; they are not zero or absence. ",
+        fmt_count(gap$records), fmt_count(gap$contexts), if (gap$contexts == 1L) "" else "s")),
+      tags$a(href = "#siteSourceGap", "Review the exact evidence path"))
+  }
+
   supported_channels <- function(bundle) {
     ids <- c("tree_dbh", "shrub_sapling_basal")
     summaries <- bundle$contract$channel_summary %||% list()
@@ -338,6 +384,8 @@ server <- function(input, output, session) {
     mapPickerServer("picker", site_table = site_table, radius_metric = "n_trees",
       color_fn = function(st) ifelse(st$support_status != "supported_sampled_context", "#7b827d",
         ifelse(st$primary_channel %in% "shrub_sapling_basal", DDL$bark, DDL$navy)),
+      dash_fn = function(st) ifelse(st$support_status != "supported_sampled_context", "2 4",
+        ifelse(st$primary_channel %in% "shrub_sapling_basal", "7 4", "")),
       label_fn = function(r) {
         supported <- identical(r$support_status, "supported_sampled_context")
         if (!supported) return(sprintf(
@@ -350,7 +398,12 @@ server <- function(input, output, session) {
           if (identical(r$primary_channel, "shrub_sapling_basal")) "shrubs & saplings" else "trees",
           fmt_count(r$n_species), fmt_num(r$tallest_m), fmt_num(r$biggest_diam_cm))
       },
-      popup_fn = site_popup_html)
+      popup_fn = site_popup_html,
+      legend_colors = c(DDL$navy, DDL$bark, "#7b827d"),
+      legend_labels = c("Tree DBH · solid ring", "Shrub & sapling basal · dashed ring",
+                        "Held / unknown · dotted ring"),
+      legend_dashes = c("", "7 4", "2 4"),
+      legend_title = "Measurement view")
   })
 
   # "Explore this site" (popup button OR About-modal footer button) -> load it.
@@ -417,6 +470,7 @@ server <- function(input, output, session) {
                    class = "hero-change"),
         downloadLink("reportPdf", tagList(bs_icon("file-earmark-arrow-down"), " report (PDF)"),
                      class = "hero-report")),
+      source_gap_notice(),
       div(class = "hero-grid",
         hero(if (supported) nrow(one) else "—", paste0("live ", sp$nouns), icon = if (shrub) "flower2" else "tree", tone = "pine",
              ttl = sprintf("Live tagged %s %s, one count per individual.", sp$nouns, thresh)),
@@ -598,7 +652,8 @@ server <- function(input, output, session) {
         div(class = "ci-text", HTML(paste0(
           "<b>Plot estimate held.</b> The bundled record does not contain a matched, supported ",
           if (identical(sp$type, "shrubland")) "shrub/sapling" else "tree",
-          " sampling opportunity with a valid area denominator. That is an unknown/unsupported state—not evidence of zero woody vegetation.")))))
+          " sampling opportunity with a valid area denominator. That is an unknown/unsupported state—not evidence of zero woody vegetation."))),
+        source_gap_inline()))
     }
     pre  <- if (st$n_plots < 3) "Preliminary (few plots): " else ""
     se_ba <- if (is.finite(st$ba_se)) sprintf(" ±%s SE", fmt_num(st$ba_se)) else ""
@@ -631,7 +686,7 @@ server <- function(input, output, session) {
     insight_banner("calculator", tone = "gold",
       HTML(sprintf("%sAcross <b>%d supported sampled plots</b> (%s): <span class='ci-hero'>%s m²/ha</span>%s measured cross-sectional area, <b>%s stems/ha</b>%s, stem-weighted quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± plot SE. %s This is not a wall-to-wall inventory.</span>",
         pre, st$n_plots, scope, fmt_num(st$ba_ha), se_ba, fmt_count(st$density_ha), se_d, sp$size_lab, fmt_num(st$qmd), dom_txt, support_txt)),
-      design_pop)
+      design_pop, source_gap_inline())
   })
 
   # ---- GROWTH & MORTALITY -------------------------------------------------
@@ -882,7 +937,7 @@ server <- function(input, output, session) {
     sp <- SP()
     if (is.null(rv$tree)) return(div(class = "qc-empty",
       div(class = "qc-empty-icon", sp$emoji), h4(sprintf("Tap a %s to see its card", sp$noun)),
-      p(sprintf("Tap a dot above and choose “Open %s career”, or pick one in the sidebar.", sp$noun))))
+      p(sprintf("Tap a dot above and choose “Open %s career”, or use the plant picker above.", sp$noun))))
     snap <- rv$snap; row <- one_per_tree(plant_rows(snap, rv$tree), sp); if (!nrow(row)) return(NULL)
     div(class = "lab-sel", span(class = "ls-emoji", sp$emoji),
       div(class = "ls-body",
@@ -909,14 +964,82 @@ server <- function(input, output, session) {
     d_now <- row[[dcol]]
     pct <- if (ncoh >= 5 && is.finite(d_now)) round(100 * mean(cohort <= d_now)) else NA
     tile <- function(v, l) div(class = "qc-tile", div(class = "qc-tile-v", v), div(class = "qc-tile-l", l))
+    growth_all <- tree_growth(career, SZ, rv$plots)
+    measurement_unaligned <- !is.null(growth_all) && nrow(growth_all) &&
+      any(growth_all$mh_change %in% TRUE)
     growth <- {
-      g <- tree_growth(career, SZ, rv$plots)
-      g <- if (!is.null(g) && nrow(g)) g[!g$mh_change & is.finite(g$growth_cm_yr), , drop = FALSE] else NULL
+      g <- if (!is.null(growth_all) && nrow(growth_all))
+        growth_all[!growth_all$mh_change & is.finite(growth_all$growth_cm_yr), , drop = FALSE] else NULL
       if (!is.null(g) && nrow(g)) g$growth_cm_yr[1] else NA_real_
     }
     n_visits <- if (is.null(hist) || !nrow(hist)) 0L else
       if ("eventID" %in% names(hist)) dplyr::n_distinct(hist$eventID) else dplyr::n_distinct(hist$date)
-    trajectory <- tree_trajectory(career, id, dcol)
+    trajectory <- tree_trajectory(career, id, dcol, rv$plots)
+    supported_career <- .supported_history(career, rv$plots, SZ)
+    basal_unaligned <- FALSE
+    if (identical(SZ$channel, "shrub_sapling_basal") &&
+        !is.null(supported_career) && nrow(supported_career)) {
+      supported_career <- .ensure_event_columns(supported_career)
+      basal_d <- suppressWarnings(as.numeric(supported_career[[dcol]]))
+      basal_live <- if ("live" %in% names(supported_career)) {
+        supported_career$live %in% TRUE
+      } else {
+        rep(TRUE, nrow(supported_career))
+      }
+      basal_rows <- supported_career[
+        supported_career$growthForm %in% SZ$forms & basal_live &
+          is.finite(basal_d) & basal_d > 0 & basal_d >= SZ$min,
+        , drop = FALSE]
+      basal_unaligned <- nrow(basal_rows) > 0L &&
+        any(table(as.character(basal_rows$eventID)) > 1L)
+    }
+    n_comparable_events <- if (is.null(trajectory) || !nrow(trajectory$per_date)) {
+      0L
+    } else {
+      nrow(trajectory$per_date)
+    }
+    hist_evidence <- if (is.null(hist) || !nrow(hist)) character(0) else {
+      plot_key <- paste(rv$plots$plotID, rv$plots$eventID, sep = "\r")
+      history_key <- paste(hist$plotID, hist$eventID, sep = "\r")
+      support <- as.character(rv$plots[[SZ$support]][match(history_key, plot_key)])
+      source_gap <- if ("opportunity_source_missing" %in% names(hist)) {
+        hist$opportunity_source_missing %in% TRUE
+      } else {
+        rep(FALSE, nrow(hist))
+      }
+      comparable <- !is.na(support) & support == "sampled_with_records"
+      held_label <- function(value) {
+        labels <- c(
+          held_sampling_impractical = "Not used · sampling could not be completed",
+          held_dendrometer_only = "Not used · different field method",
+          held_missing_area = "Not used · sampled area missing",
+          held_opportunity_unknown = "Not used · sampling context unclear",
+          held_presence_record_conflict = "Not used · presence records conflict",
+          held_metric_invalid = "Not used · required measurement unavailable",
+          held_identity_conflict = "Not used · record identity conflict",
+          held_opportunity_source_missing = "Not used · missing sampling record",
+          held_snapshot_event_mismatch = "Not used · visit does not match snapshot"
+        )
+        out <- unname(labels[value])
+        out[is.na(out)] <- "Not used · comparison unavailable"
+        out
+      }
+      ifelse(
+        source_gap, "Not used · missing sampling record",
+        ifelse(
+          comparable & basal_unaligned, "Measured · stems not aligned for change",
+          ifelse(
+            comparable & measurement_unaligned, "Measured · measurement point changed",
+          ifelse(comparable, "Comparable for change",
+          ifelse(
+            is.na(support) | !nzchar(support), "Not used · sampling context unclear",
+            held_label(support)
+          )
+          )
+          )
+        )
+      )
+    }
     # honest size tier: by within-species percentile if the cohort is big enough,
     # else by absolute size (thresholds differ by paradigm).
     tier_hi <- if (identical(SZ$type, "shrubland")) 10 else 60
@@ -938,10 +1061,15 @@ server <- function(input, output, session) {
       dvals <- if (dcol %in% names(hist)) hist[[dcol]] else hist$stemDiameter
       tagList(div(class = "qc-section-h", bs_icon("clock-history"), " Every measurement"),
         div(class = "qc-cap-scroll", tags$table(class = "inspect-tbl",
-          tags$thead(tags$tr(lapply(c("Date", sprintf("%s (cm)", SZ$size_lab), "Height (m)", "Status"), tags$th))),
+          tags$thead(tags$tr(lapply(c("Date", sprintf("%s (cm)", SZ$size_lab), "Height (m)", "Status", "Evidence"), tags$th))),
           tags$tbody(lapply(seq_len(nrow(hist)), function(i) tags$tr(
-            tags$td(format(hist$date[i], "%Y-%m-%d")), tags$td(fnum(dvals[i])),
-            tags$td(fnum(hist$height[i])), tags$td(ifelse(is.na(hist$plantStatus[i]),"—",hist$plantStatus[i]))))))))
+            tags$td(ifelse(is.na(hist$date[i]), "—", format(hist$date[i], "%Y-%m-%d"))), tags$td(fnum(dvals[i])),
+            tags$td(fnum(hist$height[i])), tags$td(ifelse(is.na(hist$plantStatus[i]),"—",hist$plantStatus[i])),
+            tags$td(span(
+              class = if (identical(hist_evidence[[i]], "Comparable for change"))
+                "evidence-chip comparable" else "evidence-chip held",
+              hist_evidence[[i]]
+            ))))))))
     }
     body <- div(id = "qcCardNode", class = "qc-card", `data-short` = short_tree(id),
       div(class = "qc-head", span(class = "qc-emoji", SZ$emoji),
@@ -955,7 +1083,8 @@ server <- function(input, output, session) {
         tile(ifelse(is.finite(row$height), round(row$height,1), "—"), "m tall"),
         tile(ifelse(is.finite(growth), sprintf("%+.2f", growth), "—"), "cm/yr"),
         tile(ifelse(is.na(pct), "—", paste0(pct, "%")), if (!is.na(pct)) sprintf("%%ile of %d live", ncoh) else "size %ile"),
-        tile(if (!n_visits) "—" else n_visits, "events"),
+        tile(if (!n_visits) "—" else sprintf("%d/%d", n_comparable_events, n_visits),
+             "comparable / recorded"),
         tile(ifelse(is.na(row$canopyPosition), "—", gsub(" .*","",row$canopyPosition)), "canopy")),
       div(class = "qc-section-h", bs_icon("graph-up"), sprintf(" Recorded diameter by event (%s)", SZ$size_full)),
       if (!is.null(trajectory) && nrow(trajectory$per_date) >= 2)
@@ -965,7 +1094,13 @@ server <- function(input, output, session) {
             tags$button(class = "smt-clear-btn", type = "button", onclick = "smtClearPins('treeSparkBox')", bsicons::bs_icon("eraser-fill"), " Clear pins"),
             tags$span(class = "sizelab-hint", bs_icon("hand-index-thumb"), " tap a point to pin it")),
           div(class = "smt-pinnable", id = "treeSparkBox", plotlyOutput("treeSpark", height = "170px")))
-      else p(class = "qc-cap-note", "No comparable multi-event line is drawn. The source measurements remain listed below."),
+      else p(class = "qc-cap-note",
+        if (isTRUE(basal_unaligned))
+          "This plant has multiple basal stems in at least one visit. Those measurements still describe current structure, but the stem labels cannot be matched safely through time, so no change line or rate is shown."
+        else if (isTRUE(measurement_unaligned))
+          "The field measurement point changed between visits. Every measurement remains visible below, but they are not treated as like-for-like, so no change line or rate is shown."
+        else
+          "No like-for-like multi-visit change line is available. The preserved measurements and their evidence state remain listed below."),
       div(class = "qc-section-h", bs_icon("clipboard-check"), " Data-quality check"), flags_ui,
       cap_tbl,
       p(class = "qc-cap-note", style = "margin-top:8px", bs_icon("info-circle"),
@@ -1004,7 +1139,7 @@ server <- function(input, output, session) {
     # Plot the per-visit WHOLE-PLANT girth (the same D_eq the cm/yr stat uses), not
     # raw per-stem rows — otherwise a multi-stem shrub's line wanders/falls while
     # the plant is actually growing (the +cm/yr stat and the line must agree).
-    tr <- tree_trajectory(career, id, dcol)
+    tr <- tree_trajectory(career, id, dcol, rv$plots)
     if (is.null(tr) || nrow(tr$per_date) < 2) return(note_plot("—"))
     pd <- tr$per_date; multi <- any(pd$n_stems > 1)
     pd$lab <- ifelse(pd$n_stems > 1,
@@ -1033,7 +1168,7 @@ server <- function(input, output, session) {
     sp <- SP()
     if (is.null(rv$tree)) return(div(class = "qc-empty",
       div(class = "qc-empty-icon", sp$emoji), h4(sprintf("Pick a %s to open its career", sp$noun)),
-      p("Use the Size Lab (tap a dot → “Open career”) or the sidebar picker.")))
+      p("Use the Size Lab (tap a dot → “Open career”) or the plant picker above.")))
     div(class = "plot-profile-wrap", tree_card_ui(rv$tree))
   })
   output$treeCsv <- downloadHandler(
@@ -1057,12 +1192,12 @@ server <- function(input, output, session) {
       site <- rv$site %||% "site"; sp <- SP()
       tl <- tidy_trees_export(rv$trees, rv$meta)
       pl <- plots_export(rv$snap, rv$plots, sp, rv$meta)
-      opportunities <- with_export_receipt(as.data.frame(rv$plots, stringsAsFactors = FALSE), rv$meta)
+      contexts <- with_export_receipt(as.data.frame(rv$plots, stringsAsFactors = FALSE), rv$meta)
       opportunity_source <- with_export_receipt(
         as.data.frame(rv$bundle$opportunity_source, stringsAsFactors = FALSE), rv$meta
       )
       exports <- list(trees_long = tl, plot_summary_latest = pl,
-                      plot_opportunities_all = opportunities,
+                      plot_event_contexts_all = contexts,
                       plot_opportunity_source = opportunity_source)
       cb <- complete_veg_codebook(veg_codebook(), exports)
       assert_veg_codebook(cb, exports)
@@ -1084,7 +1219,7 @@ server <- function(input, output, session) {
         "FILES",
         " trees_long.csv  · every preserved apparent-individual source row; source_record_key is the published uid, while protocol_stem_key exposes plot-scoped eventID + individualID + tempStemID conflicts.",
         " plot_summary_latest.csv · one canonical latest plot-event summary for the active channel, including support state and derived values.",
-        " plot_opportunities_all.csv · one deterministic plot-event row plus support/conflict fields; conflicting source keys are held, never treated as selected truth.",
+        " plot_event_contexts_all.csv · one deterministic row per published opportunity key plus measurement-only audit contexts; source-missing rows invent no effort, absence, date, or area and are always held.",
         " plot_opportunity_source.csv · every published vst_perplotperyear source row, including duplicate plot-event keys retained for audit.",
         " data_dictionary.csv · column definitions, types, units.",
         " qc_report.csv   · every data-quality flag; join plotID + individualID to trees_long.",
@@ -1094,13 +1229,13 @@ server <- function(input, output, session) {
         sprintf(" * Active presentation channel: %s; plants are sized by %s.", sp$channel_label, sp$size_full),
         " * Snapshot analyses use each plot + plant's latest supported event; the long table retains every event/stem row.",
         sprintf(" * Plot metrics scope to %s and are not a wall-to-wall inventory.", scope),
-        " * Sampled absence is zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-metric, identity-conflict, and unmatched opportunity states are held/NA with reasons.",
+        " * Sampled absence is zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-metric, identity-conflict, and missing-opportunity-source states are held/NA with reasons.",
         " * Tower and distributed designs remain labeled; pooled summaries are descriptive, not certified site-wide estimators.",
         if (!is.null(st)) sprintf(" * Supported sampled-plot mean: %s m2/ha (+/-%s plot SE), %s stems/ha, stem-weighted QMD %s cm, n=%d plots.",
                                   fmt_num(st$ba_ha), fmt_num(st$ba_se), fmt_count(st$density_ha), fmt_num(st$qmd), st$n_plots) else "")
       if (!is.null(tl)) utils::write.csv(tl, file.path(tmp, "trees_long.csv"), row.names = FALSE, na = "")
       if (!is.null(pl)) utils::write.csv(pl, file.path(tmp, "plot_summary_latest.csv"), row.names = FALSE, na = "")
-      utils::write.csv(opportunities, file.path(tmp, "plot_opportunities_all.csv"), row.names = FALSE, na = "")
+      utils::write.csv(contexts, file.path(tmp, "plot_event_contexts_all.csv"), row.names = FALSE, na = "")
       utils::write.csv(opportunity_source, file.path(tmp, "plot_opportunity_source.csv"), row.names = FALSE, na = "")
       utils::write.csv(cb, file.path(tmp, "data_dictionary.csv"), row.names = FALSE, na = "")
       # QC rows carry the full plant key and exact release receipt so they join
@@ -1112,6 +1247,50 @@ server <- function(input, output, session) {
       old <- setwd(tmp); on.exit(setwd(old), add = TRUE)
       utils::zip(zipfile = file, files = basename(fs), flags = "-q")
     })
+
+  # A compact, direct audit path for the site-wide notice above. This ledger is
+  # one row per measurement-only plot visit and counts every apparent-individual
+  # row at that key, regardless of growth form. The full site ZIP remains the
+  # route to the exact measurement rows themselves.
+  source_gap_ledger <- reactive({
+    req(rv$plots, rv$trees, rv$meta, rv$site)
+    contexts <- as.data.frame(rv$plots, stringsAsFactors = FALSE)
+    keep <- contexts$opportunity_source_missing %in% TRUE
+    contexts <- contexts[keep, , drop = FALSE]
+    if (!nrow(contexts)) return(data.frame())
+    context_key <- paste(as.character(contexts$plotID), as.character(contexts$eventID), sep = "\r")
+    measurement_key <- paste(as.character(rv$trees$plotID), as.character(rv$trees$eventID), sep = "\r")
+    measurement_n <- as.integer(table(measurement_key)[context_key])
+    measurement_n[is.na(measurement_n)] <- 0L
+    field <- function(name, default = NA_character_) {
+      if (name %in% names(contexts)) contexts[[name]] else rep(default, nrow(contexts))
+    }
+    ledger <- data.frame(
+      plotID = as.character(contexts$plotID),
+      eventID = as.character(contexts$eventID),
+      measurement_records_all_growth_forms = measurement_n,
+      opportunity_source_missing = TRUE,
+      sampling_effort_known = FALSE,
+      sampled_area_known = FALSE,
+      absence_inferred = FALSE,
+      tree_support = as.character(field("tree_support")),
+      tree_support_reason = as.character(field("tree_support_reason")),
+      shrub_support = as.character(field("shrub_support")),
+      shrub_support_reason = as.character(field("shrub_support_reason")),
+      stringsAsFactors = FALSE
+    )
+    ledger <- ledger[order(ledger$plotID, ledger$eventID), , drop = FALSE]
+    with_export_receipt(ledger, rv$meta)
+  })
+  output$sourceGapCsv <- downloadHandler(
+    filename = function() sprintf("NEON-VegStructure_%s_source-gap-ledger_%s.csv",
+      rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      ledger <- source_gap_ledger()
+      req(nrow(ledger) > 0L)
+      utils::write.csv(ledger, file, row.names = FALSE, na = "")
+    },
+    contentType = "text/csv")
 
   # ---- STAND REPORT PDF ---------------------------------------------------
   output$reportPdf <- downloadHandler(
@@ -1505,14 +1684,24 @@ server <- function(input, output, session) {
 
   observeEvent(input$help, {
     showModal(modalDialog(easyClose = TRUE, title = tagList(bs_icon("question-circle"), " How it works"),
-      tags$ul(
-        tags$li(HTML("Pick a <b>place</b>. Snapshot views use each plot + plant's latest supported event; the full download retains every event and stem key.")),
-        tags$li(HTML("<b>Structure</b>: sampled-plot size classes, height, measured cross-sectional area, and stem density. Tree and shrub/sapling channels stay separate.")),
-        tags$li(HTML("<b>Change</b>: like-for-like remeasurements only. Changed measurement points and unalignable multi-stem basal records are held; unknown fates are censored.")),
-        tags$li(HTML("<b>Size Lab</b>: every plant as a dot (size × height); <b>tap one</b> to pin its card, then “Open career” for its full growth history.")),
-        tags$li(HTML("<b>Search and compare</b>: unlike measurement channels are context, never one ranking; record sizes and richness vary with effort.")),
-        tags$li(HTML("<b>Download</b> the preserved records, plot-event support states, codebook, QC report, or sampled-plot PDF brief.")),
-        tags$li(HTML("Honesty rule: sampled absence is <b>zero</b>; impractical, dendrometer-only, invalid-area, invalid-required-diameter, identity-conflict, or unmatched opportunities are <b>held/NA</b>."))),
+      tags$ol(class = "help-steps",
+        tags$li(div(class = "help-step-number", "1"), div(
+          tags$b("Pick a place"),
+          p("Tap a map dot, type a place name, or search the whole network."))),
+        tags$li(div(class = "help-step-number", "2"), div(
+          tags$b("Choose a story"),
+          p("See what crews measured, how comparable measurements changed, or open one tagged plant."))),
+        tags$li(div(class = "help-step-number", "3"), div(
+          tags$b("Check the evidence"),
+          p("Every summary shows its support. Grey or unavailable means “we cannot make that comparison”—never zero plants.")))),
+      tags$details(class = "help-methods",
+        tags$summary(bs_icon("shield-check"), " How we keep comparisons fair"),
+        tags$ul(
+          tags$li("Tree diameter and shrub/sapling basal diameter stay in separate measurement views."),
+          tags$li("A current snapshot uses the latest supported visit for each sampled plot; the download keeps every original visit and stem key."),
+          tags$li("Change uses only like-for-like remeasurements. Changed measuring points and records that cannot be aligned stay out of the rate."),
+          tags$li("A confirmed sampled absence is zero. Missing effort, area, identity, or sampling records remain unavailable with a reason."),
+          tags$li("Downloads include the preserved records, support ledger, codebook, QC report, and sampled-plot PDF brief."))),
       footer = tagList(tags$button(type = "button", class = "btn btn-outline-dark btn-sm",
         onclick = "(function(){var m=document.querySelector('.modal.show button[data-bs-dismiss=modal],.modal.show .btn-close');if(m)m.click();setTimeout(vegTour,250);})()",
         bsicons::bs_icon("signpost-2"), " Take the tour"), modalButton("Got it"))))

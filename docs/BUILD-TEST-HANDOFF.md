@@ -120,8 +120,194 @@ promotion is authorized.
 - No local R executable was available. Authoritative R parsing, package restore,
   helper/science fixtures, two-build determinism, manifest generation, offline
   boot, and exact committed-byte equality must run in pinned GitHub Actions.
-- The new validation/refresh workflows are unrun at this working receipt; do not
-  call them green until run URLs and artifact digests are appended.
+- At the initial 13:54 working receipt the validation/refresh workflows were
+  unrun. The exact later attempts and their non-green outcomes are appended
+  below; none is a release receipt.
+
+### Exact PR/candidate execution update — 2026-07-19 16:29 MST
+
+- Draft PR: <https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/4>;
+  reviewed remote head at the start of this subpass:
+  `e9b8913230255ce35d7dcbc695676506aea34d9f`.
+- Exact-head ordinary validation run `29706628148` passed the synthetic
+  event-keyed science fixtures, then failed the expected committed-byte gate:
+  the still-unpromoted legacy HARV bundle does not carry v2 support fields. This
+  is not a green release receipt and did not mutate repository data.
+- Exact labeled candidate run `29706634767` fetched all 42 official
+  RELEASE-2026 sites successfully. Raw artifact `8448250381`,
+  `vegetation-raw-e9b8913230255ce35d7dcbc695676506aea34d9f-29706634767`,
+  records DOI `10.48443/pypa-qf12`, full-release selection,
+  `neonUtilities 4.0.1`, and raw family SHA-256
+  `02751f43d42898996dd0f54c916e545cf60e1cba96a9ca6df40e00a215a3623c`.
+  The build stopped at CLBJ because its first discovered measurement key lacked
+  a matching `vst_perplotperyear` row; no candidate artifact was emitted or
+  promoted.
+- Full-family comparison of that raw artifact against the preceding fetch found
+  zero semantic table differences across all 42 sites × three required tables.
+  The byte differences were API row-order noise. Source staging now materializes
+  portable vectors, validates unique nonblank published `uid`, sorts in UID byte
+  order, resets row names, and records the normalization before pinned RDS v3
+  serialization.
+- The full RELEASE-2026 join audit found 49 measurement-only `plotID × eventID`
+  keys across 11 sites, preserving 4,365 apparent-individual rows. The working
+  contract keeps every measurement row, marks records and contexts with
+  `opportunity_source_missing = TRUE`, assigns both channels
+  `held_opportunity_source_missing`, retains separately named
+  measurement-sourced count/date-range fields, and invents no opportunity UID,
+  date/year, effort, presence, design, coordinates, area, absence, or
+  denominator. Published `opportunity_source` remains source-exact.
+- Earlier failed/cancelled attempts retained for audit: candidate run
+  `29704097876` exposed apparent-individual locator collisions; manual run
+  `29706519086` was cancelled before fetch because the owner-label PR route is
+  mandatory; labeled run `29706575984` exposed the species-rank-without-name
+  fixture and was cancelled after diagnosis.
+- Local post-change checks at this receipt: `git diff --check` passed and
+  tree-sitter parsed all 23 R files with no syntax errors. No local R executable
+  exists, so the expanded science/DQA/verifier fixtures remain unclaimed until a
+  new exact labeled Actions candidate runs on the next pushed head.
+
+### UI release-gate closeout — 2026-07-19 18:19 MST
+
+**Outcome: STATIC PASS / LIVE BROWSER PENDING / SCIENCE HOLD UNCHANGED / NO
+DRIVER BYTE CHANGE.** This subpass retained the approved Living Poster art, hook,
+promise, and CTA while changing the in-app evidence, navigation, map, Plant
+Career, responsive styling, and their static browser contract. It does not
+authorize source promotion or publication.
+
+- The in-app poster no longer carries the three-item metric/trust strip above the
+  fold. Its 42-place scope now appears only after the `Pick a place` CTA in the
+  gateway, and the browser contract rejects any return of that poster strip.
+- The hero and structure summary now surface one site-wide coverage note for
+  every recorded plant form, explicitly separate those counts from the active
+  tree-DBH or shrub/sapling-basal view, and state that unmatched measurement rows
+  are neither zero nor plant absence. The note links to an exact plot-event CSV
+  ledger; the existing full-data ZIP remains the path to every preserved matching
+  measurement row.
+- Multi-stem shrub/sapling careers now agree internally: supported measurements
+  are labeled `Measured · stems not aligned for change`, the card reports `0/N`
+  comparable events, and the app explains why current structure remains useful
+  while no change line or rate is shown.
+- The 340 px Plant Career export source now shrinks safely inside a 320 px
+  viewport, the threshold-search row can wrap without overflow, normal green text
+  uses an AA-safe token, and dark-mode comparable/held evidence chips have explicit
+  high-contrast surfaces.
+- Low-risk gateway, overflow-menu, tour, download, evidence-info, pin open/close/
+  resize, and chart toolbar targets are at least 44 px. The national site map keeps
+  its visual marker sizes while adding invisible 44 px minimum hit circles, a
+  plain-language solid/dashed/dotted measurement-view key, and a clear statement
+  that held means unknown rather than zero.
+- Help now begins with a three-step non-scientist path—pick a place, choose a
+  story, check the evidence—with comparison methods behind a progressive
+  disclosure. Stale instructions that referred to a removed sidebar now point to
+  the plant picker above.
+- Changed implementation surfaces in this subpass: `server.R`, `ui.R`,
+  `R/map_picker.R`, `www/styles.css`, `www/veg.css`, and
+  `scripts/check_browser_contracts.mjs`. This handoff entry is the only
+  documentation surface intentionally added by this UI closeout.
+- `git diff --check`, `node scripts/check_cover.mjs`,
+  `node scripts/check_browser_contracts.mjs`, `node --check www/app.js`,
+  `node --check www/pincards.js`, and `node --check
+  scripts/check_browser_contracts.mjs` passed. Tree-sitter parsed all 26 current R
+  files without syntax errors.
+- No local R executable or attached browser surface was available in this
+  workspace. Runtime R fixtures and live desktop plus 390/375/361/360/320 px QA,
+  including PNG export inspection, keyboard order, dark mode, and map taps, remain
+  explicit release gates on the exact candidate bytes.
+
+### Runtime and derived-family trust hardening — 2026-07-19
+
+**Outcome: IMPLEMENTED / PINNED R EXECUTION PENDING / SCIENCE HOLD UNCHANGED / NO
+DRIVER BYTE CHANGE.** This subpass closes two pre-release review gaps without
+changing source data, candidate bytes, UI, or publication state.
+
+- The deployed `global.R` gate now independently reconstructs normalized tree and
+  shrub presence, channel record counts, invalid required-metric counts, protocol
+  identity-conflict counts, support-state precedence, exact support reasons,
+  supported flags, and event keys from preserved measurement/opportunity rows.
+  It no longer checks only the special opportunity-source-missing status.
+- `scripts/derived_parity.R` uses the deployed `R/veg_helpers.R` consumer path—not
+  the builder's embedded summary functions—to reconstruct each site's two
+  physical-channel summaries, taxon rows, deterministic presentation channel,
+  canonical site row, 84-row channel grid, and network search rows.
+  `scripts/verify_derived_parity.R` applies that gate to the exact actual 42-site
+  family after `scripts/verify_bundle.R` has independently certified support.
+- Synthetic positive and corrupted site/channel/taxon/search-summary fixtures are
+  part of `scripts/validation/test_bundle_contract.R`. A separate actual-family
+  runtime fixture accepts an untouched bundle and rejects valid-vocabulary status,
+  reason, and record-count mutations.
+- Candidate and ordinary CI run both gates. The official refresh workflow no
+  longer exposes bounded query inputs, and release/runtime verification requires
+  `FULL_RELEASE` at both receipt bounds. The fetch script retains closed-month
+  inputs only for non-promotable local diagnostics.
+- Local static closeout passed `git diff --check`, Ruby workflow parsing, shell
+  syntax for every workflow `run:` block, actionlint 1.7.10, tree-sitter parsing
+  of all 26 R files, both Node cover/browser contracts and JavaScript syntax,
+  exact workflow-wiring assertions, and the legacy 42-site source-family hash
+  guard. These checks do not make the legacy data family release-eligible.
+- No local R executable is available. The new consumer parity, runtime mutation
+  fixture, 42-site numerical comparison, and exact candidate build remain
+  unclaimed until the next pinned R 4.5.2 Actions run.
+
+### Final science-audit corrections — 2026-07-19
+
+**Outcome: IMPLEMENTED / PINNED R EXECUTION PENDING / SCIENCE HOLD UNCHANGED / NO
+DRIVER BYTE CHANGE.** A final independent audit found one RELEASE-2026 presence
+blocker and three traceability/parity gaps; the working implementation now closes
+them without promoting any candidate bytes.
+
+- Builder, deployed runtime, release verifier, and DQA independently normalize
+  exact `Y`/`Yes` to present and `N`/`No` to absent. Synthetic fixtures cover
+  sampled absence plus both conflict directions (`N` with records and `Y`
+  without records).
+- The canonical basal measurement-height field now accepts the actual published
+  `basalStemDiameterMsrmntHeight` source column, with a raw-to-canonical fixture.
+- Selected plot events are tested as atomic multi-stem units when source-row
+  dates differ or are missing; no stem may be filtered out after event selection.
+- Runtime, verifier, DQA, and consumer parity now independently reject stored
+  `live`, year, taxonomy derivations, permanence, composite keys, mapping-match
+  state, and taxonomy resolution that disagree with their preserved lower-level
+  fields. Fixtures rebuild embedded summaries after corrupting rows to prove a
+  coherent row-plus-summary mutation cannot pass.
+- Mapping/tagging UIDs are required and preserved as `mapping_source_uid`.
+  Multiple rows tied at the latest created timestamp for one physical plant fail
+  before joining, rather than receiving an arbitrary UID/row-order/taxon winner.
+- No local R executable was available. Static parsing and diff checks are local
+  prerequisites only; all synthetic fixtures and the complete actual-family
+  runtime/verifier/DQA/parity path remain mandatory on pinned R 4.5.2.
+
+### Final release and accessibility corrections — 2026-07-19
+
+**Outcome: IMPLEMENTED / EXACT CANDIDATE PENDING / SCIENCE HOLD UNCHANGED / NO
+DRIVER BYTE CHANGE.** Independent release and UX audits found no static P0, but
+closed the following issues before the candidate was allowed to run:
+
+- Ordinary pull-request validation now checks out and proves the exact
+  `pull_request.head.sha`; it no longer certifies GitHub's synthetic merge ref
+  while describing the receipt as an exact reviewed-head check.
+- Manual refresh dispatch is restricted to the repository owner on the default
+  branch. The owner-labeled same-repository PR route remains the only way to
+  build a source-refresh candidate for a feature head.
+- Bright canopy controls, overview doors, popover/modal headers, DataTables
+  inputs, hover/selected rows, and modal details use explicit readable dark-mode
+  foregrounds and surfaces.
+- Pinned cards clamp their complete rendered rectangle after creation, drag,
+  scale, and viewport change. Resize also caps its scale to the chart bounds, so
+  Close/Open/Resize controls cannot be stranded off-chart.
+- Both Living Poster surfaces retain the canonical 1672×941 PNG fallback but now
+  serve 317 KB full and 90 KB compact WebP variants through responsive `srcset`;
+  their exact provenance, sizes, hashes, and byte budgets are contracted.
+- The Pages skip target is programmatically focusable for reliable focus transfer.
+- Promotion remains manual but is a hard release procedure: artifact identity
+  must equal the labeled candidate head/run; the independent inspector and
+  checksum ledger must pass; the promotion commit's parent must equal that head;
+  and its changed paths must equal the ledger allowlist before exact promoted-head
+  CI can authorize merge.
+- Local preflight at `2026-07-19 19:31 MST` passed diff whitespace, cover and
+  browser contracts, JavaScript syntax, source-family hash, YAML parsing,
+  actionlint, shell syntax for repository scripts and every workflow `run:`
+  block, CSS structure, all 26 R files through tree-sitter, and exact responsive
+  WebP dimensions/copies. These remain static prerequisites, not an R/candidate
+  or public-deployment receipt.
 
 ### Failed/unsafe paths closed
 
@@ -136,19 +322,20 @@ promotion is authorized.
 
 ### Residual risks and next exact action
 
-- The event-keyed v2 bundler, opportunity/support model, and synthetic contract
-  fixture are integrated in source but have not run in the pinned R validator or
-  against the official release. `SCIENCE-CONTRACT.md` intentionally remains HOLD.
-- The official-release candidate has not yet been fetched; API/schema changes may
-  require reviewed adaptation. The NEON token must remain secret and never enter
-  logs or artifacts.
+- The event-keyed v2 fixtures ran on head `e9b8913`, but the new normalized-fetch
+  and measurement-only-context changes are not yet pushed or validated in the
+  pinned R runner. `SCIENCE-CONTRACT.md` intentionally remains HOLD.
+- The official-release source was fetched, but no complete candidate family has
+  passed; API/schema and source-linkage gaps required the reviewed adaptation
+  above. The NEON token remains secret and must never enter logs or artifacts.
 - The committed search index and manifest will intentionally fail exact-byte
   gates until validator-produced candidates are reviewed and promoted.
 - Public app/cover deployment still points to pre-Pass-4 bytes until merge and
   republish.
 
-Next: run ordinary validation, apply `build-vegetation-candidate` to the exact PR head,
-inspect/promote the validator artifact, re-run green head/merge checks, then
+Next: commit/push the normalized-fetch and measurement-only-context contract,
+run ordinary validation, apply `build-vegetation-candidate` to that exact PR head,
+inspect/promote the complete validator artifact, re-run green head/merge checks, then
 perform Connect/Pages semantic, export, desktop, and compact-width QA. Only after
 that may this entry be replaced with a production receipt and the Driver central
 learning records updated.

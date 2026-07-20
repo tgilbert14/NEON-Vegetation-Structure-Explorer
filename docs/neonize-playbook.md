@@ -24,6 +24,9 @@ patterns, but never transplant an analysis merely because another app has it.
 - Plant identity: `plotID × individualID`.
 - Published source-row identity: unique `uid`; duplicate source `uid` is a hard
   failure.
+- Preserve the selected mapping/tagging source UID. A tie at the latest created
+  timestamp for `plotID × individualID` is unresolved and fails; never choose by
+  UID, row order, or taxonomy.
 - Sampling-opportunity locator: `plotID × eventID`.
 - Documented apparent-individual locator:
   `eventID × individualID × tempStemID`; the operational locator adds `plotID`
@@ -34,6 +37,10 @@ patterns, but never transplant an analysis merely because another app has it.
   earlier protocol/presence hold applies.
 - Duplicate opportunity-source rows are preserved without an arbitrary winner;
   both channels for that `plotID × eventID` are `held_identity_conflict`.
+- Measurement keys without a published opportunity source are preserved as
+  measurement-only context, flagged on every record, and assigned
+  `held_opportunity_source_missing`. Opportunity date, effort, presence, design,
+  coordinates, area, absence, and denominator remain unknown.
 - Physical channels are disjoint:
   - `tree_dbh`: tree bole `stemDiameter` at breast height;
   - `shrub_sapling_basal`: shrub/sapling `basalStemDiameter` at the stem base.
@@ -41,6 +48,8 @@ patterns, but never transplant an analysis merely because another app has it.
   area must exist before any per-hectare value is eligible.
 - `sampled_absence` is a supported zero. Every `held_*` state remains unknown
   and carries a reason.
+- Normalize exact RELEASE-2026 `Y`/`Yes` as present and `N`/`No` as absent;
+  presence-record disagreement is held in either direction.
 - Standing structure is a slow sampled-plot state, not annual productivity,
   biomass, carbon, wall-to-wall inventory, or a causal driver response.
 
@@ -55,10 +64,12 @@ The exact formulas, thresholds, support states, and release gates live in
    empty staging and preserve raw checksums and the release DOI.
 3. Build two isolated candidates under pinned R 4.5.2, the dated Jammy package
    repository, and verified one-thread Haswell OpenBLAS settings.
-4. Fail hard on any missing site, table, published source `uid`, opportunity,
-   denominator, source receipt, validator, or exact-byte comparison. A duplicate
-   source `uid` fails; distinct-`uid` locator collisions remain visible and held
-   rather than being silently deduplicated.
+4. Fail hard on any missing site, table, published source `uid`, unaccounted
+   observation/opportunity key, source receipt, validator, or exact-byte
+   comparison. A registered measurement-only key may remain only when every
+   measurement is preserved, both channels are held, and no denominator is
+   invented. A duplicate source `uid` fails; distinct-`uid` locator collisions
+   remain visible and held rather than being silently deduplicated.
 5. Keep the public app bundle-only (`VST_LIVE=0`). Missing or incompatible bytes
    produce a visible HOLD; there is no live-data fallback at runtime.
 6. Build the first candidate from an exact same-repository PR head by having the
@@ -93,6 +104,9 @@ not create branches, open PRs, publish to `main`, or alter a source receipt.
 ## Reusable lessons
 
 - Preserve observation opportunity before deriving an occurrence or zero.
+- Treat API row order as transport noise: normalize by immutable published row
+  identity before hashing, and describe the digest as normalized extraction
+  bytes under the pinned serializer.
 - Never pool repeated visits as independent spatial samples.
 - Scope every area-scaled metric to the population sampled over that exact area.
 - Keep physical measurement channels visible at every point of use.
@@ -107,4 +121,4 @@ not create branches, open PRs, publish to `main`, or alter a source receipt.
 
 The current working family remains on scientific HOLD until an official-release
 candidate completes every empirical and public gate. This document does not
-claim that those checks have run.
+claim that the failed/incomplete candidate attempts constitute a release.

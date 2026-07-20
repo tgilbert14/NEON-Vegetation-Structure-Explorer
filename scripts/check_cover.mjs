@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,6 +45,8 @@ requireText(/Editorial illustration[^<]*(not|isn.t) a field photograph/i,
 requireText(/42 places/i, "cover must state its 42-place scope");
 requireText(/DP1\.10098\.001/i, "cover must identify the source data product");
 requireText(/Driver Cascade/i, "cover must identify the suite ambassador");
+requireText(/vegetation-living-poster-840\.webp\s+840w[^"']*vegetation-living-poster\.webp\s+1672w/i,
+  "cover must offer compact and full responsive WebP art");
 requireText(/stand numbers describe the sampled plots/i,
   "compact honesty note must identify sampled-plot support");
 requireText(/not every tree across an entire landscape/i,
@@ -96,6 +98,14 @@ try {
 }
 if (!existsSync(resolve(root, "docs/social-card.html"))) {
   fail("the separately composed social-card source is missing");
+}
+for (const [file, maximum] of [
+  ["assets/vegetation-living-poster-840.webp", 120_000],
+  ["assets/vegetation-living-poster.webp", 400_000],
+]) {
+  const path = resolve(root, "docs", file);
+  if (!existsSync(path)) fail(`responsive cover image is missing: ${file}`);
+  else if (statSync(path).size > maximum) fail(`${file} exceeds its delivery budget`);
 }
 
 for (const match of html.matchAll(/<a\b[^>]*target=["']_blank["'][^>]*>/gi)) {

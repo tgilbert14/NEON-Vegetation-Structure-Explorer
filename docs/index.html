@@ -209,6 +209,7 @@
       object-position: 59% center;
       filter: saturate(.96) contrast(1.03);
     }
+    .poster-art picture { display: block; width: 100%; height: 100%; }
     .art-note {
       position: absolute;
       right: 5vw;
@@ -219,28 +220,6 @@
       font-size: .69rem;
       letter-spacing: .035em;
     }
-    .trust {
-      position: absolute;
-      left: max(24px, calc((100% - 1440px) / 2));
-      bottom: 24px;
-      z-index: 4;
-      display: flex;
-      gap: 18px;
-      margin: 0;
-      padding: 0;
-      color: rgba(245,240,223,.73);
-      font-size: .72rem;
-      font-weight: 750;
-      letter-spacing: .06em;
-      list-style: none;
-      text-transform: uppercase;
-    }
-    .trust li + li::before {
-      content: "•";
-      margin-right: 18px;
-      color: var(--bark);
-    }
-
     footer {
       padding: 30px 24px 38px;
       background: var(--paper);
@@ -309,22 +288,13 @@
         order: 2;
         width: calc(100% - 32px);
         align-self: center;
-        padding: 26px 0 86px;
+        padding: 26px 0 38px;
       }
       .eyebrow { margin-bottom: 13px; font-size: .65rem; }
       h1 { font-size: clamp(3.35rem, 17.5vw, 5.2rem); line-height: .84; }
       .promise { margin-top: 22px; font-size: 1rem; }
       .poster-actions { margin-top: 25px; }
       .button { width: 100%; }
-      .trust {
-        left: 16px;
-        right: 16px;
-        bottom: 18px;
-        gap: 8px;
-        justify-content: space-between;
-        font-size: .55rem;
-      }
-      .trust li + li::before { margin-right: 8px; }
       .footer-inner { display: block; }
       .footer-links { margin-top: 20px; white-space: normal; flex-wrap: wrap; }
     }
@@ -345,7 +315,7 @@
 <body>
   <a class="skip" href="#main">Skip to the poster</a>
 
-  <main id="main" class="poster">
+  <main id="main" class="poster" tabindex="-1">
     <header class="topline">
       <span class="brand" aria-label="Desert Data Labs">
         <span class="brand-mark" aria-hidden="true">
@@ -372,22 +342,24 @@
       </div>
 
       <figure class="poster-art">
-        <img src="assets/vegetation-living-poster.png" width="1672" height="941" alt="Editorial screenprint of a tagged tree with a diameter tape at breast height and a smaller shrub measured at its base." />
+        <picture>
+          <source type="image/webp"
+            srcset="assets/vegetation-living-poster-840.webp 840w, assets/vegetation-living-poster.webp 1672w"
+            sizes="(max-width: 700px) 100vw, 72vw" />
+          <img src="assets/vegetation-living-poster.png" width="1672" height="941"
+            fetchpriority="high" decoding="async"
+            alt="Editorial screenprint of a tagged tree with a diameter tape at breast height and a smaller shrub measured at its base." />
+        </picture>
         <figcaption class="art-note">Editorial illustration—not a field photograph or data record.</figcaption>
       </figure>
     </div>
 
-    <ul class="trust" aria-label="Dataset at a glance">
-      <li>42 places</li>
-      <li>real tagged plants</li>
-      <li>public NEON measurements</li>
-    </ul>
   </main>
 
   <footer>
     <div class="footer-inner">
       <div class="footer-copy">
-        <p>Built by Desert Data Labs with public <a href="https://data.neonscience.org/data-products/DP1.10098.001">NEON Vegetation Structure data · DP1.10098.001</a> (CC BY 4.0). Unofficial and not endorsed by NEON, Battelle, or the NSF.</p>
+        <p>Explore 42 places using public <a href="https://data.neonscience.org/data-products/DP1.10098.001">NEON Vegetation Structure data · DP1.10098.001</a> (CC BY 4.0). Built by Desert Data Labs; unofficial and not endorsed by NEON, Battelle, or the NSF.</p>
         <details class="honesty">
           <summary>What am I looking at?</summary>
           <p>The explorer follows supported field measurements through time. Stand numbers describe the sampled plots, not every tree across an entire landscape. They show slow-changing structure—not annual productivity, biomass, or carbon.</p>

@@ -37,6 +37,11 @@ without claiming production promotion.
 7. A single default map row must not erase a supported secondary measurement
    channel. Network discovery needs an explicit site × channel index, and a
    search hit must carry that channel into the opened app view.
+8. Preserve measurements when their opportunity source is absent, but never
+   manufacture effort, absence, area, or a denominator. Give the event a
+   dedicated status and separate published-opportunity counts from
+   measurement-only context counts. Vegetation RELEASE-2026 makes this concrete:
+   49 keys / 4,365 rows / 11 sites.
 
 ## Release lessons
 
@@ -52,10 +57,17 @@ without claiming production promotion.
    PR whose exact head receives the owner-only candidate label.
 6. `skip_download` accepts only an already-promoted v2 family, revalidates those
    bytes, and never mints a new source vintage.
-7. The manifest is an exact generated closure. Archived packages require complete
-   HTTPS repository URLs; `wk` cannot inherit a relative `CRAN/...` path.
+7. The manifest is an exact generated closure. Exact URL-installed geo packages
+   retain `RemoteType=url` and the full `url::<tarball>` reference while using
+   `Source=CRAN` plus `https://cran.r-project.org` as Connect's deployment lane;
+   only their non-semantic `Built` clocks are removed. Versions and `RemoteSha`
+   are never fabricated. Ordinary packages remain on the dated Jammy snapshot,
+   and `wk` can never inherit a relative `CRAN/...` path.
 8. Source-family changes must force human review of science, empirical claims,
    cover facts, Driver disposition, and release receipts.
+9. API row order is not evidence. Materialize each raw table, validate unique
+   published row IDs, sort by that identity, reset row names, and hash the
+   normalized extraction under a pinned serialization runtime.
 
 ## Dispositions from this pass
 
@@ -64,6 +76,7 @@ without claiming production promotion.
 | app-local | Living Poster and question-led entry | `ADOPT` after visual/public QA |
 | suite-platform | isolated official-release candidate PR workflow | `ADOPT` after first green run |
 | scientific-contract | event/stem identity and opportunity ledger | `HOLD` until rebuilt and fixture-verified |
+| scientific-contract | 49 measurement-only events / 4,365 rows at 11 sites | `HOLD` from scaling and derived summaries; preserve and expose |
 | Driver-impacting | legacy vegetation denominator mismatch | `HOLD / NO DRIVER BYTE CHANGE` |
 | complementary | Vegetation as slow standing-structure lens | `COMPLEMENT` Plant Diversity and Phenology |
 
@@ -71,6 +84,8 @@ without claiming production promotion.
 
 - Read governance and source receipts first.
 - Preserve observation opportunity and identity before feature work.
+- When source opportunity is missing, preserve the observation and register the
+  gap; do not turn a hard build stop into a hidden deletion or synthetic zero.
 - Keep the poster face brief and artistic; place truth, provenance, and suite role
   below the fold.
 - Vendor essential runtime dependencies, generate deterministic release bytes,

@@ -123,9 +123,12 @@ fetch_site <- function(site) {
     return(invisible(FALSE))
   }
   portable <- stats::setNames(lapply(required_tables, function(table) {
-    vst_portable_table(result[[table]], paste(site, table))
+    vst_portable_source_table(result[[table]], paste(site, table))
   }), required_tables)
-  saveRDS(portable, file.path(OUT_DIR, paste0(site, "_raw.rds")), compress = "xz")
+  saveRDS(
+    portable, file.path(OUT_DIR, paste0(site, "_raw.rds")),
+    compress = "xz", version = 3
+  )
   cat(sprintf("%s: mapping=%d apparent=%d plots=%d\n", site,
               nrow(result$vst_mappingandtagging),
               nrow(result$vst_apparentindividual),
@@ -156,7 +159,8 @@ writeLines(c(
   sprintf("releaseDoi=%s", RELEASE_DOI),
   sprintf("queryStart=%s", if (nzchar(QUERY_START)) QUERY_START else "FULL_RELEASE"),
   sprintf("queryEnd=%s", if (nzchar(QUERY_END)) QUERY_END else "FULL_RELEASE"),
-  sprintf("neonUtilities=%s", as.character(utils::packageVersion("neonUtilities")))
+  sprintf("neonUtilities=%s", as.character(utils::packageVersion("neonUtilities"))),
+  sprintf("sourceNormalization=%s", VST_SOURCE_NORMALIZATION)
 ), file.path(OUT_DIR, "FETCH-RUNTIME.txt"), useBytes = TRUE)
 
 cat(sprintf("COMPLETE: %d raw sites; raw family SHA-256 %s\n",

@@ -77,7 +77,7 @@ apparent <- data.frame(
   ninetyCrownDiameter = c(2, NA, 2.1, 3, 4, 0.8),
   canopyPosition = c("open", NA, "open", "partial", "open", "understory"),
   measurementHeight = c(130, 130, 130, 130, 130, 10),
-  basalMeasurementHeight = c(NA, NA, NA, NA, NA, 10),
+  basalStemDiameterMsrmntHeight = c(NA, NA, NA, NA, NA, 10),
   changedMeasurementLocation = rep("noChange", 6),
   tagStatus = rep("ok", 6),
   dendrometerCondition = c(NA, NA, NA, NA, "ok", NA),
@@ -101,11 +101,8 @@ perplot <- data.frame(
   dataCollected = c("allGrowthForms", "allGrowthForms", "allGrowthForms",
                     "allGrowthForms", "allGrowthForms", "dendrometerOnly",
                     "allGrowthForms", "allGrowthForms"),
-  treesPresent = c("present - sampled", "present - sampled", "present - sampled",
-                   "not present", "not present", "present - sampled",
-                   "not present", "not present"),
-  shrubsPresent = c("not present", "not present", "not present", "not present",
-                    "not present", "not present", "present - sampled", "not present"),
+  treesPresent = c("Y", "Yes", "present - sampled", "N", "No", "Y", "N", "N"),
+  shrubsPresent = c("N", "No", "not present", "N", "N", "N", "Y", "N"),
   totalSampledAreaTrees = c(400, 40, 40, 40, 40, 40, 40, 40),
   totalSampledAreaShrubSapling = rep(40, 8),
   nestedSubplotAreaShrubSapling = rep(10, 8),
@@ -138,7 +135,7 @@ apparent <- rbind(apparent, data.frame(
   basalStemDiameter = c(NA_real_, NA_real_), height = c(7, 6),
   maxCrownDiameter = c(2, 2), ninetyCrownDiameter = c(1.5, 1.5),
   canopyPosition = c("partial", "partial"), measurementHeight = c(130, 130),
-  basalMeasurementHeight = c(NA_real_, NA_real_),
+  basalStemDiameterMsrmntHeight = c(NA_real_, NA_real_),
   changedMeasurementLocation = c("noChange", "noChange"),
   tagStatus = c("ok", "ok"), dendrometerCondition = c(NA_character_, NA_character_),
   heightQualifier = c(NA_character_, NA_character_),
@@ -150,11 +147,12 @@ perplot <- rbind(perplot, data.frame(
   eventType = "distributed", plotType = "distributed", nlcdClass = "forest",
   decimalLatitude = 40.09, decimalLongitude = -70.09,
   samplingImpractical = "ok", dataCollected = "allGrowthForms",
-  treesPresent = "present - sampled", shrubsPresent = "not present",
+  treesPresent = "Y", shrubsPresent = "N",
   totalSampledAreaTrees = 400, totalSampledAreaShrubSapling = 40,
   nestedSubplotAreaShrubSapling = 10, stringsAsFactors = FALSE
 ))
 
+mapping$uid <- sprintf("mapping-source-%02d", seq_len(nrow(mapping)))
 apparent$uid <- sprintf("apparent-source-%02d", seq_len(nrow(apparent)))
 perplot$uid <- sprintf("opportunity-source-%02d", seq_len(nrow(perplot)))
 
@@ -170,6 +168,8 @@ assert_equal(bundle$meta$contract_id, "NEON-VST-DP1.10098.001-v2",
 assert_equal(bundle$meta$release, "RELEASE-2026", "release is not explicit")
 assert_equal(bundle$contract$source_record_key, "source_uid",
              "published source-row identity changed")
+assert_equal(bundle$contract$mapping_source_record_key, "mapping_source_uid",
+             "mapping/tagging source-row identity changed")
 assert_equal(bundle$contract$protocol_stem_locator,
              c("plotID", "eventID", "individualID", "tempStemID"),
              "plot-scoped protocol stem locator changed")
@@ -183,8 +183,25 @@ assert_equal(unique(bundle$trees$scientificName[
 assert_equal(unique(bundle$trees$scientificName[
   bundle$trees$plotID == "P2" & bundle$trees$individualID == "A"
 ]), "Betula lenta", "individual identity leaked across plots")
+assert_equal(unique(bundle$trees$mapping_source_uid[
+  bundle$trees$plotID == "P1" & bundle$trees$individualID == "A"
+]), "mapping-source-02", "selected mapping/tagging uid was not preserved")
+assert_equal(bundle$trees$basalMeasurementHeight[bundle$trees$eventID == "E7"],
+             10, "RELEASE-2026 basal measurement-height alias was dropped")
 assert_true("measurementErrorQF" %in% names(bundle$trees),
             "published QC fields were dropped")
+assert_equal(
+  vst_presence_state(c("Y", "Yes", "N", "No", "Present - sampled",
+                       "not present", NA_character_, "")),
+  c("present", "present", "absent", "absent", "present", "absent",
+    "unknown", "unknown"),
+  "reviewed RELEASE-2026 presence vocabulary was not normalized exactly"
+)
+assert_equal(
+  vst_shrub_presence(c("N", "N", "Y"), c("N", "Y", "N")),
+  c("absent", "present", "unknown"),
+  "nested shrub/sapling Y/N presence algebra changed"
+)
 assert_equal(bundle$plots$area_trees[bundle$plots$eventID == "E1"], 400,
              "first event-specific area changed")
 assert_equal(bundle$plots$area_trees[bundle$plots$eventID == "E2"], 40,
@@ -199,6 +216,38 @@ assert_equal(bundle$plots$shrub_support[bundle$plots$eventID == "E7"],
              "sampled_with_records", "supported shrub record event was held")
 assert_equal(bundle$plots$shrub_support[bundle$plots$eventID == "E8"],
              "sampled_absence", "explicit shrub-channel absence is not represented as zero")
+
+# Both directions of the reviewed Y/N presence-record consistency rule fail
+# closed. N plus records is not an observed zero; Y without records is not an
+# inferred absence.
+yn_absent_with_records_raw <- raw
+yn_absent_with_records_raw$vst_perplotperyear$treesPresent[
+  yn_absent_with_records_raw$vst_perplotperyear$eventID == "E1"
+] <- "N"
+yn_absent_with_records <- vst_build_site_from_tables(
+  "TEST", yn_absent_with_records_raw
+)
+assert_equal(
+  yn_absent_with_records$plots$tree_support[
+    yn_absent_with_records$plots$eventID == "E1"
+  ],
+  "held_presence_record_conflict",
+  "RELEASE-2026 N plus records did not fail closed"
+)
+yn_present_without_records_raw <- raw
+yn_present_without_records_raw$vst_perplotperyear$treesPresent[
+  yn_present_without_records_raw$vst_perplotperyear$eventID == "E4"
+] <- "Y"
+yn_present_without_records <- vst_build_site_from_tables(
+  "TEST", yn_present_without_records_raw
+)
+assert_equal(
+  yn_present_without_records$plots$tree_support[
+    yn_present_without_records$plots$eventID == "E4"
+  ],
+  "held_presence_record_conflict",
+  "RELEASE-2026 Y without records did not fail closed"
+)
 assert_equal(bundle$plots$tree_records[bundle$plots$eventID == "E9"], 2L,
              "mixed-validity event lost a channel record")
 assert_equal(bundle$plots$tree_invalid_metric_records[bundle$plots$eventID == "E9"], 1L,
@@ -237,9 +286,229 @@ assert_equal(bundle$contract$index$site$metric_kind,
              "bole-DBH basal area (breast height)",
              "site index lost the physical meaning of its measured-area value")
 
+# Measurement rows without a published vst_perplotperyear row remain visible as
+# measurement-only context, but can never invent effort, absence, or area.
+missing_opportunity_raw <- raw
+missing_opportunity_raw$vst_perplotperyear <- perplot[
+  perplot$eventID != "E7", , drop = FALSE
+]
+missing_opportunity_bundle <- vst_build_site_from_tables(
+  "TEST", missing_opportunity_raw
+)
+missing_context <- missing_opportunity_bundle$plots[
+  missing_opportunity_bundle$plots$eventID == "E7", , drop = FALSE
+]
+assert_equal(nrow(missing_context), 1L,
+             "measurement-only event did not receive one audit context")
+assert_true(missing_context$opportunity_source_missing %in% TRUE,
+            "measurement-only context lost its explicit source-missing flag")
+assert_equal(missing_context$opportunity_source_record_count, 0L,
+             "measurement-only context invented an opportunity source count")
+assert_true(is.na(missing_context$opportunity_source_uid) &
+              is.na(missing_context$opportunity_source_uids),
+            "measurement-only context invented published source identity")
+assert_true(is.na(missing_context$date) & is.na(missing_context$year) &
+              is.na(missing_context$area_trees) &
+              is.na(missing_context$area_shrub),
+            "measurement-only context invented date, year, or sampled area")
+assert_equal(missing_context$measurement_record_count_all, 1L,
+             "measurement-only context lost its preserved row count")
+assert_equal(missing_context$measurement_date_min, as.Date("2024-07-01"),
+             "measurement-sourced minimum date was not kept separately")
+assert_equal(missing_context$measurement_date_max, as.Date("2024-07-01"),
+             "measurement-sourced maximum date was not kept separately")
+assert_equal(missing_context$measurement_date_distinct_n, 1L,
+             "measurement-only context date count changed")
+assert_equal(missing_context$tree_support,
+             "held_opportunity_source_missing",
+             "missing opportunity source did not hold the tree channel")
+assert_equal(missing_context$shrub_support,
+             "held_opportunity_source_missing",
+             "missing opportunity source did not hold the shrub channel")
+assert_equal(
+  nrow(missing_opportunity_bundle$opportunity_source), nrow(perplot) - 1L,
+  "measurement-only context contaminated the published opportunity source table"
+)
+assert_true(any(missing_opportunity_bundle$trees$eventID == "E7"),
+            "measurement rows were dropped with their missing opportunity source")
+assert_true(all(missing_opportunity_bundle$trees$opportunity_source_missing ==
+                  (missing_opportunity_bundle$trees$eventID == "E7")),
+            "measurement-row source-missing flags disagree with the context")
+assert_true(!"Unresolved taxon (SHRUB)" %in%
+              missing_opportunity_bundle$contract$index$taxa$taxon_label,
+            "measurement-only context leaked into a supported taxon index")
+assert_equal(
+  missing_opportunity_bundle$contract$index$site$n_measurement_only_contexts,
+  1L, "site index did not count measurement-only contexts"
+)
+assert_equal(
+  missing_opportunity_bundle$meta$n_measurement_records_without_opportunity_source,
+  1L, "site metadata did not count preserved source-unmatched measurements"
+)
+
+# Measurement-derived date evidence remains exact for multi-row/multi-date
+# contexts, while an all-undated context reports zero distinct dates and no
+# invented bounds.
+rich_missing_raw <- missing_opportunity_raw
+extra_dated <- rich_missing_raw$vst_apparentindividual[
+  rich_missing_raw$vst_apparentindividual$eventID == "E7", , drop = FALSE
+]
+extra_dated$tempStemID <- "2"
+extra_dated$date <- as.Date("2024-08-15")
+extra_dated$uid <- "apparent-source-extra-dated"
+extra_undated <- extra_dated
+extra_undated$eventID <- "E10"
+extra_undated$plotID <- "P10"
+extra_undated$individualID <- "U"
+extra_undated$tempStemID <- "1"
+extra_undated$date <- as.Date(NA)
+extra_undated$uid <- "apparent-source-extra-undated"
+rich_missing_raw$vst_apparentindividual <- rbind(
+  rich_missing_raw$vst_apparentindividual, extra_dated, extra_undated
+)
+rich_missing_bundle <- vst_build_site_from_tables("TEST", rich_missing_raw)
+rich_e7 <- rich_missing_bundle$plots[
+  rich_missing_bundle$plots$eventID == "E7", , drop = FALSE
+]
+rich_e10 <- rich_missing_bundle$plots[
+  rich_missing_bundle$plots$eventID == "E10", , drop = FALSE
+]
+assert_equal(rich_e7$measurement_record_count_all, 2L,
+             "multi-row measurement-only count changed")
+assert_equal(rich_e7$measurement_date_min, as.Date("2024-07-01"),
+             "multi-date measurement-only minimum changed")
+assert_equal(rich_e7$measurement_date_max, as.Date("2024-08-15"),
+             "multi-date measurement-only maximum changed")
+assert_equal(rich_e7$measurement_date_distinct_n, 2L,
+             "multi-date measurement-only distinct count changed")
+assert_equal(rich_e10$measurement_record_count_all, 1L,
+             "undated measurement-only row count changed")
+assert_true(is.na(rich_e10$measurement_date_min) &
+              is.na(rich_e10$measurement_date_max),
+            "undated measurement-only context invented date bounds")
+assert_equal(rich_e10$measurement_date_distinct_n, 0L,
+             "undated measurement-only context invented a date count")
+assert_true(is.na(rich_e7$nestedSubplotAreaShrubSapling) &
+              is.na(rich_e10$nestedSubplotAreaShrubSapling),
+            "measurement-only contexts invented an additional published area field")
+
+# Mutation checks prove the independent DQA gate rejects altered summaries,
+# fractional counts, a source-key alias, and invented extra opportunity fields.
+dqa_environment <- new.env(parent = globalenv())
+sys.source("scripts/write_data_quality_audit.R", envir = dqa_environment)
+dqa_probe <- rich_missing_bundle
+dqa_probe$meta$source_receipt <- list(
+  provenance_class = "official-release", product = "DP1.10098.001",
+  neon_release = "RELEASE-2026",
+  release_doi = "https://doi.org/10.48443/pypa-qf12",
+  source_receipt_id = paste0(
+    "VST-DP1.10098.001-RELEASE-2026-sha256-", paste(rep("a", 64), collapse = "")
+  ),
+  raw_source_digest = paste(rep("a", 64), collapse = ""),
+  source_normalization = "portable-vectors+published-uid-byte-order-v1"
+)
+selected_source_parity <- vst_selected_source_parity(
+  dqa_probe$plots, dqa_probe$opportunity_source
+)
+assert_true(
+  isTRUE(selected_source_parity$ok) &&
+    length(selected_source_parity$fields) == 0L,
+  "selected opportunity source parity rejected an unmodified bundle"
+)
+invisible(dqa_environment$vst_dqa_site_rows(dqa_probe, "TEST"))
+fractional_probe <- dqa_probe
+fractional_probe$plots$measurement_record_count_all[
+  fractional_probe$plots$eventID == "E7"
+] <- 2.5
+assert_error(
+  dqa_environment$vst_dqa_site_rows(fractional_probe, "TEST"),
+  "exact nonnegative integers",
+  "DQA accepted a fractional measurement record count"
+)
+date_probe <- dqa_probe
+date_probe$plots$measurement_date_max[date_probe$plots$eventID == "E7"] <-
+  as.Date("2024-08-16")
+assert_error(
+  dqa_environment$vst_dqa_site_rows(date_probe, "TEST"),
+  "count/date summaries differ",
+  "DQA accepted a corrupted measurement date bound"
+)
+uid_probe <- dqa_probe
+uid_probe$opportunity_source$source_record_key[[1L]] <- "not-the-published-uid"
+assert_error(
+  dqa_environment$vst_dqa_site_rows(uid_probe, "TEST"),
+  "opportunity source uids",
+  "DQA accepted a source-record alias that differs from published uid"
+)
+area_probe <- dqa_probe
+area_probe$plots$area_trees[area_probe$plots$eventID == "E1"] <- 401
+assert_error(
+  dqa_environment$vst_dqa_site_rows(area_probe, "TEST"),
+  "selected opportunity source row",
+  "DQA accepted an area that differs from its selected opportunity source row"
+)
+invented_probe <- dqa_probe
+invented_probe$plots$nestedSubplotAreaShrubSapling[
+  invented_probe$plots$eventID == "E7"
+] <- 10
+assert_error(
+  dqa_environment$vst_dqa_site_rows(invented_probe, "TEST"),
+  "invent published opportunity fields",
+  "DQA accepted invented additional opportunity metadata"
+)
+
+dqa_n_with_records <- dqa_probe
+dqa_n_with_records$plots$treesPresent[
+  dqa_n_with_records$plots$eventID == "E1"
+] <- "N"
+dqa_n_with_records$opportunity_source$treesPresent[
+  dqa_n_with_records$opportunity_source$eventID == "E1"
+] <- "N"
+assert_error(
+  dqa_environment$vst_dqa_site_rows(dqa_n_with_records, "TEST"),
+  "support states, reasons, counts, or presence differ",
+  "DQA did not independently reject RELEASE-2026 N plus records"
+)
+dqa_y_without_records <- dqa_probe
+dqa_y_without_records$plots$treesPresent[
+  dqa_y_without_records$plots$eventID == "E4"
+] <- "Y"
+dqa_y_without_records$opportunity_source$treesPresent[
+  dqa_y_without_records$opportunity_source$eventID == "E4"
+] <- "Y"
+assert_error(
+  dqa_environment$vst_dqa_site_rows(dqa_y_without_records, "TEST"),
+  "support states, reasons, counts, or presence differ",
+  "DQA did not independently reject RELEASE-2026 Y without records"
+)
+dqa_live_probe <- dqa_probe
+dqa_live_probe$trees$live[[1L]] <- !dqa_live_probe$trees$live[[1L]]
+assert_error(
+  dqa_environment$vst_dqa_site_rows(dqa_live_probe, "TEST"),
+  "row-derived invariants differ",
+  "DQA accepted live inconsistent with plantStatus"
+)
+
 # Cross-consumer numeric parity: the runtime helpers, canonical embedded site
 # row, and embedded taxon/search rows must agree on the same synthetic bundle.
-source("R/veg_helpers.R")
+# The reusable parity module deliberately sources the runtime consumer rather
+# than the bundle builder's summary functions.
+source("scripts/derived_parity.R")
+held_history <- tree_history(
+  rich_missing_bundle$trees[rich_missing_bundle$trees$eventID == "E7", , drop = FALSE],
+  "S"
+)
+assert_true(all(held_history$opportunity_source_missing %in% TRUE),
+            "plant history dropped the source-missing evidence flag")
+undated_history <- tree_history(rich_missing_bundle$trees, "U")
+assert_equal(nrow(undated_history), 1L,
+             "plant history dropped an undated preserved measurement")
+assert_true(is.na(undated_history$date),
+            "plant history invented a date for an undated measurement")
+assert_true(is.null(tree_trajectory(
+  rich_missing_bundle$trees, "S", "basalStemDiameter",
+  rich_missing_bundle$plots
+)), "plant trajectory connected a held measurement-only event")
 runtime_snapshot <- tree_snapshot(bundle$trees, bundle$plots, SIZE_FOREST)
 runtime_stand <- stand_site(runtime_snapshot, bundle$plots, SIZE_FOREST)
 assert_close(runtime_stand$ba_ha, bundle$contract$index$site$ba_ha,
@@ -248,6 +517,27 @@ assert_close(runtime_stand$density_ha, bundle$contract$index$site$density_ha,
              "runtime and canonical site density values differ")
 assert_close(runtime_stand$qmd, bundle$contract$index$site$qmd_cm,
              "runtime and canonical site QMD values differ")
+
+# The selected plot event is atomic: legitimate stem rows from that event are
+# retained even when their row dates differ or one row date is missing.
+atomic_trees <- bundle$trees[bundle$trees$eventID == "E1", , drop = FALSE]
+atomic_plots <- bundle$plots[bundle$plots$eventID == "E1", , drop = FALSE]
+atomic_trees$date <- as.Date(c("2024-06-01", "2024-06-02"))
+atomic_trees$year <- 2024L
+atomic_dated <- tree_snapshot(atomic_trees, atomic_plots, SIZE_FOREST)
+assert_equal(
+  sort(as.character(atomic_dated$source_uid)),
+  sort(as.character(atomic_trees$source_uid)),
+  "event-atomic snapshot dropped a stem with a differing row date"
+)
+atomic_trees$date[[2L]] <- as.Date(NA)
+atomic_trees$year[[2L]] <- NA_integer_
+atomic_undated <- tree_snapshot(atomic_trees, atomic_plots, SIZE_FOREST)
+assert_equal(
+  sort(as.character(atomic_undated$source_uid)),
+  sort(as.character(atomic_trees$source_uid)),
+  "event-atomic snapshot dropped an undated stem from the selected event"
+)
 runtime_taxa <- species_structure(runtime_snapshot, bundle$plots, SIZE_FOREST)
 index_taxa <- bundle$contract$index$taxa[
   bundle$contract$index$taxa$channel == "tree_dbh", , drop = FALSE]
@@ -261,6 +551,112 @@ for (taxon in index_taxa$taxon_label) {
   assert_equal(as.integer(runtime_row$stems), as.integer(index_row$n_stems),
                paste("runtime and canonical stem counts differ for", taxon))
 }
+
+parity_problems <- vst_parity_bundle_problems(bundle, "TEST")
+assert_equal(length(parity_problems), 0L,
+             paste("consumer parity rejected an unmodified bundle:",
+                   paste(parity_problems, collapse = "; ")))
+
+assert_row_derivation_rejected <- function(probe, message) {
+  probe_problems <- vst_parity_bundle_problems(probe, "TEST")
+  assert_true(any(grepl(
+    "row-derived invariants differ", probe_problems, fixed = TRUE
+  )), message)
+}
+rebuild_corrupted_contract <- function(probe) {
+  probe$contract <- vst_contract_payload(
+    "TEST", probe$trees, probe$plots,
+    vst_safe_median(probe$plots$lat), vst_safe_median(probe$plots$lng)
+  )
+  probe$meta$primary_channel <-
+    probe$contract$index$site$primary_channel[[1L]]
+  probe$meta$structure_type <-
+    probe$contract$index$site$structure_type[[1L]]
+  probe$meta$years <- sort(unique(probe$trees$year[is.finite(probe$trees$year)]))
+  probe
+}
+live_row_probe <- bundle
+live_row_probe$trees$live[[1L]] <- !live_row_probe$trees$live[[1L]]
+live_row_probe <- rebuild_corrupted_contract(live_row_probe)
+assert_row_derivation_rejected(
+  live_row_probe,
+  "consumer parity accepted coherent live/summary corruption inconsistent with plantStatus"
+)
+year_row_probe <- bundle
+year_row_probe$trees$year[[1L]] <- year_row_probe$trees$year[[1L]] + 1L
+year_row_probe <- rebuild_corrupted_contract(year_row_probe)
+assert_row_derivation_rejected(
+  year_row_probe,
+  "consumer parity accepted coherent year/summary corruption inconsistent with date"
+)
+taxonomy_row_probe <- bundle
+taxonomy_row_probe$trees$taxon_label[[1L]] <- "Coherently corrupted taxon"
+taxonomy_row_probe$trees$is_species[[1L]] <-
+  !taxonomy_row_probe$trees$is_species[[1L]]
+taxonomy_row_probe$trees$taxon_resolution[[1L]] <- "coherently-corrupted"
+taxonomy_row_probe <- rebuild_corrupted_contract(taxonomy_row_probe)
+assert_row_derivation_rejected(
+  taxonomy_row_probe,
+  "consumer parity accepted coherent taxonomy/summary corruption inconsistent with raw taxonomy"
+)
+identity_row_probe <- bundle
+identity_row_probe$trees$permanent[[1L]] <-
+  !identity_row_probe$trees$permanent[[1L]]
+identity_row_probe$trees$plant_key[[1L]] <- "corrupted-plant-key"
+identity_row_probe$trees$event_key[[1L]] <- "corrupted-event-key"
+identity_row_probe <- rebuild_corrupted_contract(identity_row_probe)
+assert_row_derivation_rejected(
+  identity_row_probe,
+  "consumer parity accepted corrupted permanence and composite identities"
+)
+
+site_summary_probe <- bundle
+site_summary_probe$contract$index$site$ba_ha <-
+  site_summary_probe$contract$index$site$ba_ha + 1
+assert_true(any(grepl(
+  "embedded site index field ba_ha differs",
+  vst_parity_bundle_problems(site_summary_probe, "TEST"), fixed = TRUE
+)), "consumer parity accepted a corrupted embedded site summary")
+
+channel_summary_probe <- bundle
+channel_summary_probe$contract$channel_summary$tree_dbh$n_stems <-
+  channel_summary_probe$contract$channel_summary$tree_dbh$n_stems + 1L
+assert_true(any(grepl(
+  "embedded channel summary field n_stems differs",
+  vst_parity_bundle_problems(channel_summary_probe, "TEST"), fixed = TRUE
+)), "consumer parity accepted a corrupted embedded channel summary")
+
+taxon_summary_probe <- bundle
+taxon_summary_probe$contract$index$taxa$n_stems[[1L]] <-
+  taxon_summary_probe$contract$index$taxa$n_stems[[1L]] + 1L
+assert_true(any(grepl(
+  "embedded taxon index field n_stems differs",
+  vst_parity_bundle_problems(taxon_summary_probe, "TEST"), fixed = TRUE
+)), "consumer parity accepted a corrupted embedded taxon summary")
+
+# Exercise the family/index comparator independently of file I/O. The release
+# verifier runs the same path over all 42 actual bundles and committed indexes.
+fixture_bundles <- list(TEST = bundle)
+fixture_family <- vst_parity_family_projection(fixture_bundles, "TEST")
+fixture_search <- list(
+  sites = fixture_family$sites,
+  channel_sites = fixture_family$channel_sites,
+  taxa = fixture_family$taxa
+)
+family_problems <- vst_parity_family_problems(
+  fixture_bundles, fixture_family$sites, fixture_search, "TEST"
+)
+assert_equal(length(family_problems), 0L,
+             "consumer family parity rejected its positive fixture")
+family_search_probe <- fixture_search
+family_search_probe$channel_sites$n_stems[[1L]] <-
+  family_search_probe$channel_sites$n_stems[[1L]] + 1L
+assert_true(any(grepl(
+  "search channel rows field n_stems differs",
+  vst_parity_family_problems(
+    fixture_bundles, fixture_family$sites, family_search_probe, "TEST"
+  ), fixed = TRUE
+)), "consumer family parity accepted a corrupted search channel row")
 
 shrub_snapshot <- tree_snapshot(bundle$trees, bundle$plots, SIZE_SHRUB)
 shrub_plots <- plot_summary_veg(shrub_snapshot, bundle$plots, SIZE_SHRUB)
@@ -380,7 +776,7 @@ assert_equal(sampling_precedence_bundle$plots$tree_support[
 presence_precedence_raw <- duplicate_raw
 presence_precedence_raw$vst_perplotperyear$treesPresent[
   presence_precedence_raw$vst_perplotperyear$eventID == "E1"
-] <- "not present"
+] <- "N"
 presence_precedence_bundle <- vst_build_site_from_tables(
   "TEST", presence_precedence_raw
 )
@@ -426,6 +822,29 @@ opportunity_precedence_bundle <- vst_build_site_from_tables(
 assert_equal(opportunity_precedence_bundle$plots$tree_support[
   opportunity_precedence_bundle$plots$eventID == "E2"
 ], "held_identity_conflict", "opportunity ambiguity lost first-precedence hold status")
+
+ambiguous_mapping <- mapping[2L, , drop = FALSE]
+ambiguous_mapping$uid <- "mapping-source-ambiguous"
+ambiguous_mapping$scientificName <- "Acer saccharum"
+assert_error(
+  vst_latest_mapping(rbind(mapping, ambiguous_mapping)),
+  "ambiguous latest mapping rows",
+  "same-created-time mapping/tagging tie was resolved by row order"
+)
+duplicate_mapping_uid <- mapping
+duplicate_mapping_uid$uid[[2L]] <- duplicate_mapping_uid$uid[[1L]]
+assert_error(
+  vst_latest_mapping(duplicate_mapping_uid),
+  "violates unique key",
+  "duplicate mapping/tagging source uid did not fail the build"
+)
+blank_mapping_uid <- mapping
+blank_mapping_uid$uid[[1L]] <- ""
+assert_error(
+  vst_latest_mapping(blank_mapping_uid),
+  "blank uid",
+  "blank mapping/tagging source uid did not fail the build"
+)
 
 duplicate_uid_raw <- raw
 duplicate_uid_raw$vst_apparentindividual <- rbind(apparent, apparent[1, ])

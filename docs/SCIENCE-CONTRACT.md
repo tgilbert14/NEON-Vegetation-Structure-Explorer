@@ -10,8 +10,14 @@ bundle family and does not authorize a Driver/Cascade data-byte change.
 ## Identity and support
 
 - Physical plant: `plotID × individualID`.
-- Published source-row identity: `uid`. It is preserved and must be unique; a
-  duplicate source `uid` is a hard failure.
+- Published source-row identity: `uid`. Apparent-individual and opportunity UIDs
+  are preserved in their source tables, and the exact mapping/tagging UID used
+  for a measurement row is preserved as `mapping_source_uid`. A blank or
+  duplicate source UID is a hard failure.
+- Mapping/tagging identity is selected only when one row has the unambiguous
+  latest created timestamp for `plotID × individualID`. Multiple rows tied at
+  that latest timestamp are a hard failure; UID, row order, and taxon content
+  are never used to invent a winner.
 - NEON's documented apparent-individual locator is
   `eventID × individualID × tempStemID`. It has collisions in `RELEASE-2026` and
   is not treated as unique.
@@ -27,15 +33,29 @@ bundle family and does not authorize a Driver/Cascade data-byte change.
 - Colliding source rows for one `plotID × eventID` opportunity are likewise all
   preserved. Because their opportunity state cannot be adjudicated without an
   arbitrary winner, both physical channels are `held_identity_conflict`.
+- RELEASE-2026 contains 4,365 published apparent-individual rows across 49
+  `plotID × eventID` keys at 11 sites with no matching published
+  `vst_perplotperyear` row. Each measurement row is preserved and flagged. A
+  measurement-only context is retained for audit, but its opportunity source
+  UID/count, date/year, effort, presence, event type, design, coordinates, and
+  sampled areas are not invented. Both physical channels are
+  `held_opportunity_source_missing` and excluded from every zero, denominator,
+  snapshot, taxon, growth, mortality, and site-summary derivation.
 - Current-state summaries select the latest supported event for each plot, then
   the matching latest event for each composite plant. Repeated events are not
   pooled as independent current observations.
-- A supported opportunity requires the matching event, a registered support
+- A supported opportunity requires a matching published `vst_perplotperyear`
+  source row, the matching event, a registered support
   state, a finite positive channel-compatible sampled area, and no eligible live
   channel row with a missing, non-finite, non-positive, or threshold-incompatible
   required diameter.
 - `sampled_absence` is an observed zero. Every `held_*` state is unknown or
   unsupported and remains `NA`, with a reason.
+- RELEASE-2026 presence values are normalized exactly: `Y`/`Yes` mean present
+  and `N`/`No` mean absent, alongside the published textual present/absent
+  forms. `N` with measurement records and `Y` without records are both
+  `held_presence_record_conflict`; only absence with no records can contribute
+  an observed zero.
 - `held_metric_invalid` fails the entire plot event closed when even one eligible
   live tree row lacks valid DBH (finite and ≥10 cm) or one eligible live
   shrub/sapling row lacks valid positive basal stem diameter. A protocol or
@@ -67,8 +87,10 @@ be opened and explored independently.
 ## Snapshot and sampled-plot estimator
 
 For every plot, the implementation keeps its latest fully supported channel
-event; if none exists, it keeps the latest held opportunity so the reason remains
-visible. From the matching snapshot it:
+event; if none exists, it keeps the latest held plot-event context so the reason
+remains visible. A selected event is atomic: every preserved stem row from that
+`plotID × eventID` remains in the snapshot even when row measurement dates differ
+or are missing. From the matching snapshot it:
 
 1. keeps eligible live stem rows in the active channel;
 2. computes each stem's cross-section as
@@ -102,6 +124,11 @@ basal trajectories are withheld because `tempStemID` is not stable enough across
 years to align shrub/sapling stems. Dead-to-live “resurrections” are held from
 growth and flagged for review. Diameter decreases remain preserved and flagged;
 their cause is not inferred.
+
+The canonical basal point-of-measurement field is populated from the published
+RELEASE-2026 `basalStemDiameterMsrmntHeight` field (with the older canonical-name
+alias accepted only for compatibility). It is not inferred from diameter or
+another measurement-height field.
 
 Status is reduced once per composite plant and event: any live stem means Live;
 all observed stems dead/downed means Dead; lost, removed, and unknown states are
@@ -139,19 +166,32 @@ nonmatching plot-ID families. Its correct state is held/unmatched, not “treele
 
 Release requires:
 
-1. an exact official-release source receipt and complete 42-site inventory;
+1. an exact official-release source receipt, explicit `FULL_RELEASE` query
+   selection, and complete 42-site inventory; bounded month queries are
+   diagnostic-only and cannot become release/runtime bytes;
 2. unique published source `uid` values; complete preservation and fail-closed
    handling of documented-locator, operational-locator, and plot-event source
-   collisions, with no arbitrary winner;
-3. exact support-state vocabulary, positive supported areas, exact invalid-metric
-   counts recomputed from preserved live rows, and records/status consistency;
-4. deterministic snapshot, stand, growth, mortality, taxonomy, presentation-channel,
+   collisions, with no arbitrary winner; exact bidirectional algebra among
+   published opportunity keys, measurement-only keys, and preserved measurement
+   rows, with source-missing contexts held and visibly counted;
+3. exact support-state vocabulary and reasons, positive supported areas, exact
+   record/invalid-metric/identity-conflict counts recomputed from preserved rows,
+   and records/status consistency in both the release verifier and the deployed
+   runtime gate;
+4. independent row-derived invariants in the runtime gate, release verifier,
+   DQA, and consumer-parity gate: `live` from `plantStatus`, `year` from date,
+   taxonomy label/species/resolution from preserved taxonomy, permanence from
+   `individualID`, composite plant/event keys from their components, and mapping
+   match state from `mapping_source_uid`;
+5. deterministic snapshot, stand, growth, mortality, taxonomy, presentation-channel,
    index, search, report, and export fixtures;
-5. exact app/index/search/export parity from one canonical builder, including
-   the 84-row site × physical-channel search grid;
-6. browser, responsive, accessibility, cover, image-provenance, offline-source,
+6. independent consumer-side recomputation of every embedded site, physical-
+   channel, and taxon summary plus the site/search indexes from preserved rows,
+   including the 84-row site × physical-channel search grid; deterministic
+   builder output alone is not evidence of summary correctness;
+7. browser, responsive, accessibility, cover, image-provenance, offline-source,
    manifest, and Connect-deployment gates;
-7. reviewed Driver and suite-learning handoffs.
+8. reviewed Driver and suite-learning handoffs.
 
 ## Driver disposition
 

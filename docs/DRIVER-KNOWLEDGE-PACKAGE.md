@@ -11,6 +11,13 @@ needed to prove each stand denominator. WOOD demonstrates the risk: qualifying
 measurement records and denominator rows exist, but their plot identifiers do
 not join. An unavailable result there cannot be translated into “no woody stand.”
 
+The official RELEASE-2026 preflight adds a current-source coverage constraint:
+4,365 measurement rows across 49 plot-events at 11 sites have no matching
+published `vst_perplotperyear` source row. The app preserves those records under
+`held_opportunity_source_missing`, but they are ineligible for absence, scaling,
+structure summaries, longitudinal metrics, or Driver features. This is context
+for coverage/QC, not a new cascade edge.
+
 ## Candidate contribution after validation
 
 | Field | Meaning | Mandatory support | Driver role |
@@ -43,8 +50,10 @@ without the channel and support fields.
 Driver may reconsider a Vegetation field only after the app provides:
 
 1. an explicit official release and DOI plus raw/bundle digests;
-2. all 42 event-keyed bundles and complete sampling-opportunity fields;
-3. an explicit denominator diagnostic with no silent unmatched joins;
+2. all 42 event-keyed bundles, every published opportunity row, and an exact
+   measurement-only ledger with no invented opportunity fields;
+3. an explicit denominator diagnostic with no silent unmatched joins and exact
+   counts for excluded source-missing events/records/sites;
 4. registered `tree_dbh` and `shrub_sapling_basal` estimands with point-of-use
    physical labels;
 5. deterministic fixtures and app/export/index parity;
@@ -66,6 +75,7 @@ Driver may reconsider a Vegetation field only after the app provides:
 
 The important finding is a **denominator-integrity gate**, not a new ecological
 edge: a plausible stem table cannot support a per-hectare value until the
-measurement event and sampled opportunity join exactly. Driver should fail closed
-and link users back to the companion app's diagnostic rather than convert an
-unsupported state to zero.
+measurement event and sampled opportunity join exactly. Driver should fail
+closed, carry the companion app's source-missing coverage diagnostic, and link
+users back to the record-level audit rather than convert an unsupported state to
+zero.

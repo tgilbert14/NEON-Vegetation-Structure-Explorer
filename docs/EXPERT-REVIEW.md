@@ -21,8 +21,10 @@ The three-table spine is necessary but must remain at its native grain:
   locator, but `RELEASE-2026` contains collisions on those three fields. The
   operational locator therefore includes `plotID` to distinguish cross-plot tag
   reuse;
-- `vst_mappingandtagging`: identity/taxonomy, resolved deterministically to the most recent created
-  record when duplicated;
+- `vst_mappingandtagging`: identity/taxonomy, joined from the one unambiguous
+  latest-created `plotID × individualID` row with its published UID preserved;
+  a tie at the latest created timestamp fails rather than being resolved by row
+  order, UID, or taxon content;
 - `vst_perplotperyear`: `plotID × eventID`, including exact event sampled areas and the fields that say
   whether sampling occurred, was impractical, was dendrometer-only, or recorded absence.
 
@@ -46,6 +48,15 @@ rows must remain preserved, with both physical channels held as
 `held_identity_conflict`; neither row order nor a preferred area/status value
 may choose a winner.
 
+The official source family also contains 4,365 apparent-individual rows across
+49 `plotID × eventID` keys at 11 sites with no matching published
+`vst_perplotperyear` row. This is a publication/linkage gap, not evidence that
+field sampling did or did not occur. The records remain available for record-level
+inspection, but absence, effort, sampled area, scaling, snapshot, taxonomy, and
+longitudinal summaries are withheld under `held_opportunity_source_missing`.
+The audit context retains only the measurement key and explicitly
+measurement-sourced count/date range; it borrows no opportunity metadata.
+
 ## Measurement channels
 
 Large-tree DBH cross-sectional area and shrub/sapling basal-cover area are both meaningful within their
@@ -66,7 +77,7 @@ For a supported plot-event and compatible channel:
 
 - sampled presence with records is measured;
 - explicit sampled absence is zero;
-- impractical, dendrometer-only, invalid-area, or unmatched opportunity is held/NA;
+- impractical, dendrometer-only, invalid-area, or missing opportunity source is held/NA;
 - density counts live measured stem rows per compatible sampled area;
 - measured area is `sum(pi * (d / 200)^2) / area_ha`;
 - QMD is stem-weighted `sqrt(sum(d^2) / n_stems)`;
@@ -118,4 +129,4 @@ passing this app's tests does not automatically promote vegetation into the caus
 
 - [NEON Vegetation structure DP1.10098.001](https://data.neonscience.org/data-products/DP1.10098.001)
 - [RELEASE-2026 DOI 10.48443/pypa-qf12](https://doi.org/10.48443/pypa-qf12)
-- [NEON vegetation structure user guide](https://data.neonscience.org/documents/10179/2838366/NEON_vegStructure_userGuide_vE/9b88927a-d5c0-658f-1fa9-d54f1e04c81e?download=true&version=1.0)
+- [NEON vegetation structure user guide, Rev G](https://data.neonscience.org/api/v0/documents/NEON_vegStructure_userGuide_vG?inline=true)

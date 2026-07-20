@@ -24,6 +24,10 @@ if (invalid.length) {
 
 const ui = readFileSync("ui.R", "utf8");
 const app = readFileSync("www/app.js", "utf8");
+const server = readFileSync("server.R", "utf8");
+const mapPicker = readFileSync("R/map_picker.R", "utf8");
+const styles = readFileSync("www/styles.css", "utf8");
+const vegStyles = readFileSync("www/veg.css", "utf8");
 for (const forbidden of [
   /fonts\.googleapis\.com/i, /fonts\.gstatic\.com/i, /cdnjs\.cloudflare\.com/i,
   /unpkg\.com/i, /cdn\.jsdelivr\.net/i,
@@ -45,5 +49,116 @@ if (!/id\s*=\s*["']loadOverlay["']/.test(ui) ||
 if (/setTimeout\([^)]*smtLoadDone/s.test(app)) {
   throw new Error("loading overlay must not auto-dismiss before the server reports completion");
 }
+if (/lpa-trust|real tagged plants|public measurements/i.test(ui)) {
+  throw new Error("in-app Living Poster must not carry an above-fold metric/trust strip");
+}
+if (!/class\s*=\s*["']lpa-skip["'][^\n]*Pick a place/.test(ui)) {
+  throw new Error("in-app Living Poster must retain its single Pick a place CTA");
+}
+for (const asset of [
+  "assets/vegetation-living-poster-840.webp",
+  "assets/vegetation-living-poster.webp",
+  "assets/vegetation-living-poster.png",
+]) {
+  if (!ui.includes(asset)) throw new Error(`in-app Living Poster is missing responsive art asset ${asset}`);
+}
 
-console.log(`Browser contracts OK: ${handlers.length} one-payload handlers, local dependencies, and accessible loading state.`);
+const requireText = (source, needle, message) => {
+  if (!source.includes(needle)) throw new Error(message);
+};
+
+// Evidence and non-scientist pathways are release contracts, not optional copy.
+for (const field of [
+  "n_measurement_only_contexts",
+  "n_measurement_records_without_opportunity_source",
+  "measurement_records_all_growth_forms",
+  "absence_inferred = FALSE",
+]) {
+  requireText(server, field, `site-wide source-gap evidence is missing ${field}`);
+}
+requireText(server, 'output$sourceGapCsv', "source-gap notice lacks its exact CSV evidence path");
+requireText(server, "every recorded plant form", "source-gap notice must state its all-growth-form scope");
+requireText(server, "never read as zero or plant absence", "source-gap notice must reject zero/absence inference");
+if (/sidebar picker/i.test(server)) throw new Error("visible plant-picker guidance still refers to the removed sidebar");
+
+for (const className of ["help-steps", "help-step-number", "help-methods"]) {
+  requireText(server, className, `plain-language Help path is missing ${className}`);
+}
+requireText(server, "basal_unaligned", "multi-stem basal career evidence guard is missing");
+requireText(server, "Measured · stems not aligned for change", "multi-stem evidence label is not plain-language or internally consistent");
+requireText(server, "measurement_unaligned", "changed measurement points must guard the career trajectory and evidence state");
+requireText(server, "Measured · measurement point changed", "measurement-point withholding needs a plain-language evidence label");
+
+// 320px layout and export-source card must shrink without changing its 340px cap.
+if (!/\.trade-card\s*\{[^}]*width:\s*min\(340px,\s*100%\)[^}]*max-width:\s*340px/s.test(styles)) {
+  throw new Error("Plant Career card must shrink to its container while preserving the 340px export cap");
+}
+if (!/\.thresh-slider\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s.test(styles)) {
+  throw new Error("threshold controls must be allowed to shrink at 320px");
+}
+if (!/\[data-bs-theme="dark"\]\s+\.evidence-chip\.comparable/.test(styles) ||
+    !/\[data-bs-theme="dark"\]\s+\.evidence-chip\.held/.test(styles)) {
+  throw new Error("dark mode needs explicit readable evidence-chip colors");
+}
+if (!/\[data-bs-theme="dark"\]\s+\.help-step-number\s*\{[^}]*color:\s*#0e1d15/s.test(vegStyles) ||
+    !/\[data-bs-theme="dark"\]\s+\.smt-snap-btn/.test(styles) ||
+    !/\[data-bs-theme="dark"\]\s+\.driver-popover\.driverjs-theme\s+button/.test(styles)) {
+  throw new Error("dark-mode canopy controls must use readable dark ink");
+}
+for (const selector of [".home-btn", ".popover .popover-header", ".modal-header"]) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(`\\[data-bs-theme="dark"\\][\\s\\S]{0,900}${escaped}[\\s\\S]{0,240}color:\\s*#0e1d15`).test(styles)) {
+    throw new Error(`${selector} must use dark ink on the bright dark-mode canopy surface`);
+  }
+}
+if (!/\[data-bs-theme="dark"\]\s+\.dataTables_wrapper\s+\.dataTables_filter\s+input\s*\{[^}]*background:\s*#0d2016/s.test(styles) ||
+    !/\[data-bs-theme="dark"\]\s+table\.dataTable\s+tbody\s+tr:hover[^\{]*\{[^}]*background:\s*#16412a/s.test(styles)) {
+  throw new Error("dark-mode DataTables controls and row states need dark readable surfaces");
+}
+if (!/--pine:\s*#256f41/.test(styles) || !/--green:\s*#256f41/.test(styles)) {
+  throw new Error("normal green text must use the AA-safe canopy token");
+}
+for (const selector of [".tc-save-btn", ".smt-pin .smt-open", ".smt-snap-btn"]) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(`${escaped}[^}]*min-height:\\s*44px`, "s").test(styles)) {
+    throw new Error(`${selector} must expose a 44px touch target`);
+  }
+}
+if (!/\.dropdown-menu\s+\.dropdown-item\s*\{[^}]*min-height:\s*44px/s.test(vegStyles) ||
+    !/\.pg-actions\s+a\s*\{[^}]*min-height:\s*44px/s.test(vegStyles)) {
+  throw new Error("gateway and overflow navigation targets must be at least 44px tall");
+}
+for (const contract of [
+  [/\.channel-picker\s+\.radio-inline\s*\{[^}]*min-height:\s*44px/s, "measurement-channel choices"],
+  [/\.leader-cats[\s\S]*min-height:\s*44px/, "Champion choices"],
+  [/\.search-mode\s+\.radio-inline[^\{]*\{[^}]*min-height:\s*44px/s, "search-mode choices"],
+  [/\.picker-mode\s+label\.radio-inline[^\{]*\{[^}]*min-height:\s*44px/s, "site/species choices"],
+]) {
+  if (!contract[0].test(`${styles}\n${vegStyles}`)) throw new Error(`${contract[1]} must expose 44px touch targets`);
+}
+if (/\.leader-cats\s+input\[type=radio\]\s*\{[^}]*display:\s*none/s.test(styles) ||
+    !/\.leader-cats[\s\S]*focus-visible/.test(`${styles}\n${vegStyles}`)) {
+  throw new Error("Champion radios must remain keyboard-focusable with a visible focus state");
+}
+for (const token of ["cloneNode(true)", "smt-export-card", "fixedWidth: 340"]) {
+  requireText(readFileSync("www/pincards.js", "utf8"), token,
+    `Tree Card export lacks stable 340px source contract: ${token}`);
+}
+for (const token of ["function clampPin", "boxRect.width - pinRect.width - 4", "fitScale", "clampPin(pin, pin.offsetLeft, pin.offsetTop)"]) {
+  requireText(readFileSync("www/pincards.js", "utf8"), token,
+    `pinned cards must remain fully reachable after drag, resize, and viewport changes: ${token}`);
+}
+
+requireText(mapPicker, "hit_radius <- pmax(22, visible_radius)", "map markers need an invisible 44px-minimum hit target");
+requireText(mapPicker, "pathOptions(interactive = FALSE)", "visible map rings must not steal the enlarged hit target");
+for (const token of ["markerClusterOptions", "maxClusterRadius = 44", "spiderfyOnMaxZoom = TRUE", "STEI/TREE"]) {
+  requireText(mapPicker, token, `dense national map targets lack disambiguation contract: ${token}`);
+}
+requireText(mapPicker, "addControl", "map measurement channels need a custom visible key");
+requireText(mapPicker, "veg-channel-legend-ring", "map key must render ring patterns, not solid color swatches");
+for (const label of ["Tree DBH · solid ring", "Shrub & sapling basal · dashed ring", "Held / unknown · dotted ring"]) {
+  requireText(server, label, `map key is missing ${label}`);
+}
+requireText(vegStyles, ".veg-channel-legend", "map key needs light/dark readable styling");
+
+console.log(`Browser contracts OK: ${handlers.length} one-payload handlers, local dependencies, accessible loading state, responsive controls, evidence paths, and map targets.`);

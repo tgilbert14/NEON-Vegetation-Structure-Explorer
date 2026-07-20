@@ -94,6 +94,13 @@ These are source-identity findings, not a green candidate or release receipt:
 - Ten `vst_perplotperyear` rows form five duplicate `plotID × eventID` groups across BLAN (two
   groups), DEJU, JERC, and JORN. All source rows are preserved and both physical channels are
   `held_identity_conflict`.
+- RELEASE-2026 contains 4,365 apparent-individual rows across 49 measurement-only
+  `plotID × eventID` keys at 11 sites: CLBJ, GRSM, HARV, HEAL, JERC, KONZ,
+  ORNL, OSBS, SRER, WOOD, and WREF. No matching published
+  `vst_perplotperyear` row exists for those keys. Measurements are preserved;
+  `opportunity_source_missing = TRUE` is carried on the record and context;
+  both channels are `held_opportunity_source_missing`; and no opportunity date,
+  year, effort, absence, design, coordinates, area, or denominator is inferred.
 - A duplicate published source `uid`, rather than a duplicate documented or operational locator, is
   the hard source-row-identity failure.
 
@@ -109,8 +116,13 @@ excluded. It preserves:
 - physical plant key: `plotID + individualID`;
 - every event-specific plot-opportunity source row, sampled area, design, presence, impractical,
   data-collected, and identity-conflict state;
+- every source-missing measurement key as an explicit measurement-only context,
+  plus record-level flags and measurement-sourced count/date-range fields that
+  are never presented as opportunity metadata;
 - measurement height/location, basal measurement height, status, growth form, and available QC fields;
-- deterministic latest mapping/tagging record, never arbitrary `first()` selection;
+- the published UID of the one unambiguous latest-created mapping/tagging row;
+  a latest-timestamp tie fails instead of receiving an arbitrary `first()`, UID,
+  row-order, or taxonomy winner;
 - explicit support states: sampled-with-records, sampled-absence-zero, and held/unsupported.
 
 All consumer surfaces must declare the same contract ID, release, source DOI, and artifact hashes.
@@ -121,7 +133,11 @@ All consumer surfaces must declare the same contract ID, release, source DOI, an
 - multi-stem and same-date distinct events remain; duplicate source `uid` fails, while distinct-`uid`
   operational-locator collisions remain preserved and hold the affected channel opportunity;
 - duplicate `plotID × eventID` opportunity-source rows remain preserved and hold both channels;
-- sampled presence + records, explicit sampled absence, sampling impractical, and dendrometer-only states
+- a measurement-only event preserves every measurement UID, receives exactly
+  one context with zero source records and no invented opportunity fields, and
+  holds both channels from all derived summaries;
+- RELEASE-2026 `Y`/`N` sampled presence + records, explicit sampled absence,
+  both presence-record conflict directions, sampling impractical, and dendrometer-only states
   resolve to measured, zero, held, and held respectively;
 - large trees ignore shrub records; shrub/sapling channels use their compatible form and area;
 - a valid 40 m² area survives; zero/NA area is held; areas remain event-specific;

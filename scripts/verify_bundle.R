@@ -16,13 +16,130 @@ VST_SUPPORTED <- c("sampled_with_records", "sampled_absence")
 VST_HELD <- c(
   "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
   "held_opportunity_unknown", "held_presence_record_conflict",
-  "held_metric_invalid", "held_identity_conflict"
+  "held_metric_invalid", "held_identity_conflict",
+  "held_opportunity_source_missing"
 )
 VST_STATUS <- c(VST_SUPPORTED, VST_HELD)
+VST_CONTEXT_DERIVED_FIELDS <- c(
+  "plotID", "eventID", "opportunity_source_uid",
+  "opportunity_source_record_count", "opportunity_key_conflict",
+  "opportunity_source_uids", "opportunity_source_missing",
+  "measurement_record_count_all", "measurement_date_min",
+  "measurement_date_max", "measurement_date_distinct_n",
+  "treePresence", "shrubSaplingPresence", "tree_records", "shrub_records",
+  "small_tree_records", "tree_invalid_metric_records",
+  "shrub_invalid_metric_records", "tree_identity_conflict_keys",
+  "shrub_identity_conflict_keys", "tree_support", "tree_support_reason",
+  "shrub_support", "shrub_support_reason", "tree_supported",
+  "shrub_supported", "event_key"
+)
 
 problems <- character(0)
 note <- function(message) problems <<- c(problems, message)
 nonblank <- function(value) !is.na(value) & nzchar(trimws(as.character(value)))
+exact_nonnegative_integer <- function(value, label) {
+  numeric_value <- suppressWarnings(as.numeric(as.character(value)))
+  if (any(!is.finite(numeric_value)) || any(numeric_value < 0) ||
+      any(numeric_value != floor(numeric_value)) ||
+      any(numeric_value > .Machine$integer.max)) {
+    note(sprintf("%s must contain exact nonnegative integers", label))
+    return(rep(NA_integer_, length(value)))
+  }
+  as.integer(numeric_value)
+}
+date_number <- function(value) {
+  if (inherits(value, "Date")) return(as.numeric(value))
+  suppressWarnings(as.numeric(as.Date(substr(as.character(value), 1L, 10L))))
+}
+expected_species <- function(rank, scientific_name) {
+  rank <- tolower(trimws(as.character(rank)))
+  scientific_name <- as.character(scientific_name)
+  accepted <- !is.na(rank) & rank %in% c(
+    "species", "subspecies", "variety", "form"
+  )
+  safe_name <- ifelse(is.na(scientific_name), "", scientific_name)
+  accepted & nonblank(scientific_name) &
+    !grepl("\\bsp\\.?$", safe_name, ignore.case = TRUE) &
+    !grepl("/", safe_name, fixed = TRUE)
+}
+expected_taxon_label <- function(scientific_name, taxon_id) {
+  scientific_name <- as.character(scientific_name)
+  taxon_id <- as.character(taxon_id)
+  ifelse(
+    nonblank(scientific_name), scientific_name,
+    ifelse(
+      nonblank(taxon_id), paste0("Unresolved taxon (", taxon_id, ")"),
+      "Unresolved taxon"
+    )
+  )
+}
+row_derivation_problems <- function(trees) {
+  required <- c(
+    "date", "year", "plotID", "eventID", "individualID", "plantStatus",
+    "live", "permanent", "plant_key", "event_key", "mapping_source_uid",
+    "mappingMatched", "scientificName", "taxonID", "taxonRank",
+    "is_species", "taxon_label", "taxon_resolution"
+  )
+  missing <- setdiff(required, names(trees))
+  if (length(missing)) {
+    return(paste0("missing fields: ", paste(missing, collapse = ",")))
+  }
+  expected_date <- suppressWarnings(as.Date(substr(as.character(trees$date), 1L, 10L)))
+  expected_year <- suppressWarnings(as.integer(format(expected_date, "%Y")))
+  expected_live <- grepl(
+    "^live", trimws(as.character(trees$plantStatus)), ignore.case = TRUE
+  )
+  expected_permanent <- grepl("^NEON", as.character(trees$individualID))
+  species <- expected_species(trees$taxonRank, trees$scientificName)
+  label <- expected_taxon_label(trees$scientificName, trees$taxonID)
+  resolution <- ifelse(
+    species & nonblank(trees$scientificName),
+    "species-level", "coarse-or-unresolved"
+  )
+  mapping_matched <- nonblank(trees$mapping_source_uid)
+  checks <- c(
+    date_type = inherits(trees$date, "Date"),
+    year = is.integer(trees$year) && identical(trees$year, expected_year),
+    live = is.logical(trees$live) && identical(trees$live, expected_live),
+    permanent = is.logical(trees$permanent) &&
+      identical(trees$permanent, expected_permanent),
+    plant_key = is.character(trees$plant_key) && identical(
+      trees$plant_key,
+      paste(trees$plotID, trees$individualID, sep = "\r")
+    ),
+    event_key = is.character(trees$event_key) && identical(
+      trees$event_key,
+      paste(trees$plotID, trees$eventID, sep = "\r")
+    ),
+    mapping_source_uid_type = is.character(trees$mapping_source_uid),
+    mappingMatched = is.logical(trees$mappingMatched) && identical(
+      trees$mappingMatched, mapping_matched
+    ),
+    is_species = is.logical(trees$is_species) &&
+      identical(trees$is_species, species),
+    taxon_label = is.character(trees$taxon_label) &&
+      identical(trees$taxon_label, label),
+    taxon_resolution = is.character(trees$taxon_resolution) && identical(
+      trees$taxon_resolution, resolution
+    )
+  )
+  problems <- names(checks)[!checks]
+  mapping_uid <- as.character(trees$mapping_source_uid[mapping_matched])
+  if (length(mapping_uid)) {
+    mapping_plant <- paste(
+      trees$plotID[mapping_matched], trees$individualID[mapping_matched],
+      sep = "\r"
+    )
+    if (any(tapply(mapping_plant, mapping_uid, function(value) {
+      length(unique(value))
+    }) != 1L) || any(tapply(mapping_uid, mapping_plant, function(value) {
+      length(unique(value))
+    }) != 1L)) {
+      problems <- c(problems, "mapping_source_uid traceability")
+    }
+  }
+  unique(problems)
+}
 release_key <- function(data, columns) {
   parts <- lapply(columns, function(column) {
     value <- as.character(data[[column]])
@@ -70,8 +187,9 @@ identity_conflict_counts <- function(trees, plots, keep) {
 presence_state <- function(value) {
   value <- tolower(trimws(as.character(value)))
   result <- rep("unknown", length(value))
-  result[grepl("not present|absent", value)] <- "absent"
-  result[grepl("^present", value)] <- "present"
+  result[value %in% c("n", "no") | grepl("not present|absent", value)] <-
+    "absent"
+  result[value %in% c("y", "yes") | grepl("^present", value)] <- "present"
   result[is.na(value) | !nzchar(value)] <- "unknown"
   result
 }
@@ -82,43 +200,79 @@ shrub_presence_state <- function(trees_present, shrubs_present) {
          ifelse(shrub_state == "absent" & tree_state == "absent",
                 "absent", "unknown"))
 }
-expected_support_status <- function(area, sampling_impractical, data_collected,
-                                    presence, records, invalid_metric,
-                                    identity_conflicts,
-                                    opportunity_conflict) {
+expected_support_decision <- function(area, sampling_impractical, data_collected,
+                                      presence, records, invalid_metric,
+                                      identity_conflicts,
+                                      opportunity_conflict,
+                                      opportunity_source_missing) {
   sampling <- gsub("[^a-z]", "", tolower(trimws(as.character(sampling_impractical))))
   collected <- gsub("[^a-z]", "", tolower(trimws(as.character(data_collected))))
-  result <- rep(NA_character_, length(area))
+  status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
-    if (isTRUE(opportunity_conflict[[i]])) {
-      result[[i]] <- "held_identity_conflict"
+    if (isTRUE(opportunity_source_missing[[i]])) {
+      status[[i]] <- "held_opportunity_source_missing"
+      reason[[i]] <- paste(
+        "no published vst_perplotperyear row for this plotID + eventID;",
+        "sampling effort, absence, and sampled area are unknown"
+      )
+    } else if (isTRUE(opportunity_conflict[[i]])) {
+      status[[i]] <- "held_identity_conflict"
+      reason[[i]] <-
+        "multiple published vst_perplotperyear rows share this plot-event key"
     } else if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
-      result[[i]] <- "held_opportunity_unknown"
+      status[[i]] <- "held_opportunity_unknown"
+      reason[[i]] <- "samplingImpractical is missing"
     } else if (!identical(sampling[[i]], "ok")) {
-      result[[i]] <- "held_sampling_impractical"
+      status[[i]] <- "held_sampling_impractical"
+      reason[[i]] <- paste0(
+        "samplingImpractical=", as.character(sampling_impractical[[i]])
+      )
     } else if (identical(collected[[i]], "dendrometeronly")) {
-      result[[i]] <- "held_dendrometer_only"
+      status[[i]] <- "held_dendrometer_only"
+      reason[[i]] <- "dataCollected=dendrometerOnly cannot scale a plot response"
     } else if (!identical(collected[[i]], "allgrowthforms")) {
-      result[[i]] <- "held_opportunity_unknown"
+      status[[i]] <- "held_opportunity_unknown"
+      raw_collected <- as.character(data_collected[[i]])
+      reason[[i]] <- if (is.na(raw_collected) || !nzchar(raw_collected)) {
+        "dataCollected is missing"
+      } else {
+        paste0("dataCollected=", raw_collected)
+      }
     } else if (!is.finite(area[[i]]) || area[[i]] <= 0) {
-      result[[i]] <- "held_missing_area"
+      status[[i]] <- "held_missing_area"
+      reason[[i]] <- "event-specific total sampled area is missing or non-positive"
     } else if (records[[i]] > 0L && identical(presence[[i]], "absent")) {
-      result[[i]] <- "held_presence_record_conflict"
+      status[[i]] <- "held_presence_record_conflict"
+      reason[[i]] <- "presence says absent but measurement records exist"
     } else if (is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
-      result[[i]] <- "held_identity_conflict"
+      status[[i]] <- "held_identity_conflict"
+      reason[[i]] <- sprintf(
+        "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
+        identity_conflicts[[i]], if (identity_conflicts[[i]] == 1L) "" else "s",
+        if (identity_conflicts[[i]] == 1L) "s" else ""
+      )
     } else if (invalid_metric[[i]] > 0L) {
-      result[[i]] <- "held_metric_invalid"
+      status[[i]] <- "held_metric_invalid"
+      reason[[i]] <- sprintf(
+        "%d live channel record%s lack%s a finite positive threshold-compatible diameter",
+        invalid_metric[[i]], if (invalid_metric[[i]] == 1L) "" else "s",
+        if (invalid_metric[[i]] == 1L) "s" else ""
+      )
     } else if (records[[i]] > 0L) {
-      result[[i]] <- "sampled_with_records"
+      status[[i]] <- "sampled_with_records"
+      reason[[i]] <- "supported all-growth-forms event with measurement records"
     } else if (identical(presence[[i]], "absent")) {
-      result[[i]] <- "sampled_absence"
+      status[[i]] <- "sampled_absence"
+      reason[[i]] <- "explicit plot-scale absence in a supported event"
     } else if (identical(presence[[i]], "present")) {
-      result[[i]] <- "held_presence_record_conflict"
+      status[[i]] <- "held_presence_record_conflict"
+      reason[[i]] <- "presence says sampled/present but no measurement records exist"
     } else {
-      result[[i]] <- "held_opportunity_unknown"
+      status[[i]] <- "held_opportunity_unknown"
+      reason[[i]] <- "no records and presence does not establish sampled absence"
     }
   }
-  result
+  data.frame(status = status, reason = reason, stringsAsFactors = FALSE)
 }
 read_hash_ledger <- function(path, expected_names, label) {
   if (!file.exists(path)) return(NULL)
@@ -177,11 +331,16 @@ v2_tree_required <- c(
   "measurementHeight", "basalMeasurementHeight", "changedMeasurementLocation",
   "tagStatus", "dendrometerCondition", "heightQualifier", "dataQF",
   "source_uid", "protocol_stem_key", "protocol_key_group_n",
-  "protocol_key_conflict", "plant_key", "event_key"
+  "protocol_key_conflict", "opportunity_source_missing", "plant_key", "event_key",
+  "mapping_source_uid", "mappingMatched", "taxonID", "scientificName",
+  "taxon_label", "taxon_resolution"
 )
 v2_plot_required <- c(
   "opportunity_source_uid", "opportunity_source_record_count",
   "opportunity_key_conflict", "opportunity_source_uids",
+  "opportunity_source_missing", "measurement_record_count_all",
+  "measurement_date_min", "measurement_date_max",
+  "measurement_date_distinct_n",
   "plotID", "eventID", "date", "year", "eventType", "plotType",
   "samplingImpractical", "dataCollected", "treesPresent", "shrubsPresent",
   "treePresence", "shrubSaplingPresence", "area_trees", "area_shrub",
@@ -198,6 +357,9 @@ denominator_mismatches <- list()
 v2_sites <- character(0)
 apparent_source_inventory <- character(0)
 opportunity_source_inventory <- character(0)
+measurement_only_context_total <- 0L
+measurement_without_source_total <- 0L
+measurement_only_sites <- character(0)
 
 for (path in site_files) {
   site <- sub("[.]rds$", "", basename(path))
@@ -227,7 +389,7 @@ for (path in site_files) {
     next
   }
   if (is_v2 && (!is.data.frame(bundle$opportunity_source) ||
-                !all(c("source_record_key", "protocol_key_group_n",
+                !all(c("uid", "source_record_key", "protocol_key_group_n",
                        "protocol_key_conflict") %in% names(bundle$opportunity_source)))) {
     note(sprintf("%s opportunity_source is missing source identity fields", site))
     next
@@ -253,6 +415,8 @@ for (path in site_files) {
       note(sprintf("%s lacks the exact embedded v2 contract", site))
     } else {
       if (!identical(as.character(contract$source_record_key), "source_uid") ||
+          !identical(as.character(contract$mapping_source_record_key),
+                     "mapping_source_uid") ||
           !identical(as.character(contract$protocol_stem_locator),
                      c("plotID", "eventID", "individualID", "tempStemID")) ||
           !identical(as.character(contract$opportunity_source_record_key),
@@ -292,13 +456,28 @@ for (path in site_files) {
         trees, c("plotID", "eventID", "individualID", "tempStemID")
       )
       expected_group_n <- as.integer(table(protocol_key)[protocol_key])
-      if (!identical(as.integer(trees$protocol_key_group_n), expected_group_n) ||
+      stored_group_n <- exact_nonnegative_integer(
+        trees$protocol_key_group_n,
+        paste(site, "apparent-individual locator group counts")
+      )
+      if (!identical(stored_group_n, expected_group_n) ||
           !identical(as.logical(trees$protocol_key_conflict), expected_group_n > 1L) ||
           !identical(as.character(trees$protocol_stem_key), protocol_key))
         note(sprintf("%s apparent-individual protocol locator audit is inconsistent", site))
+      derivation_problems <- row_derivation_problems(trees)
+      if (length(derivation_problems)) {
+        note(sprintf(
+          "%s row-derived invariants differ from preserved source fields: %s",
+          site, paste(derivation_problems, collapse = ", ")
+        ))
+      }
     }
-    if (any(!nonblank(opportunity_source$source_record_key)) ||
-        anyDuplicated(as.character(opportunity_source$source_record_key)))
+    if (any(!nonblank(opportunity_source$uid)) ||
+        anyDuplicated(as.character(opportunity_source$uid)) ||
+        any(!nonblank(opportunity_source$source_record_key)) ||
+        anyDuplicated(as.character(opportunity_source$source_record_key)) ||
+        !identical(as.character(opportunity_source$source_record_key),
+                   as.character(opportunity_source$uid)))
       note(sprintf("%s opportunity source uids are blank or non-unique", site))
     opportunity_source_inventory <- c(
       opportunity_source_inventory,
@@ -309,8 +488,11 @@ for (path in site_files) {
     )
     source_event_key <- release_key(opportunity_source, c("eventID", "plotID"))
     expected_source_group_n <- as.integer(table(source_event_key)[source_event_key])
-    if (!identical(as.integer(opportunity_source$protocol_key_group_n),
-                   expected_source_group_n) ||
+    stored_source_group_n <- exact_nonnegative_integer(
+      opportunity_source$protocol_key_group_n,
+      paste(site, "opportunity-source locator group counts")
+    )
+    if (!identical(stored_source_group_n, expected_source_group_n) ||
         !identical(as.logical(opportunity_source$protocol_key_conflict),
                    expected_source_group_n > 1L))
       note(sprintf("%s opportunity source key audit is inconsistent", site))
@@ -319,26 +501,133 @@ for (path in site_files) {
     if (anyDuplicated(release_key(plots, c("eventID", "plotID"))))
       note(sprintf("%s duplicates eventID + plotID opportunity rows", site))
     canonical_keys <- release_key(plots, c("eventID", "plotID"))
-    if (!setequal(unique(source_event_key), canonical_keys))
-      note(sprintf("%s source and canonical opportunity key inventories differ", site))
-    canonical_source_n <- as.integer(table(source_event_key)[canonical_keys])
+    source_missing <- as.logical(plots$opportunity_source_missing)
+    if (any(is.na(source_missing)))
+      note(sprintf("%s has unknown opportunity-source-missing flags", site))
+    source_missing[is.na(source_missing)] <- FALSE
+    source_backed_keys <- canonical_keys[!source_missing]
+    if (!setequal(unique(source_event_key), source_backed_keys))
+      note(sprintf("%s published source and source-backed context inventories differ", site))
+    measurement_keys <- release_key(trees, c("eventID", "plotID"))
+    expected_missing_keys <- setdiff(unique(measurement_keys), unique(source_event_key))
+    if (!setequal(canonical_keys[source_missing], expected_missing_keys) ||
+        length(setdiff(unique(measurement_keys), canonical_keys)))
+      note(sprintf("%s measurement-only contexts do not equal source-key gaps", site))
+    if (any(as.integer(table(measurement_keys)[canonical_keys[source_missing]]) < 1L,
+            na.rm = TRUE) ||
+        any(is.na(as.integer(table(measurement_keys)[canonical_keys[source_missing]]))))
+      note(sprintf("%s has source-missing contexts without measurement rows", site))
+
+    canonical_source_n <- integer(nrow(plots))
+    canonical_source_n[!source_missing] <- as.integer(
+      table(source_event_key)[source_backed_keys]
+    )
     source_uid_sets <- tapply(
       as.character(opportunity_source$source_record_key), source_event_key,
-      function(value) paste(sort(unique(value)), collapse = ";")
+      function(value) {
+        value <- unique(value)
+        paste(value[vst_byte_order(value)], collapse = ";")
+      }
     )
-    canonical_uid_sets <- unname(source_uid_sets[canonical_keys])
-    if (any(is.na(canonical_source_n)) ||
-        !identical(as.integer(plots$opportunity_source_record_count), canonical_source_n) ||
+    canonical_uid_sets <- rep(NA_character_, nrow(plots))
+    canonical_uid_sets[!source_missing] <- unname(
+      source_uid_sets[source_backed_keys]
+    )
+    selected_source_uid <- as.character(plots$opportunity_source_uid)
+    selected_is_known <- mapply(function(uid, uids, missing) {
+      if (missing) return(is.na(uid) || !nzchar(trimws(uid)))
+      if (is.na(uid) || !nzchar(trimws(uid)) || is.na(uids)) return(FALSE)
+      uid %in% strsplit(uids, ";", fixed = TRUE)[[1L]]
+    }, selected_source_uid, canonical_uid_sets, source_missing,
+    USE.NAMES = FALSE)
+    stored_source_n <- exact_nonnegative_integer(
+      plots$opportunity_source_record_count,
+      paste(site, "opportunity source record counts")
+    )
+    if (!all(selected_is_known) ||
+        !identical(stored_source_n, canonical_source_n) ||
         !identical(as.logical(plots$opportunity_key_conflict), canonical_source_n > 1L) ||
         !identical(as.character(plots$opportunity_source_uids), canonical_uid_sets))
-      note(sprintf("%s canonical opportunity conflict audit differs from source rows", site))
-    if (nrow(trees)) {
-      orphan <- setdiff(release_key(trees, c("plotID", "eventID")),
-                        release_key(plots, c("plotID", "eventID")))
-      if (length(orphan))
-        note(sprintf("%s has %d measurement event keys without opportunity rows", site,
-                     length(unique(orphan))))
+      note(sprintf("%s plot-event context source audit differs from source rows", site))
+    selected_source_parity <- vst_selected_source_parity(
+      plots, opportunity_source
+    )
+    if (!selected_source_parity$ok) {
+      note(sprintf(
+        "%s canonical context differs from selected opportunity source row: %s",
+        site, paste(selected_source_parity$fields, collapse = ",")
+      ))
     }
+    source_derived_fields <- setdiff(names(plots), VST_CONTEXT_DERIVED_FIELDS)
+    invented <- vapply(source_derived_fields, function(field) {
+      value <- plots[[field]][source_missing]
+      if (is.character(value) || is.factor(value)) any(nonblank(value)) else any(!is.na(value))
+    }, logical(1))
+    if (any(invented) || any(plots$opportunity_key_conflict[source_missing] %in% TRUE))
+      note(sprintf("%s source-missing contexts invent published opportunity fields", site))
+
+    expected_tree_missing <- measurement_keys %in% canonical_keys[source_missing]
+    if (!identical(as.logical(trees$opportunity_source_missing),
+                   expected_tree_missing))
+      note(sprintf("%s measurement-row source-missing flags disagree with contexts", site))
+    expected_measurement_count <- as.integer(table(measurement_keys)[canonical_keys])
+    expected_measurement_count[is.na(expected_measurement_count)] <- 0L
+    stored_measurement_count <- exact_nonnegative_integer(
+      plots$measurement_record_count_all,
+      paste(site, "context measurement record counts")
+    )
+    stored_measurement_date_n <- exact_nonnegative_integer(
+      plots$measurement_date_distinct_n,
+      paste(site, "context distinct measurement-date counts")
+    )
+    if (!inherits(plots$measurement_date_min, "Date") ||
+        !inherits(plots$measurement_date_max, "Date")) {
+      note(sprintf("%s context measurement date bounds are not Date vectors", site))
+    }
+    expected_date_min <- expected_date_max <- rep(NA_real_, nrow(plots))
+    expected_date_n <- integer(nrow(plots))
+    if (nrow(trees)) {
+      measurement_date_number <- date_number(trees$date)
+      date_min <- tapply(measurement_date_number, measurement_keys, function(value) {
+        value <- value[is.finite(value)]
+        if (length(value)) min(value) else NA_real_
+      })
+      date_max <- tapply(measurement_date_number, measurement_keys, function(value) {
+        value <- value[is.finite(value)]
+        if (length(value)) max(value) else NA_real_
+      })
+      date_n <- tapply(measurement_date_number, measurement_keys, function(value) {
+        as.integer(length(unique(value[is.finite(value)])))
+      })
+      expected_date_min <- unname(date_min[canonical_keys])
+      expected_date_max <- unname(date_max[canonical_keys])
+      expected_date_n <- as.integer(unname(date_n[canonical_keys]))
+      expected_date_n[is.na(expected_date_n)] <- 0L
+    }
+    if (!identical(stored_measurement_count, expected_measurement_count) ||
+        !identical(date_number(plots$measurement_date_min), expected_date_min) ||
+        !identical(date_number(plots$measurement_date_max), expected_date_max) ||
+        !identical(stored_measurement_date_n, expected_date_n))
+      note(sprintf("%s context measurement count/date summaries differ from preserved rows", site))
+
+    expected_missing_n <- as.integer(sum(source_missing))
+    expected_missing_records <- as.integer(sum(measurement_keys %in% canonical_keys[source_missing]))
+    measurement_only_context_total <- measurement_only_context_total + expected_missing_n
+    measurement_without_source_total <- measurement_without_source_total +
+      expected_missing_records
+    if (expected_missing_n > 0L) measurement_only_sites <- c(measurement_only_sites, site)
+    stored_meta_missing_n <- exact_nonnegative_integer(
+      bundle$meta$n_measurement_only_contexts %||% NA_integer_,
+      paste(site, "metadata measurement-only context count")
+    )
+    stored_meta_missing_records <- exact_nonnegative_integer(
+      bundle$meta$n_measurement_records_without_opportunity_source %||% NA_integer_,
+      paste(site, "metadata measurements-without-source count")
+    )
+    if (!identical(stored_meta_missing_n,
+                   expected_missing_n) ||
+        !identical(stored_meta_missing_records, expected_missing_records))
+      note(sprintf("%s metadata source-missing counts differ from preserved rows", site))
 
     tree_form <- tolower(trimws(as.character(trees$growthForm))) %in%
       c("single bole tree", "multi-bole tree")
@@ -346,7 +635,9 @@ for (path in site_files) {
       c("single shrub", "small shrub", "sapling")
     tree_diameter <- suppressWarnings(as.numeric(trees$stemDiameter))
     shrub_diameter <- suppressWarnings(as.numeric(trees$basalStemDiameter))
-    live <- trees$live %in% TRUE
+    live <- grepl(
+      "^live", trimws(as.character(trees$plantStatus)), ignore.case = TRUE
+    )
     recomputed <- list(
       tree = list(
         records = event_counts(trees, plots, tree_form),
@@ -405,15 +696,18 @@ for (path in site_files) {
       if (!identical(as.integer(identity_conflicts),
                      recomputed[[channel]]$identity_conflicts))
         note(sprintf("%s %s identity-conflict counts differ from preserved source rows", site, channel))
-      expected_status <- expected_support_status(
+      expected_decision <- expected_support_decision(
         area, plots$samplingImpractical, plots$dataCollected,
         recomputed[[channel]]$presence, recomputed[[channel]]$records,
         recomputed[[channel]]$invalid,
         recomputed[[channel]]$identity_conflicts,
-        plots$opportunity_key_conflict
+        plots$opportunity_key_conflict,
+        plots$opportunity_source_missing
       )
-      if (!identical(as.character(status), expected_status))
+      if (!identical(as.character(status), expected_decision$status))
         note(sprintf("%s %s support states violate fail-closed precedence", site, channel))
+      if (!identical(as.character(reason), expected_decision$reason))
+        note(sprintf("%s %s support reasons differ from the recomputed decision", site, channel))
       if (any(supported_rows & invalid != 0L, na.rm = TRUE))
         note(sprintf("%s %s supported rows contain invalid required metrics", site, channel))
       if (any(status == "held_metric_invalid" & invalid <= 0L, na.rm = TRUE))
@@ -422,6 +716,9 @@ for (path in site_files) {
               identity_conflicts <= 0L & !plots$opportunity_key_conflict,
               na.rm = TRUE))
         note(sprintf("%s %s held_identity_conflict rows contain no source-key conflict", site, channel))
+      if (any(source_missing & status != "held_opportunity_source_missing") ||
+          any(!source_missing & status == "held_opportunity_source_missing"))
+        note(sprintf("%s %s source-missing status disagrees with context audit", site, channel))
       if (any(status == "sampled_absence" & records != 0L, na.rm = TRUE))
         note(sprintf("%s %s sampled_absence rows contain records", site, channel))
       if (any(status == "sampled_with_records" & records <= 0L, na.rm = TRUE))
@@ -457,6 +754,21 @@ for (label in names(source_inventories)) {
   }
 }
 
+if (identical(sort(v2_sites), expected)) {
+  if (!identical(measurement_only_context_total, 49L) ||
+      !identical(measurement_without_source_total, 4365L) ||
+      length(unique(measurement_only_sites)) != 11L) {
+    note(sprintf(
+      paste0(
+        "RELEASE-2026 measurement-only inventory changed: contexts=%d ",
+        "records=%d sites=%d; expected 49/4365/11"
+      ),
+      measurement_only_context_total, measurement_without_source_total,
+      length(unique(measurement_only_sites))
+    ))
+  }
+}
+
 receipt_count <- sum(vapply(receipts, Negate(is.null), logical(1)))
 common_receipt <- NULL
 if (length(v2_sites)) {
@@ -472,7 +784,8 @@ if (length(v2_sites)) {
       receipt_required <- c(
         "schema_version", "provenance_class", "product", "neon_release",
         "release_doi", "query_start", "query_end", "source_receipt_id",
-        "raw_source_digest", "neon_utilities_version", "built_at", "builder_commit"
+        "raw_source_digest", "neon_utilities_version", "source_normalization",
+        "built_at", "builder_commit"
       )
       missing <- receipt_required[!vapply(receipt_required, function(field) {
         value <- common_receipt[[field]]
@@ -483,8 +796,13 @@ if (length(v2_sites)) {
           !identical(as.character(common_receipt$product), "DP1.10098.001") ||
           !identical(as.character(common_receipt$neon_release), "RELEASE-2026") ||
           !identical(as.character(common_receipt$release_doi),
-                     "https://doi.org/10.48443/pypa-qf12"))
+                     "https://doi.org/10.48443/pypa-qf12") ||
+          !identical(as.character(common_receipt$source_normalization),
+                     VST_SOURCE_NORMALIZATION))
         note("source receipt does not identify the reviewed official RELEASE-2026 family")
+      if (!identical(as.character(common_receipt$query_start), "FULL_RELEASE") ||
+          !identical(as.character(common_receipt$query_end), "FULL_RELEASE"))
+        note("release candidate uses a bounded diagnostic query instead of FULL_RELEASE")
       if (!grepl("^[0-9a-f]{64}$", as.character(common_receipt$raw_source_digest)))
         note("source receipt raw_source_digest is not SHA-256")
     }
@@ -519,7 +837,8 @@ if (length(v2_sites)) site_index_required <- unique(c(
   site_index_required, "contract_id", "primary_channel", "n_supported_plots",
   "n_record_plots", "n_stems", "n_individuals", "n_taxa", "n_sampled_absence",
   "ba_ha", "density_ha", "qmd_cm", "metric_kind", "support_status",
-  "inference_scope"
+  "n_measurement_only_contexts",
+  "n_measurement_records_without_opportunity_source", "inference_scope"
 ))
 if (!is.null(site_index)) {
   if (!is.data.frame(site_index) || nrow(site_index) != length(expected))
@@ -551,6 +870,19 @@ if (!is.null(site_index)) {
                            "held_no_supported_event" |
                            as.character(site_index$metric_kind) != "unavailable")))
       note("site_index unavailable rows lack the exact held status/metric label")
+    diagnostic_fields <- c(
+      "n_measurement_only_contexts",
+      "n_measurement_records_without_opportunity_source"
+    )
+    if (any(vapply(diagnostic_fields, function(field) {
+      value <- suppressWarnings(as.numeric(site_index[[field]]))
+      any(!is.finite(value) | value < 0 | value != floor(value))
+    }, logical(1))))
+      note("site_index source-missing diagnostics are not nonnegative integers")
+    if (sum(site_index$n_measurement_only_contexts) != 49L ||
+        sum(site_index$n_measurement_records_without_opportunity_source) != 4365L ||
+        sum(site_index$n_measurement_only_contexts > 0L) != 11L)
+      note("site_index source-missing diagnostics differ from RELEASE-2026 49/4365/11")
   }
   if (receipt_count == length(expected) &&
       !identical(attr(site_index, "source_receipt"), common_receipt))
@@ -667,6 +999,29 @@ if (receipt_count == length(expected)) {
     note(sprintf("refreshed source ledgers are missing: %s",
                  paste(missing_ledgers, collapse = ",")))
   if (!length(missing_ledgers)) {
+    fetch_runtime <- tryCatch(
+      vst_read_fetch_runtime(ledger_files[["fetch_runtime"]]),
+      error = function(error) {
+        note(sprintf("fetch runtime receipt is invalid: %s", conditionMessage(error)))
+        NULL
+      }
+    )
+    if (!is.null(fetch_runtime) && !is.null(common_receipt)) {
+      expected_runtime <- list(
+        product = as.character(common_receipt$product),
+        officialNeonRelease = as.character(common_receipt$neon_release),
+        releaseDoi = as.character(common_receipt$release_doi),
+        queryStart = as.character(common_receipt$query_start),
+        queryEnd = as.character(common_receipt$query_end),
+        neonUtilities = as.character(common_receipt$neon_utilities_version),
+        sourceNormalization = as.character(common_receipt$source_normalization)
+      )
+      if (!identical(fetch_runtime, expected_runtime) ||
+          !identical(fetch_runtime$sourceNormalization,
+                     VST_SOURCE_NORMALIZATION)) {
+        note("durable fetch runtime differs from the embedded source receipt")
+      }
+    }
     raw_names <- paste0(expected, "_raw.rds")
     bundle_names <- paste0(expected, ".rds")
     raw_ledger <- read_hash_ledger(ledger_files[["raw"]], raw_names, "raw source")

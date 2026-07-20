@@ -53,6 +53,14 @@ woody records, but their 14 unique measurement `plotID` values match none of the
 **unmatched-denominator condition**, not evidence of a treeless or shrubless
 site. Current-source and Driver promotion remain held.
 
+The staged official RELEASE-2026 fetch adds a second, source-native limitation:
+4,365 published `vst_apparentindividual` rows across 49 plot-event keys at 11
+sites have no matching published `vst_perplotperyear` row. This is not repaired
+by borrowing another row or inferring absence/area. The v2 candidate preserves
+and flags those measurements, creates a measurement-only audit context with no
+invented opportunity metadata, and holds both channels as
+`held_opportunity_source_missing`.
+
 ## Contract for the next source family
 
 The next candidate targets the explicit immutable official release
@@ -62,14 +70,26 @@ sites. It must preserve:
 1. the official release tag and product DOI;
 2. actual candidate build date and builder commit as separate repository fields;
 3. exact raw per-file and aggregate SHA-256 ledgers;
-4. `neonUtilities` version and query subset (or explicit full-release selection);
-5. every published source `uid`, plus the plot-scoped event × individual ×
-   temporary-stem locator and its conflict audit;
+4. `neonUtilities` version and explicit `FULL_RELEASE` selection at both query
+   bounds; bounded subsets are diagnostic-only and cannot be promoted;
+5. every published apparent-individual and opportunity source `uid`, the exact
+   mapping/tagging `uid` selected for each joined plant identity, plus the
+   plot-scoped event × individual × temporary-stem locator and its conflict
+   audit; a latest-created mapping tie is unresolved and fails rather than being
+   ranked by UID, row order, or taxonomy;
 6. every per-plot/per-year opportunity source row, plus protocol, plot type,
    sampled-opportunity/area, and conflict fields;
 7. one identical receipt across every site bundle, both indexes, and durable
    source ledgers;
-8. strict 42-site accounting and hard failure on every missing table/site/key.
+8. strict 42-site accounting and hard failure on every missing table/site or
+   unaccounted observation/opportunity key.
+
+Fetched tables are materialized to portable vectors, validated for unique
+nonblank published `uid`, sorted in published-UID byte order, and assigned fresh
+sequential row names before pinned RDS serialization. The raw-family digest
+therefore identifies the normalized extraction bytes, not upstream HTTP arrival
+order. Source-key gaps are permitted only when they equal the exact registered
+measurement-only context ledger; any unaccounted key still fails hard.
 
 `skip_download=true` is reserved for revalidating an already-promoted v2 family;
 it deliberately rejects these legacy bundles. It preserves the promoted receipt

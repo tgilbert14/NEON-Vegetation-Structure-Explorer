@@ -41,7 +41,10 @@ mapPickerUI <- function(id, height = "560px", spinner = "#2f7fb5") {
 # RETURNS a reactiveVal of the tapped site code. The CALLER observes it and loads
 # the site IN THE MAIN SERVER — do NOT load inside the module: shinyjs::hide("splash")
 # called from a module session namespaces the id ("picker-splash") and silently no-ops.
-mapPickerServer <- function(id, site_table, radius_metric, color_fn, label_fn, popup_fn = NULL) {
+mapPickerServer <- function(id, site_table, radius_metric, color_fn, label_fn,
+                            popup_fn = NULL, dash_fn = NULL,
+                            legend_colors = NULL, legend_labels = NULL,
+                            legend_dashes = NULL, legend_title = NULL) {
   shiny::moduleServer(id, function(input, output, session) {
     output$map <- leaflet::renderLeaflet({
       st <- site_table[is.finite(site_table$lat) & is.finite(site_table$lng), , drop = FALSE]
@@ -57,16 +60,69 @@ mapPickerServer <- function(id, site_table, radius_metric, color_fn, label_fn, p
       pop_opts <- if (!is.null(popup_fn)) leaflet::popupOptions(maxWidth = 300, minWidth = 230,
         autoPan = TRUE, autoPanPadding = c(40, 55), keepInView = TRUE,
         closeButton = TRUE, closeOnClick = FALSE, className = "pm-pop-card") else NULL
-      leaflet::leaflet(st, options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) %>%
+      visible_radius <- picker_radius(st[[radius_metric]])
+      # Keep the visual hierarchy (6..24px radius), but place an invisible
+      # 44px-minimum interaction circle over every site. The visible ring is
+      # non-interactive so taps, hover labels, and popups all resolve through the
+      # larger target beneath it.
+      hit_radius <- pmax(22, visible_radius)
+      stroke_dash <- if (is.null(dash_fn)) rep("", nrow(st)) else as.character(dash_fn(st))
+      stroke_dash[is.na(stroke_dash)] <- ""
+      # Initial national zoom places several real NEON sites inside one 44px hit
+      # target (dense-pair regression examples: STEI/TREE, DCFS/WOOD, BLAN/SCBI).
+      # Cluster the INTERACTIVE layer until those targets separate; a tap then
+      # zooms/spiderfies instead of silently opening whichever overlapping SVG
+      # happened to be painted last. The non-interactive rings remain the visual
+      # encoding underneath the cluster count.
+      cluster_options <- leaflet::markerClusterOptions(
+        showCoverageOnHover = FALSE,
+        zoomToBoundsOnClick = TRUE,
+        spiderfyOnMaxZoom = TRUE,
+        removeOutsideVisibleBounds = TRUE,
+        maxClusterRadius = 44,
+        iconCreateFunction = htmlwidgets::JS(
+          "function(cluster) { return new L.DivIcon({ html: '<div><span>' + cluster.getChildCount() + '</span></div>', className: 'marker-cluster veg-site-cluster', iconSize: new L.Point(48, 48) }); }"
+        )
+      )
+      map <- leaflet::leaflet(st, options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) %>%
         leaflet::addProviderTiles("CartoDB.Positron", options = leaflet::providerTileOptions(noWrap = TRUE)) %>%
         leaflet::setView(lng = -96, lat = 41, zoom = 4) %>%
         leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, layerId = ~site,
-          radius = picker_radius(st[[radius_metric]]), stroke = TRUE, color = "#ffffff",
-          weight = 1.4, opacity = 1, fillColor = color_fn(st), fillOpacity = 0.85,
+          radius = hit_radius, stroke = FALSE, color = "transparent", weight = 0,
+          opacity = 0, fillColor = "#ffffff", fillOpacity = 0.001,
           label = labs, popup = pops, popupOptions = pop_opts,
           labelOptions = leaflet::labelOptions(direction = "auto", textsize = "13px",
             style = list("font-family" = "Aptos, Segoe UI, system-ui, sans-serif", "box-shadow" = "0 3px 12px rgba(0,0,0,.18)")),
-          options = leaflet::markerOptions(riseOnHover = TRUE)) %>%
+          clusterOptions = cluster_options, clusterId = "site-hit-targets") %>%
+        leaflet::addCircleMarkers(lng = ~lng, lat = ~lat,
+          radius = visible_radius, stroke = TRUE, color = "#ffffff",
+          weight = 1.4, opacity = 1, fillColor = color_fn(st), fillOpacity = 0.85,
+          dashArray = stroke_dash,
+          options = leaflet::pathOptions(interactive = FALSE))
+      if (length(legend_colors) && length(legend_labels) &&
+          length(legend_colors) == length(legend_labels)) {
+        dashes <- if (length(legend_dashes) == length(legend_labels))
+          as.character(legend_dashes) else rep("", length(legend_labels))
+        styles <- ifelse(!nzchar(dashes), "solid",
+          ifelse(grepl("^2[[:space:]]", dashes), "dotted", "dashed"))
+        title <- if (is.null(legend_title) || !nzchar(as.character(legend_title)))
+          "Map key" else as.character(legend_title)
+        legend_html <- htmltools::tagList(
+          htmltools::tags$strong(title),
+          lapply(seq_along(legend_labels), function(i) htmltools::div(
+            class = "veg-channel-legend-row",
+            htmltools::span(
+              class = "veg-channel-legend-ring", `aria-hidden` = "true",
+              style = sprintf("--legend-color:%s;--legend-style:%s", legend_colors[[i]], styles[[i]])
+            ),
+            htmltools::span(as.character(legend_labels[[i]]))
+          ))
+        )
+        map <- map %>% leaflet::addControl(
+          html = as.character(legend_html), position = "bottomright",
+          className = "veg-channel-legend")
+      }
+      map %>%
         # Self-fix sizing: the splash leaflet binds before its container has a width
         # (the map has no intrinsic width, so the container can resolve to 0 until a
         # reflow happens) -> blank tiles/markers. invalidateSize alone can't help a

@@ -51,8 +51,11 @@ CSV/codebook/QC exports, and a sampled-plot PDF brief.
 - Duplicate `plotID + eventID` opportunity-source rows are likewise preserved and both physical
   channels are held as `held_identity_conflict`. Only a duplicate published source `uid` is a hard
   source-row-identity failure.
-- Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, and unmatched
-  opportunities are held/NA.
+- RELEASE-2026 also contains 4,365 measurement rows across 49 plot-events at 11 sites without a
+  matching published `vst_perplotperyear` row. Those measurements remain visible, but their event is
+  `held_opportunity_source_missing`; no effort, absence, date, area, or denominator is invented.
+- Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, and
+  opportunity-source-missing contexts are held/NA.
 - Sampled areas remain event-specific; every finite positive compatible area—including a 40 m² nested
   area—is retained.
 - Large-tree DBH area and shrub/sapling basal-cover area are separate physical channels. They are not
@@ -75,10 +78,10 @@ The v2 build targets official **RELEASE-2026**, provisional data excluded, with 
 
 - `trees` preserves published source `uid`, the documented and plot-scoped operational locators,
   plot + plant identity, event/date, taxonomy, growth form, status, diameter/height,
-  measurement-point, and available QC fields;
-- `plots` carries one deterministic plot-event presentation row, support state, sampled area, design,
-  presence, data-collected state, and identity-conflict audit fields; a conflicting row is never
-  treated as selected truth;
+  measurement-point, available QC fields, and an explicit opportunity-source-missing flag;
+- `plots` carries one deterministic plot-event context row for every published opportunity key plus
+  every measurement-only key. Source-missing contexts carry no invented opportunity date, effort,
+  presence, design, or area; separate measurement-sourced date/count fields keep what is known;
 - `opportunity_source` preserves every published plot-opportunity source row, including conflicting
   `plotID + eventID` records;
 - `meta` declares site, release, contract ID, source, and build provenance.

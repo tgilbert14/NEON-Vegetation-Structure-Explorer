@@ -71,14 +71,20 @@ ui <- bslib::page_fillable(
         div(class = "lpa-kicker", "NEON VEGETATION STRUCTURE", span("unofficial")),
         h1("Tagged. Measured. ", em("Still changing.")),
         p(class = "lpa-promise", "Follow real trees and shrubs through years of change."),
-        div(class = "lpa-trust",
-          span(bs_icon("geo-alt-fill"), " 42 places"),
-          span(bs_icon("tag-fill"), " real tagged plants"),
-          span(bs_icon("database-fill"), " public measurements")),
         tags$a(class = "lpa-skip", href = "#placeGateway", "Pick a place ", bs_icon("arrow-down"))),
       figure(class = "lpa-art",
-        tags$img(src = asset_url("assets/vegetation-living-poster.png"),
-          alt = "Editorial illustration of a tagged tree with a diameter tape and a shrub measured at its base."),
+        tags$picture(
+          tags$source(
+            type = "image/webp",
+            srcset = paste0(
+              asset_url("assets/vegetation-living-poster-840.webp"), " 840w, ",
+              asset_url("assets/vegetation-living-poster.webp"), " 1672w"
+            ),
+            sizes = "(max-width: 700px) 100vw, 58vw"
+          ),
+          tags$img(src = asset_url("assets/vegetation-living-poster.png"),
+            fetchpriority = "high", decoding = "async",
+            alt = "Editorial illustration of a tagged tree with a diameter tape and a shrub measured at its base.")),
         tags$figcaption("Editorial illustration—not a field photograph or data record."))),
 
     div(id = "placeGateway", class = "place-gateway",
@@ -92,7 +98,7 @@ ui <- bslib::page_fillable(
                        class = "btn-outline-dark"),
           actionLink("tourBtn", tagList(bs_icon("signpost-2"), " Quick tour")))),
       div(class = "splash-map-hint", bs_icon("hand-index-thumb"),
-        " Dot size reflects supported live plants; colour separates tree-DBH from shrub/sapling measurement channels. Grey or held places are unknown—not zero."),
+        " Dot size reflects supported live plants. The map key separates solid tree-DBH rings, dashed shrub/sapling rings, and dotted grey held places. Held means unknown—not zero."),
       mapPickerUI("picker", height = "500px", spinner = DDL$green),
       div(class = "select-panel select-panel-compact",
         div(class = "sp-field",

@@ -19,14 +19,6 @@ on:
         description: "Revalidate already-promoted v2 bundles and rebuild derived bytes only"
         type: boolean
         default: false
-      query_start:
-        description: "Optional YYYY-MM subset start; blank selects the full release"
-        type: string
-        required: false
-      query_end:
-        description: "Optional YYYY-MM subset end; blank selects the full release"
-        type: string
-        required: false
   pull_request:
     # This is the release-candidate route: the repository owner applies the
     # label below to an exact same-repository PR head. Forks and non-owner
@@ -55,6 +47,9 @@ jobs:
     if: >-
       ${{
         (github.event_name != 'workflow_dispatch' || inputs.skip_download != true) &&
+        (github.event_name != 'workflow_dispatch' ||
+         (github.actor == github.repository_owner &&
+          github.ref_name == github.event.repository.default_branch)) &&
         (github.event_name != 'pull_request' ||
          (github.event.label.name == 'build-vegetation-candidate' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
@@ -71,6 +66,7 @@ jobs:
       query_start: ${{ steps.receipt.outputs.query_start }}
       query_end: ${{ steps.receipt.outputs.query_end }}
       neon_utilities_version: ${{ steps.receipt.outputs.neon_utilities_version }}
+      source_normalization: ${{ steps.receipt.outputs.source_normalization }}
     steps:
       - name: Checkout immutable builder source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -100,8 +96,6 @@ jobs:
           NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
           VST_RAW_OUT_DIR: ${{ runner.temp }}/vegetation-raw
           VST_NEON_RELEASE: ${{ inputs.neon_release || 'RELEASE-2026' }}
-          VST_QUERY_START: ${{ inputs.query_start }}
-          VST_QUERY_END: ${{ inputs.query_end }}
         run: |
           set -euo pipefail
           if [[ -z "${NEON_TOKEN:-}" ]]; then
@@ -124,15 +118,18 @@ jobs:
           query_start=$(value queryStart)
           query_end=$(value queryEnd)
           neon_utilities_version=$(value neonUtilities)
+          source_normalization=$(value sourceNormalization)
           [[ "$raw_digest" =~ ^[0-9a-f]{64}$ ]]
           [[ "$neon_release" =~ ^RELEASE-[0-9]{4}$ ]]
           [[ "$release_doi" =~ ^https://doi[.]org/10[.][0-9]+/[^[:space:]]+$ ]]
+          [[ "$source_normalization" == "portable-vectors+published-uid-byte-order-v1" ]]
           echo "raw_digest=$raw_digest" >> "$GITHUB_OUTPUT"
           echo "neon_release=$neon_release" >> "$GITHUB_OUTPUT"
           echo "release_doi=$release_doi" >> "$GITHUB_OUTPUT"
           echo "query_start=$query_start" >> "$GITHUB_OUTPUT"
           echo "query_end=$query_end" >> "$GITHUB_OUTPUT"
           echo "neon_utilities_version=$neon_utilities_version" >> "$GITHUB_OUTPUT"
+          echo "source_normalization=$source_normalization" >> "$GITHUB_OUTPUT"
           echo "Validated $neon_release source receipt for 42 sites."
 
       - name: Upload immutable raw staging
@@ -147,6 +144,9 @@ jobs:
     needs: [fetch_raw]
     if: >-
       always() &&
+      (github.event_name != 'workflow_dispatch' ||
+       (github.actor == github.repository_owner &&
+        github.ref_name == github.event.repository.default_branch)) &&
       ((github.event_name == 'workflow_dispatch' && inputs.skip_download == true) ||
        needs.fetch_raw.result == 'success')
     runs-on: ubuntu-22.04
@@ -174,16 +174,16 @@ jobs:
             leaflet, DT, shinyjs, shinycssloaders, RColorBrewer, htmltools,
             digest, jsonlite, rsconnect, cpp11,
             url::https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz,
-            url::https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz
+            url::https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz,
+            url::https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz,
+            url::https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz,
+            url::https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz,
+            url::https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz,
+            url::https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz,
+            url::https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz
           pak-version: stable
           dependencies: '"hard"'
-          cache-version: vegetation-release-build-r452-2026-07-15-v1
+          cache-version: vegetation-geo-closure-v2
           cache: always
           install-pandoc: 'false'
           install-quarto: 'false'
@@ -209,6 +209,96 @@ jobs:
           name: vegetation-raw-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}
           path: ${{ runner.temp }}/vegetation-raw
 
+      - name: Independently verify downloaded raw staging
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_download == true) }}
+        env:
+          RAW_DIR: ${{ runner.temp }}/vegetation-raw
+          EXPECTED_RAW_DIGEST: ${{ needs.fetch_raw.outputs.raw_digest }}
+        run: |
+          set -euo pipefail
+          expected_sites=(
+            ABBY BART BLAN BONA CLBJ CPER DCFS DEJU DELA DSNY GRSM GUAN
+            HARV HEAL JERC JORN KONZ LAJA LENO MLBS MOAB NIWO NOGP ONAQ
+            ORNL OSBS PUUM RMNP SCBI SERC SJER SOAP SRER STEI TALL TEAK
+            TREE UKFS UNDE WOOD WREF YELL
+          )
+          expected_files=(
+            SOURCE-SHA256SUMS.txt SOURCE-FAMILY-SHA256.txt FETCH-RUNTIME.txt
+          )
+          for site in "${expected_sites[@]}"; do
+            expected_files+=("${site}_raw.rds")
+          done
+
+          [[ -d "$RAW_DIR" ]]
+          [[ "$EXPECTED_RAW_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          non_file_entry=$(find "$RAW_DIR" -mindepth 1 -maxdepth 1 ! -type f -print -quit)
+          if [[ -n "$non_file_entry" ]]; then
+            printf 'Unexpected non-file entry in raw staging: %q\n' "$non_file_entry" >&2
+            exit 1
+          fi
+          mapfile -d '' -t expected_inventory < <(
+            printf '%s\0' "${expected_files[@]}" | LC_ALL=C sort -z
+          )
+          mapfile -d '' -t actual_inventory < <(
+            find "$RAW_DIR" -mindepth 1 -maxdepth 1 -type f -printf '%f\0' |
+              LC_ALL=C sort -z
+          )
+          if (( ${#actual_inventory[@]} != ${#expected_inventory[@]} )); then
+            echo "Raw staging inventory has the wrong file count" >&2
+            exit 1
+          fi
+          for inventory_index in "${!expected_inventory[@]}"; do
+            if [[ "${actual_inventory[$inventory_index]}" != "${expected_inventory[$inventory_index]}" ]]; then
+              printf 'Raw staging inventory mismatch at %d: expected %q, found %q\n' \
+                "$inventory_index" "${expected_inventory[$inventory_index]}" \
+                "${actual_inventory[$inventory_index]}" >&2
+              exit 1
+            fi
+          done
+
+          mapfile -t ledger_lines < "$RAW_DIR/SOURCE-SHA256SUMS.txt"
+          if (( ${#ledger_lines[@]} != ${#expected_sites[@]} )); then
+            echo "Raw checksum ledger does not contain exactly 42 records" >&2
+            exit 1
+          fi
+          for ledger_index in "${!expected_sites[@]}"; do
+            ledger_line="${ledger_lines[$ledger_index]}"
+            if [[ ! "$ledger_line" =~ ^[0-9a-f]{64}\ [^/[:space:]]+$ ]]; then
+              echo "Raw checksum ledger has a malformed record" >&2
+              exit 1
+            fi
+            recorded_hash="${ledger_line%% *}"
+            recorded_name="${ledger_line#* }"
+            expected_name="${expected_sites[$ledger_index]}_raw.rds"
+            if [[ "$recorded_name" != "$expected_name" ]]; then
+              printf 'Raw checksum ledger record %d names %q; expected %q\n' \
+                "$ledger_index" "$recorded_name" "$expected_name" >&2
+              exit 1
+            fi
+            actual_hash=$(sha256sum "$RAW_DIR/$recorded_name")
+            actual_hash="${actual_hash%% *}"
+            if [[ "$actual_hash" != "$recorded_hash" ]]; then
+              printf 'Raw checksum mismatch for %q\n' "$recorded_name" >&2
+              exit 1
+            fi
+          done
+
+          mapfile -t family_lines < "$RAW_DIR/SOURCE-FAMILY-SHA256.txt"
+          if (( ${#family_lines[@]} != 1 )) ||
+             [[ ! "${family_lines[0]}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Raw family checksum file is malformed" >&2
+            exit 1
+          fi
+          recorded_family_digest="${family_lines[0]}"
+          ledger_digest=$(sha256sum "$RAW_DIR/SOURCE-SHA256SUMS.txt")
+          ledger_digest="${ledger_digest%% *}"
+          if [[ "$ledger_digest" != "$recorded_family_digest" ]] ||
+             [[ "$ledger_digest" != "$EXPECTED_RAW_DIGEST" ]]; then
+            echo "Raw family checksum does not bind the ledger to the fetch receipt" >&2
+            exit 1
+          fi
+          echo "Verified the exact 42-site raw inventory and every checksum."
+
       - name: Build and validate two isolated candidates
         env:
           SKIP_DOWNLOAD: ${{ inputs.skip_download || false }}
@@ -219,6 +309,7 @@ jobs:
           QUERY_START: ${{ needs.fetch_raw.outputs.query_start }}
           QUERY_END: ${{ needs.fetch_raw.outputs.query_end }}
           NEON_UTILITIES_VERSION: ${{ needs.fetch_raw.outputs.neon_utilities_version }}
+          SOURCE_NORMALIZATION: ${{ needs.fetch_raw.outputs.source_normalization }}
           BUILDER_COMMIT: ${{ env.VST_SOURCE_SHA }}
           REFRESH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -258,6 +349,7 @@ jobs:
                 export VST_SOURCE_RECEIPT_ID="VST-DP1.10098.001-${NEON_RELEASE}-sha256-${RAW_DIGEST}"
                 export VST_RAW_SOURCE_DIGEST="$RAW_DIGEST"
                 export VST_NEON_UTILITIES_VERSION="$NEON_UTILITIES_VERSION"
+                export VST_SOURCE_NORMALIZATION="$SOURCE_NORMALIZATION"
                 export VST_BUILT_AT="$build_date"
                 export VST_BUILDER_COMMIT="$BUILDER_COMMIT"
                 export VST_REFRESH_RUN_URL="$REFRESH_RUN_URL"
@@ -271,8 +363,10 @@ jobs:
               fi
               bash scripts/check_source_family.sh
               Rscript --vanilla scripts/verify_bundle.R
+              Rscript --vanilla scripts/verify_derived_parity.R
               Rscript --vanilla scripts/validation/test_bundle_contract.R
               Rscript --vanilla scripts/test_helpers.R
+              Rscript --vanilla scripts/validation/test_runtime_bundle_gate.R
               Rscript --vanilla scripts/write_manifest.R
               Rscript --vanilla scripts/verify_manifest.R
               Rscript --vanilla -e 'Sys.setenv(VST_LIVE="0"); source("global.R"); source("ui.R"); source("server.R"); stopifnot(length(BUNDLED) == 42L, is.function(server))'
@@ -280,20 +374,101 @@ jobs:
           }
           build_one "$RUNNER_TEMP/candidate-a"
           build_one "$RUNNER_TEMP/candidate-b"
+          expected_sites=(
+            ABBY BART BLAN BONA CLBJ CPER DCFS DEJU DELA DSNY GRSM GUAN
+            HARV HEAL JERC JORN KONZ LAJA LENO MLBS MOAB NIWO NOGP ONAQ
+            ORNL OSBS PUUM RMNP SCBI SERC SJER SOAP SRER STEI TALL TEAK
+            TREE UKFS UNDE WOOD WREF YELL
+          )
+          expected_paths=(
+            data/site_index.rds
+            data/search_index.rds
+            data/source/vegetation-raw-SHA256SUMS.txt
+            data/source/vegetation-raw-family-SHA256.txt
+            data/source/vegetation-fetch-runtime.txt
+            data/source/vegetation-bundle-SHA256SUMS.txt
+            data/source/vegetation-bundle-family-SHA256.txt
+            data/source/vegetation-data-quality-audit.csv
+            data/source/vegetation-data-quality-audit-SHA256.txt
+            data-sample/demo.rds
+            manifest.json
+            docs/VEGETATION-SOURCE-RECEIPT.md
+          )
+          for site in "${expected_sites[@]}"; do
+            expected_paths+=("data/sites/${site}.rds")
+          done
+          mapfile -d '' -t expected_paths < <(
+            printf '%s\0' "${expected_paths[@]}" | LC_ALL=C sort -z
+          )
+
+          verify_candidate_inventory() {
+            root=$1
+            [[ -f "$root/manifest.json" && ! -L "$root/manifest.json" ]]
+            [[ -f "$root/docs/VEGETATION-SOURCE-RECEIPT.md" &&
+               ! -L "$root/docs/VEGETATION-SOURCE-RECEIPT.md" ]]
+            unexpected_entry=$(find "$root/data" "$root/data-sample" -mindepth 1 \
+              ! -type f ! -type d -print -quit)
+            if [[ -n "$unexpected_entry" ]]; then
+              printf 'Unexpected non-file candidate entry: %q\n' "$unexpected_entry" >&2
+              exit 1
+            fi
+            mapfile -d '' -t actual_dirs < <(
+              cd "$root" && find data data-sample -type d -print0 | LC_ALL=C sort -z
+            )
+            expected_dirs=(data data-sample data/sites data/source)
+            mapfile -d '' -t expected_dirs < <(
+              printf '%s\0' "${expected_dirs[@]}" | LC_ALL=C sort -z
+            )
+            if (( ${#actual_dirs[@]} != ${#expected_dirs[@]} )); then
+              echo "Candidate release directories are not the exact allowlist" >&2
+              exit 1
+            fi
+            for inventory_index in "${!expected_dirs[@]}"; do
+              if [[ "${actual_dirs[$inventory_index]}" != "${expected_dirs[$inventory_index]}" ]]; then
+                printf 'Candidate directory mismatch at %d: expected %q, found %q\n' \
+                  "$inventory_index" "${expected_dirs[$inventory_index]}" \
+                  "${actual_dirs[$inventory_index]}" >&2
+                exit 1
+              fi
+            done
+            mapfile -d '' -t actual_paths < <(
+              (
+                cd "$root"
+                find data data-sample -type f -print0
+                printf '%s\0' manifest.json docs/VEGETATION-SOURCE-RECEIPT.md
+              ) | LC_ALL=C sort -z
+            )
+            if (( ${#actual_paths[@]} != ${#expected_paths[@]} )); then
+              echo "Candidate file inventory has the wrong size" >&2
+              exit 1
+            fi
+            for inventory_index in "${!expected_paths[@]}"; do
+              if [[ "${actual_paths[$inventory_index]}" != "${expected_paths[$inventory_index]}" ]]; then
+                printf 'Candidate file mismatch at %d: expected %q, found %q\n' \
+                  "$inventory_index" "${expected_paths[$inventory_index]}" \
+                  "${actual_paths[$inventory_index]}" >&2
+                exit 1
+              fi
+            done
+          }
           inventory() {
             root=$1
-            (
-              cd "$root"
-              find data data-sample -type f -print0
-              printf '%s\0' manifest.json docs/VEGETATION-SOURCE-RECEIPT.md
-            ) | LC_ALL=C sort -z | while IFS= read -r -d '' path; do
+            for path in "${expected_paths[@]}"; do
               sha256sum "$root/$path" | awk -v p="$path" '{print $1 " " p}'
             done
           }
+          verify_candidate_inventory "$RUNNER_TEMP/candidate-a"
+          verify_candidate_inventory "$RUNNER_TEMP/candidate-b"
           inventory "$RUNNER_TEMP/candidate-a" > "$RUNNER_TEMP/candidate-a.sha256"
           inventory "$RUNNER_TEMP/candidate-b" > "$RUNNER_TEMP/candidate-b.sha256"
           diff -u "$RUNNER_TEMP/candidate-a.sha256" "$RUNNER_TEMP/candidate-b.sha256"
-          cp "$RUNNER_TEMP/candidate-a.sha256" "$RUNNER_TEMP/candidate-a/CANDIDATE-SHA256SUMS.txt"
+          promotion="$RUNNER_TEMP/vegetation-promotion"
+          mkdir -p "$promotion"
+          for path in "${expected_paths[@]}"; do
+            mkdir -p "$promotion/$(dirname "$path")"
+            cp "$RUNNER_TEMP/candidate-a/$path" "$promotion/$path"
+          done
+          cp "$RUNNER_TEMP/candidate-a.sha256" "$promotion/CANDIDATE-SHA256SUMS.txt"
 
       - name: Upload validated candidate
         if: success()
@@ -303,11 +478,6 @@ jobs:
           # Publish only the checksum-backed promotion allowlist. The staged
           # repository also contains builder source, but those bytes are not a
           # release artifact and must never be overlaid onto a reviewed branch.
-          path: |
-            ${{ runner.temp }}/candidate-a/data
-            ${{ runner.temp }}/candidate-a/data-sample
-            ${{ runner.temp }}/candidate-a/manifest.json
-            ${{ runner.temp }}/candidate-a/docs/VEGETATION-SOURCE-RECEIPT.md
-            ${{ runner.temp }}/candidate-a/CANDIDATE-SHA256SUMS.txt
+          path: ${{ runner.temp }}/vegetation-promotion
           if-no-files-found: error
           retention-days: 7

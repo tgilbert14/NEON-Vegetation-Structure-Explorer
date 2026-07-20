@@ -2,10 +2,32 @@
 
 # Safe local orchestrator for a full Vegetation Structure candidate. This never
 # deletes or overwrites the committed data tree. Point VST_CANDIDATE_ROOT at a
-# new/empty directory outside the repository, set a closed VST_QUERY_END month,
-# and review/promote the resulting candidate through a pull request.
+# new/empty directory outside the repository and leave VST_QUERY_START/END blank
+# for the required full-release candidate. Closed month ranges are fetch-only
+# diagnostics and are deliberately rejected before candidate construction.
 
 repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+git_root <- trimws(system2("git", c("rev-parse", "--show-toplevel"), stdout = TRUE))
+if (length(git_root) != 1L ||
+    !identical(normalizePath(git_root, winslash = "/", mustWork = TRUE), repo_root)) {
+  stop("run the local candidate orchestrator from the exact repository root",
+       call. = FALSE)
+}
+dirty <- system2(
+  "git", c("status", "--porcelain=v1", "--untracked-files=all"),
+  stdout = TRUE, stderr = TRUE
+)
+if (length(dirty)) {
+  stop(
+    "local candidate source is dirty; commit/stash every change so builder_commit names the exact executed source",
+    call. = FALSE
+  )
+}
+head_commit <- trimws(system2("git", c("rev-parse", "HEAD"), stdout = TRUE))
+if (length(head_commit) != 1L ||
+    !grepl("^[0-9a-f]{40}$", head_commit, ignore.case = TRUE)) {
+  stop("could not resolve the exact local builder commit", call. = FALSE)
+}
 candidate_input <- trimws(Sys.getenv("VST_CANDIDATE_ROOT", unset = ""))
 if (!nzchar(candidate_input))
   stop("VST_CANDIDATE_ROOT is required; refreshes must build outside the repository",
@@ -36,20 +58,28 @@ receipt_value <- function(key) {
   sub(paste0("^", key, "="), "", line)
 }
 neon_version <- receipt_value("neonUtilities")
+source_normalization <- receipt_value("sourceNormalization")
+if (!identical(source_normalization, VST_SOURCE_NORMALIZATION)) {
+  stop("fetch runtime uses an unreviewed source normalization", call. = FALSE)
+}
 neon_release <- receipt_value("officialNeonRelease")
 release_doi <- receipt_value("releaseDoi")
 query_start <- receipt_value("queryStart")
 query_end <- receipt_value("queryEnd")
+if (!identical(query_start, "FULL_RELEASE") ||
+    !identical(query_end, "FULL_RELEASE")) {
+  stop(
+    "bounded query fetch completed as a local diagnostic, but cannot build a promotable candidate; rerun with VST_QUERY_START/END unset",
+    call. = FALSE
+  )
+}
 receipt_id <- sprintf("VST-DP1.10098.001-%s-sha256-%s", neon_release, raw_digest)
 builder_commit <- trimws(Sys.getenv("VST_BUILDER_COMMIT", unset = ""))
-if (!nzchar(builder_commit)) {
-  builder_commit <- trimws(system2("git", c("rev-parse", "HEAD"), stdout = TRUE))
-}
-if (length(builder_commit) != 1L ||
-    !grepl("^[0-9a-f]{40}$", builder_commit, ignore.case = TRUE)) {
-  stop("VST_BUILDER_COMMIT must identify the exact 40-character source commit",
+if (nzchar(builder_commit) && !identical(tolower(builder_commit), tolower(head_commit))) {
+  stop("VST_BUILDER_COMMIT differs from the clean working tree HEAD",
        call. = FALSE)
 }
+builder_commit <- head_commit
 
 Sys.setenv(
   VST_RAW_DIR = raw_dir,
@@ -69,6 +99,7 @@ Sys.setenv(
   VST_SOURCE_RECEIPT_ID = receipt_id,
   VST_RAW_SOURCE_DIGEST = raw_digest,
   VST_NEON_UTILITIES_VERSION = neon_version,
+  VST_SOURCE_NORMALIZATION = source_normalization,
   VST_BUILT_AT = format(Sys.Date(), "%Y-%m-%d"),
   VST_BUILDER_COMMIT = builder_commit
 )
