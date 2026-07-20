@@ -1,117 +1,483 @@
-name: Refresh NEON data bundle
+name: Propose official NEON vegetation refresh
 
-# Monthly rebuild of the per-site Vegetation-structure .rds bundles
-# (data/sites/*.rds) + the site index, then a PR. Runs late on the FIRST
-# SATURDAY NIGHT of each month (~11pm Arizona time) so any republish lands
-# off-peak. NEON publishes on a lag, so a monthly pull keeps the bundled data
-# current. Posit Connect Cloud auto-republishes when the PR merges to main.
-#
-# REQUIRES one repo secret (Settings → Secrets and variables → Actions):
-#   NEON_TOKEN   your NEON API token (optional but recommended; speeds the pull)
-# Trigger manually from the Actions tab (workflow_dispatch); tick "skip_download"
-# to just rebuild the index from the committed bundles (fast, no NEON pull).
+# Fetch, build, and validation are separate trust boundaries. Every job is
+# read-only. Each trigger produces an artifact for human review; no trigger
+# creates a branch, opens a pull request, or writes to main.
 
 on:
   schedule:
-    # Every Sunday 06:00 UTC == Saturday 23:00 America/Phoenix (Arizona, no DST).
-    # Cron can't express "first Saturday of the month", so we fire every Saturday
-    # night and let the `gate` job below proceed only on the first one.
-    - cron: "0 6 * * 0"
+    # One actual monthly trigger; no wall-clock gate that can skip after a delay.
+    - cron: "17 13 3 * *"
   workflow_dispatch:
     inputs:
+      neon_release:
+        description: "Explicit immutable NEON release tag"
+        type: string
+        required: true
+        default: "RELEASE-2026"
       skip_download:
-        description: "Skip the NEON re-pull; just rebuild the index from committed bundles (fast test)"
+        description: "Revalidate already-promoted v2 bundles and rebuild derived bytes only"
         type: boolean
         default: false
+  pull_request:
+    # This is the release-candidate route: the repository owner applies the
+    # label below to an exact same-repository PR head. Forks and non-owner
+    # labels cannot reach the NEON token.
+    types: [labeled]
 
 permissions:
-  contents: write          # commit the refreshed bundle to the PR branch
-  pull-requests: write     # open/update the data-refresh PR
+  contents: read
+
+concurrency:
+  group: vegetation-structure-refresh
+  cancel-in-progress: false
+
+env:
+  RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  RENV_CONFIG_REPOS_OVERRIDE: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  VST_RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  OPENBLAS_CORETYPE: Haswell
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  VST_LIVE: "0"
+  VST_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
-  # Gate: only the FIRST Saturday night (Arizona time) runs the heavy refresh.
-  # Manual runs (workflow_dispatch) always proceed.
-  gate:
-    runs-on: ubuntu-latest
+  fetch_raw:
+    if: >-
+      ${{
+        (github.event_name != 'workflow_dispatch' || inputs.skip_download != true) &&
+        (github.event_name != 'workflow_dispatch' ||
+         (github.actor == github.repository_owner &&
+          github.ref_name == github.event.repository.default_branch)) &&
+        (github.event_name != 'pull_request' ||
+         (github.event.label.name == 'build-vegetation-candidate' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor == github.repository_owner))
+      }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
     outputs:
-      run: ${{ steps.check.outputs.run }}
+      raw_digest: ${{ steps.receipt.outputs.raw_digest }}
+      neon_release: ${{ steps.receipt.outputs.neon_release }}
+      release_doi: ${{ steps.receipt.outputs.release_doi }}
+      query_start: ${{ steps.receipt.outputs.query_start }}
+      query_end: ${{ steps.receipt.outputs.query_end }}
+      neon_utilities_version: ${{ steps.receipt.outputs.neon_utilities_version }}
+      source_normalization: ${{ steps.receipt.outputs.source_normalization }}
     steps:
-      - id: check
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual run — proceeding."
-            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          dow=$(TZ='America/Phoenix' date +%u)    # 6 = Saturday
-          day=$(TZ='America/Phoenix' date +%-d)   # day-of-month, no leading zero
-          if [ "$dow" = "6" ] && [ "$day" -le 7 ]; then
-            echo "First Saturday in Arizona (day $day) — proceeding."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Not the first Saturday in Arizona (dow=$dow day=$day) — skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  refresh:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Checkout immutable builder source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}   # push to main → Connect Cloud auto-redeploys
+          ref: ${{ env.VST_SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - uses: r-lib/actions/setup-r@v2
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          use-public-rspm: true
+          r-version: '4.5.2'
+          use-public-rspm: false
 
-      - name: Install R packages
-        uses: r-lib/actions/setup-r-dependencies@v2
+      - name: Install fetch-only closure
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          packages: >
-            neonUtilities, dplyr, tibble, tidyr, stringr, jsonlite, rsconnect
+          packages: neonUtilities, arrow, digest, jsonlite
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: vegetation-release-fetch-r452-2026-07-15-v1
+          cache: always
+          install-pandoc: 'false'
+          install-quarto: 'false'
 
-      - name: Rebuild the per-site bundles (full NEON re-pull)
-        if: ${{ github.event.inputs.skip_download != 'true' }}
+      - name: Fetch the exact official 42-site family into empty staging
         env:
           NEON_TOKEN: ${{ secrets.NEON_TOKEN }}
+          VST_RAW_OUT_DIR: ${{ runner.temp }}/vegetation-raw
+          VST_NEON_RELEASE: ${{ inputs.neon_release || 'RELEASE-2026' }}
         run: |
-          rm -f data/sites/*.rds
-          Rscript scripts/refresh_data.R
-
-      - name: Rebuild the index only (skip-download fast path)
-        if: ${{ github.event.inputs.skip_download == 'true' }}
-        run: |
-          Rscript scripts/build_site_index.R
-
-      # Rebuild the bundled "Search the network" index from the committed per-site
-      # bundles (data/sites/*.rds) so it never goes stale. Derives only from
-      # committed data, so it runs in BOTH the full-pull and skip-download paths.
-      - name: Rebuild the search index
-        run: |
-          Rscript scripts/build_search_index.R
-
-      # Regenerate the lean manifest.json (CHECK-ONLY gate: fails loud if
-      # neonUtilities/arrow slipped in; data.table excused for plotly). Committed
-      # below alongside the refreshed bundles so Connect serves a current manifest.
-      - name: Regenerate the lean manifest
-        run: |
-          Rscript scripts/write_manifest.R
-
-      # Commit + push the refreshed bundle DIRECTLY to main — THIS is the deploy:
-      # the push makes Connect Cloud auto-republish (no human merge in the loop,
-      # matching the Small Mammal / Plant / Beetle siblings). Guarded so it no-ops
-      # cleanly when nothing changed.
-      - name: Commit & push refreshed bundles to main
-        run: |
-          git config user.name  "neon-data-bot"
-          git config user.email "neon-data-bot@users.noreply.github.com"
-          git add -A data          # bundles + site_index + search_index
-          git add manifest.json    # regenerated above (root-level, not under data/)
-          if git diff --cached --quiet; then
-            echo "No data changes — nothing to commit or deploy."
-          else
-            git commit -m "data: monthly NEON vegetation-structure refresh [bot]"
-            git push origin HEAD:main
-            echo "Pushed refreshed bundles to main — Connect Cloud will redeploy."
+          set -euo pipefail
+          if [[ -z "${NEON_TOKEN:-}" ]]; then
+            echo "::error title=Missing NEON token::NEON_TOKEN is required for official release downloads"
+            exit 1
           fi
+          mkdir -p "$VST_RAW_OUT_DIR"
+          Rscript --vanilla scripts/fetch_veg_data.R
+
+      - name: Capture non-secret source receipt outputs
+        id: receipt
+        env:
+          RAW_DIR: ${{ runner.temp }}/vegetation-raw
+        run: |
+          set -euo pipefail
+          raw_digest=$(tr -d '\r\n' < "$RAW_DIR/SOURCE-FAMILY-SHA256.txt")
+          value() { sed -n "s/^$1=//p" "$RAW_DIR/FETCH-RUNTIME.txt"; }
+          neon_release=$(value officialNeonRelease)
+          release_doi=$(value releaseDoi)
+          query_start=$(value queryStart)
+          query_end=$(value queryEnd)
+          neon_utilities_version=$(value neonUtilities)
+          source_normalization=$(value sourceNormalization)
+          [[ "$raw_digest" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$neon_release" =~ ^RELEASE-[0-9]{4}$ ]]
+          [[ "$release_doi" =~ ^https://doi[.]org/10[.][0-9]+/[^[:space:]]+$ ]]
+          [[ "$source_normalization" == "portable-vectors+published-uid-byte-order-v1" ]]
+          echo "raw_digest=$raw_digest" >> "$GITHUB_OUTPUT"
+          echo "neon_release=$neon_release" >> "$GITHUB_OUTPUT"
+          echo "release_doi=$release_doi" >> "$GITHUB_OUTPUT"
+          echo "query_start=$query_start" >> "$GITHUB_OUTPUT"
+          echo "query_end=$query_end" >> "$GITHUB_OUTPUT"
+          echo "neon_utilities_version=$neon_utilities_version" >> "$GITHUB_OUTPUT"
+          echo "source_normalization=$source_normalization" >> "$GITHUB_OUTPUT"
+          echo "Validated $neon_release source receipt for 42 sites."
+
+      - name: Upload immutable raw staging
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vegetation-raw-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/vegetation-raw
+          if-no-files-found: error
+          retention-days: 7
+
+  build_candidate:
+    needs: [fetch_raw]
+    if: >-
+      always() &&
+      (github.event_name != 'workflow_dispatch' ||
+       (github.actor == github.repository_owner &&
+        github.ref_name == github.event.repository.default_branch)) &&
+      ((github.event_name == 'workflow_dispatch' && inputs.skip_download == true) ||
+       needs.fetch_raw.result == 'success')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout immutable builder source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.VST_SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: '4.5.2'
+          use-public-rspm: false
+
+      - name: Install pinned build, runtime, and verification closure
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          packages: >
+            shiny, bslib, bsicons, dplyr, tidyr, stringr, tibble, plotly,
+            leaflet, DT, shinyjs, shinycssloaders, RColorBrewer, htmltools,
+            digest, jsonlite, rsconnect, cpp11,
+            url::https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz,
+            url::https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz,
+            url::https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz,
+            url::https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz,
+            url::https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz,
+            url::https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz,
+            url::https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz,
+            url::https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: vegetation-geo-closure-v2
+          cache: always
+          install-pandoc: 'false'
+          install-quarto: 'false'
+
+      - name: Verify deterministic numeric runtime
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ctypes
+          lib = ctypes.CDLL("libopenblas.so.0")
+          lib.openblas_get_corename.restype = ctypes.c_char_p
+          core = lib.openblas_get_corename().decode("ascii")
+          threads = lib.openblas_get_num_threads()
+          print(f"OpenBLAS core={core} threads={threads}")
+          if core.lower() != "haswell" or threads != 1:
+              raise SystemExit("numeric runtime contract failed")
+          PY
+
+      - name: Download exact raw staging
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_download == true) }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vegetation-raw-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/vegetation-raw
+
+      - name: Independently verify downloaded raw staging
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_download == true) }}
+        env:
+          RAW_DIR: ${{ runner.temp }}/vegetation-raw
+          EXPECTED_RAW_DIGEST: ${{ needs.fetch_raw.outputs.raw_digest }}
+        run: |
+          set -euo pipefail
+          expected_sites=(
+            ABBY BART BLAN BONA CLBJ CPER DCFS DEJU DELA DSNY GRSM GUAN
+            HARV HEAL JERC JORN KONZ LAJA LENO MLBS MOAB NIWO NOGP ONAQ
+            ORNL OSBS PUUM RMNP SCBI SERC SJER SOAP SRER STEI TALL TEAK
+            TREE UKFS UNDE WOOD WREF YELL
+          )
+          expected_files=(
+            SOURCE-SHA256SUMS.txt SOURCE-FAMILY-SHA256.txt FETCH-RUNTIME.txt
+          )
+          for site in "${expected_sites[@]}"; do
+            expected_files+=("${site}_raw.rds")
+          done
+
+          [[ -d "$RAW_DIR" ]]
+          [[ "$EXPECTED_RAW_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          non_file_entry=$(find "$RAW_DIR" -mindepth 1 -maxdepth 1 ! -type f -print -quit)
+          if [[ -n "$non_file_entry" ]]; then
+            printf 'Unexpected non-file entry in raw staging: %q\n' "$non_file_entry" >&2
+            exit 1
+          fi
+          mapfile -d '' -t expected_inventory < <(
+            printf '%s\0' "${expected_files[@]}" | LC_ALL=C sort -z
+          )
+          mapfile -d '' -t actual_inventory < <(
+            find "$RAW_DIR" -mindepth 1 -maxdepth 1 -type f -printf '%f\0' |
+              LC_ALL=C sort -z
+          )
+          if (( ${#actual_inventory[@]} != ${#expected_inventory[@]} )); then
+            echo "Raw staging inventory has the wrong file count" >&2
+            exit 1
+          fi
+          for inventory_index in "${!expected_inventory[@]}"; do
+            if [[ "${actual_inventory[$inventory_index]}" != "${expected_inventory[$inventory_index]}" ]]; then
+              printf 'Raw staging inventory mismatch at %d: expected %q, found %q\n' \
+                "$inventory_index" "${expected_inventory[$inventory_index]}" \
+                "${actual_inventory[$inventory_index]}" >&2
+              exit 1
+            fi
+          done
+
+          mapfile -t ledger_lines < "$RAW_DIR/SOURCE-SHA256SUMS.txt"
+          if (( ${#ledger_lines[@]} != ${#expected_sites[@]} )); then
+            echo "Raw checksum ledger does not contain exactly 42 records" >&2
+            exit 1
+          fi
+          for ledger_index in "${!expected_sites[@]}"; do
+            ledger_line="${ledger_lines[$ledger_index]}"
+            if [[ ! "$ledger_line" =~ ^[0-9a-f]{64}\ [^/[:space:]]+$ ]]; then
+              echo "Raw checksum ledger has a malformed record" >&2
+              exit 1
+            fi
+            recorded_hash="${ledger_line%% *}"
+            recorded_name="${ledger_line#* }"
+            expected_name="${expected_sites[$ledger_index]}_raw.rds"
+            if [[ "$recorded_name" != "$expected_name" ]]; then
+              printf 'Raw checksum ledger record %d names %q; expected %q\n' \
+                "$ledger_index" "$recorded_name" "$expected_name" >&2
+              exit 1
+            fi
+            actual_hash=$(sha256sum "$RAW_DIR/$recorded_name")
+            actual_hash="${actual_hash%% *}"
+            if [[ "$actual_hash" != "$recorded_hash" ]]; then
+              printf 'Raw checksum mismatch for %q\n' "$recorded_name" >&2
+              exit 1
+            fi
+          done
+
+          mapfile -t family_lines < "$RAW_DIR/SOURCE-FAMILY-SHA256.txt"
+          if (( ${#family_lines[@]} != 1 )) ||
+             [[ ! "${family_lines[0]}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Raw family checksum file is malformed" >&2
+            exit 1
+          fi
+          recorded_family_digest="${family_lines[0]}"
+          ledger_digest=$(sha256sum "$RAW_DIR/SOURCE-SHA256SUMS.txt")
+          ledger_digest="${ledger_digest%% *}"
+          if [[ "$ledger_digest" != "$recorded_family_digest" ]] ||
+             [[ "$ledger_digest" != "$EXPECTED_RAW_DIGEST" ]]; then
+            echo "Raw family checksum does not bind the ledger to the fetch receipt" >&2
+            exit 1
+          fi
+          echo "Verified the exact 42-site raw inventory and every checksum."
+
+      - name: Build and validate two isolated candidates
+        env:
+          SKIP_DOWNLOAD: ${{ inputs.skip_download || false }}
+          RAW_DIR: ${{ runner.temp }}/vegetation-raw
+          RAW_DIGEST: ${{ needs.fetch_raw.outputs.raw_digest }}
+          NEON_RELEASE: ${{ needs.fetch_raw.outputs.neon_release }}
+          RELEASE_DOI: ${{ needs.fetch_raw.outputs.release_doi }}
+          QUERY_START: ${{ needs.fetch_raw.outputs.query_start }}
+          QUERY_END: ${{ needs.fetch_raw.outputs.query_end }}
+          NEON_UTILITIES_VERSION: ${{ needs.fetch_raw.outputs.neon_utilities_version }}
+          SOURCE_NORMALIZATION: ${{ needs.fetch_raw.outputs.source_normalization }}
+          BUILDER_COMMIT: ${{ env.VST_SOURCE_SHA }}
+          REFRESH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          build_date=$(date -u +%F)
+          build_one() {
+            target=$1
+            mkdir -p "$target"
+            git archive "$VST_SOURCE_SHA" | tar -x -C "$target"
+            if [[ "$SKIP_DOWNLOAD" != "true" ]]; then
+              find "$target/data/sites" -maxdepth 1 -type f -name '*.rds' -delete
+              find "$target/data-sample" -maxdepth 1 -type f -name '*.rds' -delete
+              mkdir -p "$target/data/source"
+              find "$target/data/source" -maxdepth 1 -type f -delete
+            fi
+            (
+              cd "$target"
+              export VST_LIVE=0
+              export VST_SITE_DIR=data/sites
+              export VST_SITE_INDEX=data/site_index.rds
+              export VST_SITE_INDEX_OUT=data/site_index.rds
+              export VST_SEARCH_INDEX_OUT=data/search_index.rds
+              if [[ "$SKIP_DOWNLOAD" == "true" ]]; then
+                Rscript --vanilla -e 'source("scripts/vegetation_inventory.R"); paths <- file.path("data/sites", paste0(VST_EXPECTED_SITES, ".rds")); stopifnot(all(file.exists(paths))); ids <- vapply(paths, function(path) as.character(readRDS(path)$meta$contract_id %||% ""), character(1)); stopifnot(all(ids == "NEON-VST-DP1.10098.001-v2"))'
+              fi
+              if [[ "$SKIP_DOWNLOAD" != "true" ]]; then
+                export VST_RAW_DIR="$RAW_DIR"
+                export VST_SITE_OUT_DIR=data/sites
+                export VST_SAMPLE_OUT_DIR=data-sample
+                export VST_RECEIPT_SCHEMA_VERSION=1
+                export VST_PROVENANCE_CLASS=official-release
+                export VST_PRODUCT=DP1.10098.001
+                export VST_NEON_RELEASE="$NEON_RELEASE"
+                export VST_RELEASE_DOI="$RELEASE_DOI"
+                export VST_QUERY_START="$QUERY_START"
+                export VST_QUERY_END="$QUERY_END"
+                export VST_SOURCE_RECEIPT_ID="VST-DP1.10098.001-${NEON_RELEASE}-sha256-${RAW_DIGEST}"
+                export VST_RAW_SOURCE_DIGEST="$RAW_DIGEST"
+                export VST_NEON_UTILITIES_VERSION="$NEON_UTILITIES_VERSION"
+                export VST_SOURCE_NORMALIZATION="$SOURCE_NORMALIZATION"
+                export VST_BUILT_AT="$build_date"
+                export VST_BUILDER_COMMIT="$BUILDER_COMMIT"
+                export VST_REFRESH_RUN_URL="$REFRESH_RUN_URL"
+                Rscript --vanilla scripts/bundle_veg_data.R
+              fi
+              Rscript --vanilla scripts/build_site_index.R
+              Rscript --vanilla scripts/build_search_index.R
+              Rscript --vanilla scripts/write_data_quality_audit.R
+              if [[ "$SKIP_DOWNLOAD" != "true" ]]; then
+                Rscript --vanilla scripts/write_source_receipt.R
+              fi
+              bash scripts/check_source_family.sh
+              Rscript --vanilla scripts/verify_bundle.R
+              Rscript --vanilla scripts/verify_derived_parity.R
+              Rscript --vanilla scripts/validation/test_bundle_contract.R
+              Rscript --vanilla scripts/test_helpers.R
+              Rscript --vanilla scripts/validation/test_runtime_bundle_gate.R
+              Rscript --vanilla scripts/write_manifest.R
+              Rscript --vanilla scripts/verify_manifest.R
+              Rscript --vanilla -e 'Sys.setenv(VST_LIVE="0"); source("global.R"); source("ui.R"); source("server.R"); stopifnot(length(BUNDLED) == 42L, is.function(server))'
+            )
+          }
+          build_one "$RUNNER_TEMP/candidate-a"
+          build_one "$RUNNER_TEMP/candidate-b"
+          expected_sites=(
+            ABBY BART BLAN BONA CLBJ CPER DCFS DEJU DELA DSNY GRSM GUAN
+            HARV HEAL JERC JORN KONZ LAJA LENO MLBS MOAB NIWO NOGP ONAQ
+            ORNL OSBS PUUM RMNP SCBI SERC SJER SOAP SRER STEI TALL TEAK
+            TREE UKFS UNDE WOOD WREF YELL
+          )
+          expected_paths=(
+            data/site_index.rds
+            data/search_index.rds
+            data/source/vegetation-raw-SHA256SUMS.txt
+            data/source/vegetation-raw-family-SHA256.txt
+            data/source/vegetation-fetch-runtime.txt
+            data/source/vegetation-bundle-SHA256SUMS.txt
+            data/source/vegetation-bundle-family-SHA256.txt
+            data/source/vegetation-data-quality-audit.csv
+            data/source/vegetation-data-quality-audit-SHA256.txt
+            data-sample/demo.rds
+            manifest.json
+            docs/VEGETATION-SOURCE-RECEIPT.md
+          )
+          for site in "${expected_sites[@]}"; do
+            expected_paths+=("data/sites/${site}.rds")
+          done
+          mapfile -d '' -t expected_paths < <(
+            printf '%s\0' "${expected_paths[@]}" | LC_ALL=C sort -z
+          )
+
+          verify_candidate_inventory() {
+            root=$1
+            [[ -f "$root/manifest.json" && ! -L "$root/manifest.json" ]]
+            [[ -f "$root/docs/VEGETATION-SOURCE-RECEIPT.md" &&
+               ! -L "$root/docs/VEGETATION-SOURCE-RECEIPT.md" ]]
+            unexpected_entry=$(find "$root/data" "$root/data-sample" -mindepth 1 \
+              ! -type f ! -type d -print -quit)
+            if [[ -n "$unexpected_entry" ]]; then
+              printf 'Unexpected non-file candidate entry: %q\n' "$unexpected_entry" >&2
+              exit 1
+            fi
+            mapfile -d '' -t actual_dirs < <(
+              cd "$root" && find data data-sample -type d -print0 | LC_ALL=C sort -z
+            )
+            expected_dirs=(data data-sample data/sites data/source)
+            mapfile -d '' -t expected_dirs < <(
+              printf '%s\0' "${expected_dirs[@]}" | LC_ALL=C sort -z
+            )
+            if (( ${#actual_dirs[@]} != ${#expected_dirs[@]} )); then
+              echo "Candidate release directories are not the exact allowlist" >&2
+              exit 1
+            fi
+            for inventory_index in "${!expected_dirs[@]}"; do
+              if [[ "${actual_dirs[$inventory_index]}" != "${expected_dirs[$inventory_index]}" ]]; then
+                printf 'Candidate directory mismatch at %d: expected %q, found %q\n' \
+                  "$inventory_index" "${expected_dirs[$inventory_index]}" \
+                  "${actual_dirs[$inventory_index]}" >&2
+                exit 1
+              fi
+            done
+            mapfile -d '' -t actual_paths < <(
+              (
+                cd "$root"
+                find data data-sample -type f -print0
+                printf '%s\0' manifest.json docs/VEGETATION-SOURCE-RECEIPT.md
+              ) | LC_ALL=C sort -z
+            )
+            if (( ${#actual_paths[@]} != ${#expected_paths[@]} )); then
+              echo "Candidate file inventory has the wrong size" >&2
+              exit 1
+            fi
+            for inventory_index in "${!expected_paths[@]}"; do
+              if [[ "${actual_paths[$inventory_index]}" != "${expected_paths[$inventory_index]}" ]]; then
+                printf 'Candidate file mismatch at %d: expected %q, found %q\n' \
+                  "$inventory_index" "${expected_paths[$inventory_index]}" \
+                  "${actual_paths[$inventory_index]}" >&2
+                exit 1
+              fi
+            done
+          }
+          inventory() {
+            root=$1
+            for path in "${expected_paths[@]}"; do
+              sha256sum "$root/$path" | awk -v p="$path" '{print $1 " " p}'
+            done
+          }
+          verify_candidate_inventory "$RUNNER_TEMP/candidate-a"
+          verify_candidate_inventory "$RUNNER_TEMP/candidate-b"
+          inventory "$RUNNER_TEMP/candidate-a" > "$RUNNER_TEMP/candidate-a.sha256"
+          inventory "$RUNNER_TEMP/candidate-b" > "$RUNNER_TEMP/candidate-b.sha256"
+          diff -u "$RUNNER_TEMP/candidate-a.sha256" "$RUNNER_TEMP/candidate-b.sha256"
+          promotion="$RUNNER_TEMP/vegetation-promotion"
+          mkdir -p "$promotion"
+          for path in "${expected_paths[@]}"; do
+            mkdir -p "$promotion/$(dirname "$path")"
+            cp "$RUNNER_TEMP/candidate-a/$path" "$promotion/$path"
+          done
+          cp "$RUNNER_TEMP/candidate-a.sha256" "$promotion/CANDIDATE-SHA256SUMS.txt"
+
+      - name: Upload validated candidate
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vegetation-release-candidate-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}
+          # Publish only the checksum-backed promotion allowlist. The staged
+          # repository also contains builder source, but those bytes are not a
+          # release artifact and must never be overlaid onto a reviewed branch.
+          path: ${{ runner.temp }}/vegetation-promotion
+          if-no-files-found: error
+          retention-days: 7

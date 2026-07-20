@@ -12,9 +12,11 @@
    sky-blue (info), --rust = the reserved true-error coral. On a cool sand-sky
    canvas. The app DEFAULTS to LIGHT; dark below carries desert-night. */
 :root {
-  --pine: #2f8a52;   --pine2: #256f41;
+  /* Text-safe canopy greens on white (AA for normal text). Keep --accent as
+     the brighter decorative green so the visual identity stays lively. */
+  --pine: #256f41;   --pine2: #1f6038;
   --terra: #b07a3c;  --cardinal: #b07a3c;  --gold: #c79a1c;  --gold-ink: #9a7314;
-  --sky: #2f8fc4;    --green: #3f9a52; --rust: #b5471f;
+  --sky: #2f8fc4;    --green: #256f41; --rust: #b5471f;
   --accent: #2f8a52;
   --ink: #16261c;    --muted: #5a6a82;
   --bg: #eef3ee;     --paper: #ffffff; --line: #d6e2d8;
@@ -56,8 +58,36 @@
 [data-bs-theme="dark"] .sp-go,
 [data-bs-theme="dark"] .sp-go:hover,
 [data-bs-theme="dark"] .tc-save-btn,
-[data-bs-theme="dark"] .tc-save-btn:hover { color: #0e1d15 !important; }
+[data-bs-theme="dark"] .tc-save-btn:hover,
+[data-bs-theme="dark"] .smt-snap-btn,
+[data-bs-theme="dark"] .smt-snap-btn:hover,
+[data-bs-theme="dark"] .driver-popover.driverjs-theme button,
+[data-bs-theme="dark"] .home-btn,
+[data-bs-theme="dark"] .home-btn:hover,
+[data-bs-theme="dark"] .home-btn > div,
+[data-bs-theme="dark"] .home-btn span,
+[data-bs-theme="dark"] .home-btn small,
+[data-bs-theme="dark"] .popover .popover-header,
+[data-bs-theme="dark"] .modal-header { color: #0e1d15 !important; }
 [data-bs-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_button.current { color: #0e1d15 !important; }
+[data-bs-theme="dark"] .home-btn .bi { color: #16321f !important; }
+[data-bs-theme="dark"] .modal-header .btn-close { filter: none; opacity: .75; }
+[data-bs-theme="dark"] .dataTables_wrapper .dataTables_filter input {
+  background: #0d2016; color: var(--ink); border-color: var(--line);
+}
+[data-bs-theme="dark"] table.dataTable tbody tr:hover,
+[data-bs-theme="dark"] .rank-row:hover,
+[data-bs-theme="dark"] .rank-row.rank-click:hover { background: #16412a !important; }
+[data-bs-theme="dark"] table.dataTable tbody tr.selected {
+  background: #493c13 !important; box-shadow: inset 3px 0 0 var(--gold);
+}
+[data-bs-theme="dark"] table.dataTable td,
+[data-bs-theme="dark"] table.dataTable th,
+[data-bs-theme="dark"] .rank-row { border-color: rgba(255,255,255,.12) !important; }
+[data-bs-theme="dark"] .modal-content { background: var(--paper); color: var(--ink); }
+[data-bs-theme="dark"] .rank-modal-insight {
+  background: #2f2910; color: #f2e6b7; border-color: var(--gold);
+}
 /* the --pine token used as TEXT goes dim on dark -> brighter canopy */
 [data-bs-theme="dark"] .brand-title,
 [data-bs-theme="dark"] .bio-links-title,
@@ -447,12 +477,16 @@ body {
 /* leaderboard category "chips" */
 .leader-cats .shiny-options-group { display: flex; gap: 6px; flex-wrap: wrap; }
 .leader-cats .radio-inline {
-  border: 1px solid var(--line); border-radius: 20px; padding: 5px 12px; margin: 0 !important;
-  transition: .15s; cursor: pointer; font-size: 13px; background: var(--paper); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 22px; padding: 8px 12px; margin: 0 !important;
+  min-height: 44px; transition: .15s; cursor: pointer; font-size: 13px; background: var(--paper); color: var(--ink);
 }
 .leader-cats .radio-inline:hover { background: #eef3f0; }
-.leader-cats input[type=radio] { display: none; }
+.leader-cats input[type=radio] {
+  position: absolute !important; width: 1px; height: 1px; margin: 0; opacity: 0;
+  overflow: hidden; pointer-events: none; }
 .leader-cats .radio-inline:has(input:checked) { background: var(--pine); border-color: var(--pine); color: #fff; font-weight: 700; }
+.leader-cats .radio-inline:has(input:focus-visible) {
+  outline: 3px solid var(--sky); outline-offset: 2px; }
 
 /* ---- badges ----------------------------------------------------------- */
 .glow-badge, .tag-badge {
@@ -526,17 +560,20 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
 .picker-mode .shiny-options-group { display: inline-flex; gap: 4px; background: #eef3f9;
   border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
 .picker-mode label.radio-inline, .picker-mode .form-check {
-  margin: 0; padding: 0; min-height: 0; display: inline-flex; }
+  margin: 0; padding: 0; min-height: 44px; display: inline-flex; position: relative; }
 .picker-mode input[type=radio], .picker-mode .form-check-input {
   position: absolute; opacity: 0; pointer-events: none; }
 /* the visible pill is the <span> (classic shiny markup) or the label (BS5) */
 .picker-mode .radio-inline > span, .picker-mode .form-check-label {
-  display: inline-flex; align-items: center; gap: 6px; padding: 7px 18px; border-radius: 999px;
+  display: inline-flex; min-height: 44px; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 999px;
   font-weight: 700; font-size: 13px; color: var(--muted); cursor: pointer; transition: .15s; }
 .picker-mode .radio-inline:hover > span, .picker-mode .form-check-label:hover { color: var(--pine); }
 .picker-mode input:checked + span,
 .picker-mode .form-check-input:checked + .form-check-label {
   background: var(--pine); color: #fff; box-shadow: 0 4px 12px -4px var(--pine); }
+.picker-mode .form-check-input:focus-visible + .form-check-label,
+.picker-mode .radio-inline:has(input:focus-visible) > span {
+  outline: 3px solid var(--sky); outline-offset: 2px; }
 
 /* by-species controls */
 .range-controls { max-width: 640px; margin: 6px auto 10px; }
@@ -618,7 +655,7 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
 .driver-popover.driverjs-theme .driver-popover-progress-text { color: var(--muted); }
 .driver-popover.driverjs-theme button {
   background: var(--pine); color: #fff; border: none; border-radius: 8px; text-shadow: none;
-  font-weight: 700; padding: 5px 12px; }
+  min-height: 44px; font-weight: 700; padding: 8px 12px; }
 .driver-popover.driverjs-theme button:hover { background: var(--pine2); }
 .driver-popover.driverjs-theme .driver-popover-prev-btn { background: #eef3f9; color: var(--pine); }
 .driver-popover.driverjs-theme .driver-popover-arrow { border-color: var(--paper); }
@@ -696,14 +733,14 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
 }
 
 /* ---- dossier trading card (shareable, html-to-image export) ----------- */
-.tradingcard-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 6px 0 18px; }
-.tc-toolbar { display: flex; align-items: center; gap: 10px; }
+.tradingcard-wrap { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: center; gap: 10px; margin: 6px 0 18px; }
+.tc-toolbar { display: flex; width: min(340px, 100%); min-width: 0; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .tc-save-btn { background: var(--pine); color: #fff; border: none; border-radius: 9px;
-  font-weight: 700; font-size: 13px; padding: 8px 16px; cursor: pointer; box-shadow: 0 6px 16px -7px var(--pine); }
+  min-height: 44px; font-weight: 700; font-size: 13px; padding: 8px 16px; cursor: pointer; box-shadow: 0 6px 16px -7px var(--pine); }
 .tc-save-btn:hover { background: var(--pine2); transform: translateY(-1px); transition: .15s; }
 .tc-hint { font-size: 12px; color: var(--muted); }
 
-.trade-card { position: relative; width: 340px; border-radius: 18px; padding: 18px 18px 14px;
+.trade-card { position: relative; width: min(340px, 100%); max-width: 340px; min-width: 0; border-radius: 18px; padding: 18px 18px 14px;
   color: #fff; overflow: hidden; isolation: isolate;
   background:
     radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--rc) 55%, #fff 0%), transparent 60%),
@@ -733,6 +770,19 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
 .tc-foot { display: flex; justify-content: space-between; align-items: center; font-size: 11px;
   opacity: .9; border-top: 1px solid rgba(255,255,255,.22); padding-top: 8px; }
 .tc-foot-app { font-weight: 700; }
+
+@media (max-width: 400px) {
+  .trade-card { padding: 15px 13px 12px; border-radius: 15px; }
+  .tc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tc-save-btn { width: 100%; }
+  .tc-hint { width: 100%; text-align: center; }
+}
+
+/* Export uses a connected offscreen clone with a stable 340px CSS source even
+   when the visible card has responsively collapsed on a 320px phone. */
+.trade-card.smt-export-card { width: 340px !important; max-width: 340px !important;
+  min-width: 340px !important; padding: 18px 18px 14px !important; border-radius: 18px !important; }
+.trade-card.smt-export-card .tc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
 
 /* "report card" link in the hero band */
 .hero-report { font-size: 12.5px; font-weight: 700; color: var(--sky); text-decoration: none;
@@ -805,7 +855,7 @@ table.dataTable td, table.dataTable th { border-color: #eef1ec !important; color
 .insights-list li i { color: var(--pine); font-style: italic; }
 
 /* ---- info popovers ---------------------------------------------------- */
-.info-dot { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: auto; border-radius: 50%; color: rgba(255,255,255,.85); cursor: pointer; transition: .15s; font-size: 14px; flex: none; }
+.info-dot { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -12px -12px -12px auto; border-radius: 50%; color: rgba(255,255,255,.85); cursor: pointer; transition: .15s; font-size: 14px; flex: none; }
 .card-header .info-dot:hover { color: #fff; background: rgba(255,255,255,.2); }
 .tab-head-text .info-dot { color: var(--muted); margin-left: 6px; }
 .tab-head-text .info-dot:hover { color: var(--pine); background: #eaf1ee; }
@@ -1125,20 +1175,20 @@ svg.smt-pin-lines {
 .smt-pin-rar { font-size: 11px; color: var(--gold); font-weight: 600; }
 .smt-pin-stats { color: #aebfd6; font-size: 11.5px; }
 .smt-pin .smt-open {
-  display: inline-block; margin-top: 7px; padding: 2px 9px;
+  display: inline-flex; min-height: 44px; align-items: center; margin-top: 7px; padding: 7px 10px;
   color: #16243a; background: var(--gold); border-radius: 6px;
   font-weight: 700; font-size: 11.5px; cursor: pointer;
 }
 .smt-pin .smt-open:hover { background: #ffe04d; }
 .smt-pin-close {
-  position: absolute; top: 1px; right: 6px; background: none; border: none;
+  position: absolute; top: 0; right: 0; width: 44px; height: 44px; background: none; border: none;
   color: #cfd9e8; font-size: 17px; line-height: 1; cursor: pointer; padding: 0;
 }
 .smt-pin-close:hover { color: #fff; }
 .smt-pin-resize {
-  position: absolute; right: 2px; bottom: 2px; width: 18px; height: 18px;
+  position: absolute; right: 0; bottom: 0; width: 44px; height: 44px;
   cursor: nwse-resize; touch-action: none; opacity: 0.5;
-  background: linear-gradient(135deg, transparent 50%, var(--gold) 50%);
+  background: linear-gradient(135deg, transparent 72%, var(--gold) 72%);
   border-radius: 0 0 8px 0;
 }
 .smt-pin-resize:hover { opacity: 1; }
@@ -1150,7 +1200,9 @@ svg.smt-pin-lines {
 
 /* Search the network */
 .search-mode { padding: 4px 4px 10px; }
-.search-mode .radio-inline, .search-mode .shiny-options-group { display: inline-flex; gap: 18px; flex-wrap: wrap; }
+.search-mode .shiny-options-group { display: inline-flex; gap: 18px; flex-wrap: wrap; }
+.search-mode .radio-inline, .search-mode .form-check {
+  display: inline-flex; min-height: 44px; align-items: center; margin: 0; }
 .search-controls { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px; }
 .search-controls .form-group, .search-controls .shiny-input-container { margin-bottom: 0; }
 .search-pick { margin-bottom: 6px; }
@@ -1160,7 +1212,8 @@ svg.smt-pin-lines {
 .search-count .sc-taxon { font-style: italic; }
 .search-empty { font-size: 14px; color: var(--muted); padding: 14px 4px; }
 .search-cap { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
-.thresh-slider { min-width: 260px; }
+.thresh-slider { flex: 1 1 260px; min-width: 0; max-width: 100%; }
+.thresh-slider .shiny-input-container { width: 100%; max-width: 100%; }
 
 /* tab-head controls + the scatter toolbar */
 .sizelab-controls { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
@@ -1171,7 +1224,7 @@ svg.smt-pin-lines {
 }
 .smt-snap-btn, .smt-clear-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  border-radius: 8px; padding: 6px 13px; font-weight: 600; font-size: 13px; cursor: pointer;
+  min-height: 44px; border-radius: 8px; padding: 8px 13px; font-weight: 600; font-size: 13px; cursor: pointer;
 }
 .smt-snap-btn { background: var(--pine); color: #fff; border: none; }
 .smt-snap-btn:hover { background: var(--pine2); }
@@ -1220,6 +1273,9 @@ svg.smt-pin-lines {
 
 /* reuse the inspect-tbl look for the capture table inside the QC card */
 .qc-card .inspect-tbl { width: 100%; }
+.evidence-chip { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.evidence-chip.comparable { color: #165b31; background: rgba(45, 143, 79, .13); }
+.evidence-chip.held { color: #8a4b12; background: rgba(218, 139, 47, .16); }
 
 /* dark theme: deepen the card surfaces (flag chips stay vivid, they're meant to pop) */
 [data-bs-theme="dark"] .qc-card { background: linear-gradient(162deg, #1c3322 0%, #182e20 100%); }
@@ -1227,6 +1283,18 @@ svg.smt-pin-lines {
 [data-bs-theme="dark"] .qc-flag.warn { background: rgba(255,210,74,.12); color: #ffd24a; }
 [data-bs-theme="dark"] .qc-flag.info { background: rgba(67,184,232,.12); color: #8fd2f2; }
 [data-bs-theme="dark"] .qc-flag.clean { background: rgba(78,184,106,.14); color: #9ce6ad; }
+[data-bs-theme="dark"] .evidence-chip.comparable {
+  color: #c8f7d4; background: #234b31; box-shadow: inset 0 0 0 1px rgba(200,247,212,.22);
+}
+[data-bs-theme="dark"] .evidence-chip.held {
+  color: #ffe4ad; background: #52391d; box-shadow: inset 0 0 0 1px rgba(255,228,173,.20);
+}
+
+@media (max-width: 400px) {
+  .search-controls > *,
+  .search-controls .form-group,
+  .search-controls .shiny-input-container { width: 100%; min-width: 0; }
+}
 
 /* ====================================================================== *
  *  PREMIUM DESERT-NIGHT layer — command-band hero, starfield, sheen, and

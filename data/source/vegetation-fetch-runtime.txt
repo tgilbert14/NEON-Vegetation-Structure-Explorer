@@ -1,0 +1,7 @@
+product=DP1.10098.001
+officialNeonRelease=RELEASE-2026
+releaseDoi=https://doi.org/10.48443/pypa-qf12
+queryStart=FULL_RELEASE
+queryEnd=FULL_RELEASE
+neonUtilities=4.0.1
+sourceNormalization=portable-vectors+published-uid-byte-order-v1

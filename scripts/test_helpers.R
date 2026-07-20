@@ -12,10 +12,10 @@ check <- function(cond, msg) { if (!isTRUE(cond)) stop("FAIL: ", msg); cat("  ok
 run_site <- function(site, spec) {
   b <- readRDS(file.path("data/sites", paste0(site, ".rds")))
   tr <- b$trees; pl <- b$plots
-  stype <- b$meta$structure_type %||% classify_structure(tree_snapshot(tr))
+  stype <- b$meta$structure_type %||% "forest"
   cat(sprintf("\n=== %s (%s; spec=%s) — trees %d, plots %d ===\n",
               site, stype, spec$type, nrow(tr), nrow(pl)))
-  snap <- tree_snapshot(tr); one <- one_per_tree(live_only(snap), spec)
+  snap <- tree_snapshot(tr, pl, spec); one <- one_per_tree(live_only(snap), spec)
   woody <- woody_only(one, spec)
   cat("  live plants (woody_only):", nrow(woody), "| size col:", spec$col, "\n")
   st <- stand_site(snap, pl, spec)
@@ -40,9 +40,9 @@ shrub_site <- if (file.exists("data/sites/SRER.rds")) "SRER" else "JORN"
 run_site(shrub_site, SIZE_SHRUB)
 
 # ---------------------------------------------------------------------------
-# REGRESSION: status_summary() must SCOPE by the spec's growth forms. A prior
-# bug referenced spec$forms when no spec defined it -> `%in% NULL` kept only
-# NA-growthForm rows. This synthetic snapshot fails that bug loudly.
+# REGRESSION: status_summary() must scope strictly to the registered, disjoint
+# growth forms. Small-tree DBH and unknown growth forms are preserved in the
+# long table but withheld from both summaries pending a dedicated channel.
 # ---------------------------------------------------------------------------
 cat("\n################  REGRESSION: status_summary form-scoping  ################\n")
 syn <- data.frame(
@@ -54,16 +54,81 @@ syn <- data.frame(
 check(!is.null(SIZE_FOREST$forms) && length(SIZE_FOREST$forms) > 0, "SIZE_FOREST$forms is defined")
 check(!is.null(SIZE_SHRUB$forms)  && length(SIZE_SHRUB$forms)  > 0, "SIZE_SHRUB$forms is defined")
 
-sf <- status_summary(syn, SIZE_FOREST)   # keeps tree forms + NA: t1,t2,d1,x1 -> 4 (incl. 1 dead)
-sh <- status_summary(syn, SIZE_SHRUB)    # keeps shrub forms + NA: s1,s2,t2,x1 -> 4 (all live; "single bole tree" d1 excluded)
+sf <- status_summary(syn, SIZE_FOREST)   # t1,d1 -> 2 (incl. 1 dead)
+sh <- status_summary(syn, SIZE_SHRUB)    # s1,s2 -> 2 (all live)
 cat("  forest counts:\n"); print(sf)
 cat("  shrub counts:\n");  print(sh)
 
-# the bug would scope to ONLY the NA row (x1) -> sum == 1 for both
-check(sum(sf$n) == 4, "forest scoping keeps tree-form + NA individuals (4), not only NA (1)")
-check(sum(sh$n) == 4, "shrub scoping keeps shrub-form + NA individuals (4), not only NA (1)")
+# Neither channel may silently absorb small-tree or unknown growth-form rows.
+check(sum(sf$n) == 2, "forest scoping keeps only registered full-plot tree forms")
+check(sum(sh$n) == 2, "shrub scoping keeps only registered shrub/sapling basal forms")
 # forest must see the standing-dead TREE; shrub must NOT (it's a single-bole tree, excluded)
 check(sum(sf$n[grepl("Dead", sf$cls)]) == 1, "forest scoping includes the standing-dead tree")
 check(sum(sh$n[grepl("Dead", sh$cls)]) == 0, "shrub scoping excludes the single-bole-tree (different form set)")
+
+cat("\n################  REGRESSION: export dictionaries  ################\n")
+export_fixture <- list(
+  trees_long = data.frame(site = "HARV", contract_id = VEG_CONTRACT_ID,
+                          dataQF = "legacyData", stringsAsFactors = FALSE),
+  plot_summary_latest = data.frame(site = "HARV", plotID = "HARV_001",
+                                   n_taxa = 1L, stringsAsFactors = FALSE),
+  plot_event_contexts_all = data.frame(site = "HARV", plotID = "HARV_001",
+                                      eventID = "EV1", customOpportunityFlag = "ok",
+                                      stringsAsFactors = FALSE),
+  plot_opportunity_source = data.frame(
+                                      site = "HARV", source_record_key = "opp-uid-1",
+                                      eventID = "EV1", customSourceFlag = "review",
+                                      stringsAsFactors = FALSE)
+)
+cb <- complete_veg_codebook(veg_codebook(), export_fixture)
+check(isTRUE(assert_veg_codebook(cb, export_fixture)),
+      "data dictionary covers every emitted canonical and preserved source field")
+check(any(cb$column == "dataQF" & cb$table == "trees_long"),
+      "preserved QF fields receive explicit dictionary rows")
+check(any(cb$column == "customOpportunityFlag" & cb$table == "plot_event_contexts_all"),
+      "new opportunity fields receive explicit dictionary rows")
+check(any(cb$column == "customSourceFlag" & cb$table == "plot_opportunity_source"),
+      "preserved opportunity-source fields receive explicit dictionary rows")
+
+tree_export_fixture <- data.frame(
+  source_uid = "apparent-uid-1", protocol_stem_key = "fixture",
+  mapping_source_uid = "mapping-uid-1",
+  protocol_key_group_n = 1L, protocol_key_conflict = FALSE,
+  opportunity_source_missing = TRUE,
+  eventID = "EV1", plotID = "HARV_001", individualID = "NEON.PLA.D01.1",
+  tempStemID = "1", date = as.Date("2025-01-01"), year = 2025L,
+  taxonRank = "species", scientificName = "Acer rubrum", growthForm = "single bole tree",
+  plantStatus = "Live", live = TRUE, permanent = TRUE, is_species = TRUE,
+  stemDiameter = 12, basalStemDiameter = NA_real_, height = 8,
+  recordType = "mapped and tagged", identificationQualifier = "reviewed",
+  mappingDataQF = "mapping-review", tagStatus = "ok",
+  dendrometerCondition = "not applicable", heightQualifier = "estimated",
+  dataQF = "legacyData", measurementErrorQF = "reviewed",
+  stringsAsFactors = FALSE
+)
+tree_export_result <- tidy_trees_export(tree_export_fixture, list(
+  site = "HARV", product = VEG_CONTRACT$product, release = VEG_CONTRACT$release,
+  source_receipt = list(raw_source_digest = paste(rep("a", 64), collapse = ""))
+))
+required_review_fields <- c(
+  "source_record_key", "mapping_source_record_key", "protocol_stem_key",
+  "protocol_key_group_n",
+  "protocol_key_conflict", "opportunity_source_missing",
+  "recordType", "identificationQualifier", "mappingDataQF", "tagStatus",
+  "dendrometerCondition", "heightQualifier", "dataQF", "measurementErrorQF"
+)
+check(all(required_review_fields %in% names(tree_export_result)),
+      "trees_long preserves every registered identity and measurement review field")
+check(identical(tree_export_result$opportunity_source_missing, TRUE),
+      "trees_long preserves the measurement-row opportunity-source flag")
+check(identical(tree_export_result$mapping_source_record_key, "mapping-uid-1"),
+      "trees_long preserves the selected mapping/tagging source uid")
+
+qc_fixture <- data.frame(site = "HARV", source_digest = paste(rep("a", 64), collapse = ""),
+                         contract_id = VEG_CONTRACT_ID, level = "info",
+                         issue = "fixture", later_cm = 10, stringsAsFactors = FALSE)
+qcb <- qc_dictionary(qc_fixture)
+check(isTRUE(assert_qc_dictionary(qcb, qc_fixture)),
+      "QC dictionary covers emitted receipt and evidence fields")
 
 cat("\nALL TESTS PASSED\n")

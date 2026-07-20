@@ -12,13 +12,13 @@ server <- function(input, output, session) {
     hov  <- if (dark) list(bg = "rgba(16,32,24,0.96)", bd = "#4eb86a", fg = "#eaf4ec")
             else        list(bg = "rgba(22,50,34,0.96)", bd = "#2f8a52", fg = "#ffffff")
     p %>% plotly::layout(paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
-      font = list(color = ink, family = "Rubik"),
+      font = list(color = ink, family = "Aptos, Segoe UI, system-ui, sans-serif"),
       xaxis = list(gridcolor = grid, zerolinecolor = zero, linecolor = lin),
       yaxis = list(gridcolor = grid, zerolinecolor = zero, linecolor = lin),
       legend = list(bgcolor = "rgba(0,0,0,0)", orientation = "h", y = -0.2, font = list(color = legc)),
       margin = list(l = 55, r = 30, t = 48, b = 44),
       hoverlabel = list(bgcolor = hov$bg, bordercolor = hov$bd,
-        font = list(color = hov$fg, family = "Rubik", size = 13))) %>%
+        font = list(color = hov$fg, family = "Aptos, Segoe UI, system-ui, sans-serif", size = 13))) %>%
       plotly::config(displayModeBar = FALSE, responsive = TRUE)
   }
   note_plot <- function(msg, icon = "\U0001F332") {
@@ -29,107 +29,261 @@ server <- function(input, output, session) {
           font = list(color = if (is_dark()) "#a4c0aa" else "#5a6a82", size = 15), align = "center"))) %>%
       plotly::config(displayModeBar = FALSE)
   }
+  fmt_num <- function(x, digits = 1, big = FALSE) {
+    x <- suppressWarnings(as.numeric(x))
+    if (!length(x) || !is.finite(x[[1]])) return("—")
+    formatC(x[[1]], format = "f", digits = digits,
+            big.mark = if (big) "," else "", drop0trailing = FALSE)
+  }
+  fmt_count <- function(x) {
+    x <- suppressWarnings(as.numeric(x))
+    if (!length(x) || !is.finite(x[[1]])) return("—")
+    format(round(x[[1]]), big.mark = ",", scientific = FALSE, trim = TRUE)
+  }
 
-  rv <- reactiveValues(trees = NULL, snap = NULL, one = NULL, plots = NULL, lb = NULL,
+  rv <- reactiveValues(trees = NULL, snap = NULL, one = NULL, plots = NULL, meta = NULL, lb = NULL,
                        pal = NULL, label = NULL, site = NULL, tree = NULL, ctx = NULL, is_demo = FALSE,
-                       stype = "forest", spec = SIZE_FOREST, pendingSite = NULL)
-  SP <- function() rv$spec %||% SIZE_FOREST     # the active site's size paradigm
+                       stype = NULL, spec = NULL, bundle = NULL,
+                       available_channels = character())
+  SP <- function() { req(rv$spec); rv$spec }     # exact v2 active physical channel
 
-  observe({ ch <- veg_state_choices(); updateSelectInput(session, "stateSel", choices = ch,
-            selected = if ("MA" %in% ch) "MA" else NULL) })
-  # State cascade: honour a pending map/browse pick instead of snapping to the
-  # first site in the state, so the sidebar reflects the site you actually picked.
-  observeEvent(input$stateSel, {
-    sites <- veg_sites_in_state(input$stateSel)
-    sel <- if (!is.null(rv$pendingSite) && rv$pendingSite %in% sites) rv$pendingSite
-           else if (length(sites)) sites[[1]] else NULL
-    rv$pendingSite <- NULL
-    updateSelectInput(session, "site", choices = sites, selected = sel)
-  }, ignoreNULL = TRUE)
-  output$siteBio <- renderUI({ req(input$site); b <- site_bio(input$site); if (is.null(b)) return(NULL)
-    div(class = "site-bio", bs_icon("info-circle-fill"), span(b)) })
+  # Site-wide source-gap evidence is intentionally separate from the active
+  # physical channel. RELEASE-2026 includes measurement rows for some plot
+  # visits that have no matching published plot-opportunity row. They remain in
+  # the preserved download, but are ineligible for every zero, denominator, and
+  # derived summary. Keep that coverage fact visible beside the summaries rather
+  # than making a user discover it one plant record at a time.
+  site_source_gap <- reactive({
+    req(rv$meta)
+    one_nonnegative_int <- function(x) {
+      value <- suppressWarnings(as.integer(x))
+      if (length(value) != 1L || is.na(value) || value < 0L) 0L else value
+    }
+    contexts <- one_nonnegative_int(rv$meta$n_measurement_only_contexts)
+    records <- one_nonnegative_int(rv$meta$n_measurement_records_without_opportunity_source)
+    if (contexts == 0L && records == 0L) return(NULL)
+    list(contexts = contexts, records = records)
+  })
 
-  output$siteCards <- renderUI({
-    if (is.null(SITE_INDEX) || !nrow(site_table)) return(NULL)
-    div(class = "site-cards", lapply(seq_len(nrow(site_table)), function(i) {
-      r <- site_table[i, ]
-      shrub <- identical(r$structure_type, "shrubland")
-      emoji <- if (shrub) "\U0001F33F" else "\U0001F333"
-      noun  <- if (shrub) "shrubs" else "trees"
-      tags$a(class = paste0("site-card", if (shrub) " site-card-shrub" else ""), href = "#",
-        onclick = sprintf("smtLoadStart('%s · loading…');Shiny.setInputValue('pickSite','%s',{priority:'event'});return false;",
-                          gsub("'", "", r$name), r$site),
-        div(class = "sc-emoji", emoji),
-        div(class = "sc-body",
-          div(class = "sc-name", tags$b(r$site), sprintf(" · %s", r$name)),
-          div(class = "sc-meta", sprintf("%s · %s %s · %s species · tallest %sm",
-            r$state, format(r$n_trees, big.mark = ","), noun, r$n_species, r$tallest_m)))) }))
+  source_gap_notice <- function() {
+    gap <- site_source_gap()
+    if (is.null(gap)) return(NULL)
+    channel <- SP()$channel_label
+    div(id = "siteSourceGap", class = "source-gap-note", role = "note",
+      div(class = "source-gap-icon", bs_icon("exclamation-diamond-fill")),
+      div(class = "source-gap-copy",
+        div(class = "source-gap-title", "Coverage note · all plant forms at this place"),
+        p(HTML(sprintf(
+          "NEON has <b>%s preserved measurement records</b> from <b>%s plot visit%s</b> without the matching plot sampling record. They are not used in the active <b>%s</b> summary and are never read as zero or plant absence.",
+          fmt_count(gap$records), fmt_count(gap$contexts),
+          if (gap$contexts == 1L) "" else "s", channel))),
+        p(class = "source-gap-scope",
+          "These site-wide counts cover every recorded plant form, including forms outside this measurement view. The ledger gives the exact plot and visit keys; the full data download contains every matching measurement row.")),
+      downloadButton("sourceGapCsv", tagList(bs_icon("download"), " Download gap ledger (CSV)"),
+                     class = "btn-outline-dark btn-sm source-gap-download"))
+  }
+
+  source_gap_inline <- function() {
+    gap <- site_source_gap()
+    if (is.null(gap)) return(NULL)
+    div(class = "source-gap-inline", bs_icon("exclamation-diamond-fill"),
+      HTML(sprintf(
+        " Separately, the all-plant-form coverage note holds <b>%s records from %s plot visit%s</b> that lack a matching sampling record; they are not zero or absence. ",
+        fmt_count(gap$records), fmt_count(gap$contexts), if (gap$contexts == 1L) "" else "s")),
+      tags$a(href = "#siteSourceGap", "Review the exact evidence path"))
+  }
+
+  supported_channels <- function(bundle) {
+    ids <- c("tree_dbh", "shrub_sapling_basal")
+    summaries <- bundle$contract$channel_summary %||% list()
+    ids[vapply(ids, function(id) {
+      summary <- summaries[[id]] %||% list()
+      n <- suppressWarnings(as.integer(summary$n_supported_plots %||% NA_integer_))
+      length(n) == 1L && is.finite(n) && n > 0L
+    }, logical(1))]
+  }
+
+  # individualID is not globally unique inside a site. The same identifier can
+  # occur in different plots, so every interactive selection uses the composite
+  # plotID + individualID key. Keep it local to the app rather than exposing an
+  # invented identifier as a NEON field in downloads.
+  plant_key_vec <- function(d) {
+    if (is.null(d) || !nrow(d)) return(character())
+    paste(as.character(d$plotID), as.character(d$individualID), sep = "::")
+  }
+  plant_rows <- function(d, key = rv$tree) {
+    if (is.null(d) || !nrow(d) || is.null(key) || !nzchar(key)) return(d[0, , drop = FALSE])
+    d[plant_key_vec(d) %in% key, , drop = FALSE]
+  }
+  growth_key_vec <- function(d) {
+    if (is.null(d) || !nrow(d)) return(character())
+    if ("plotID" %in% names(d)) paste(as.character(d$plotID), as.character(d$individualID), sep = "::")
+    else as.character(d$individualID)
+  }
+
+  # One searchable place picker replaces the former state -> site cascade.
+  observeEvent(TRUE, {
+    rows <- site_table[order(site_table$name, site_table$site), , drop = FALSE]
+    choices <- stats::setNames(rows$site,
+      sprintf("%s · %s, %s", rows$site, rows$name, rows$state))
+    updateSelectizeInput(session, "site", choices = c("Choose a place…" = "", choices),
+                         selected = "", server = TRUE)
+    if (!isTRUE(VEG_FAMILY_READY)) {
+      shinyjs::disable("loadBtn")
+      shinyjs::disable("searchNetworkBtn")
+    }
+  }, once = TRUE)
+  output$siteBio <- renderUI({
+    if (!isTRUE(VEG_FAMILY_READY)) {
+      return(div(class = "site-bio search-empty", role = "status", `aria-live` = "polite",
+        bs_icon("exclamation-triangle-fill"),
+        div(tags$b("Candidate data family on hold. "),
+          "The exact 42-site v2 contract, official source receipt, and search index do not yet agree. Derived counts, site views, and network search are unavailable—this is not evidence of zero vegetation.")))
+    }
+    req(input$site)
+    b <- site_bio(input$site)
+    if (is.null(b)) return(NULL)
+    div(class = "site-bio", bs_icon("info-circle-fill"), span(b))
   })
 
   shinyjs::hide("mainTabsWrap")
 
-  ingest <- function(b, label, is_demo = FALSE) {
-    if (is.null(b) || is.null(b$trees) || !nrow(b$trees)) {
-      session$sendCustomMessage("loadDone", list()); showNotification("No vegetation data for that site.", type = "warning"); return(invisible()) }
+  ingest <- function(b, label, is_demo = FALSE, expected_site = NULL,
+                     requested_channel = NULL) {
+    contract_check <- bundle_contract_check(b, expected_site = expected_site)
+    available_channels <- if (isTRUE(contract_check$ok)) supported_channels(b) else character()
+    supported_site <- isTRUE(contract_check$ok) &&
+      identical(.veg_scalar_chr(b$contract$index$site$support_status), "supported_sampled_context") &&
+      length(available_channels) > 0L
+    if (!isTRUE(supported_site)) {
+      session$sendCustomMessage("loadDone", list())
+      if (!isTRUE(contract_check$ok)) {
+        warning(sprintf("refused Vegetation bundle: %s", paste(contract_check$reason, collapse = "; ")))
+        showNotification("This site bundle is outside the exact validated v2 data family. Derived views remain on hold.", type = "warning", duration = 8)
+      } else {
+        showNotification("No supported census is available for this site; that is held—not zero.", type = "warning", duration = 8)
+      }
+      return(invisible(FALSE))
+    }
+    b$trees$.plant_key <- plant_key_vec(b$trees)
+    selected_channel <- .veg_scalar_chr(requested_channel)
+    if (is.na(selected_channel) || !selected_channel %in% available_channels) {
+      selected_channel <- .veg_scalar_chr(b$meta$primary_channel)
+    }
+    if (is.na(selected_channel) || !selected_channel %in% available_channels) {
+      selected_channel <- available_channels[[1L]]
+    }
+    rv$bundle <- b
+    rv$available_channels <- available_channels
     rv$trees <- b$trees
-    rv$snap  <- tree_snapshot(b$trees)             # latest bout per plant
-    rv$stype <- b$meta$structure_type %||% classify_structure(rv$snap)
-    rv$spec  <- size_spec(rv$stype)                # forest (DBH) vs shrubland (basal ø)
-    rv$one   <- one_per_tree(live_only(rv$snap), rv$spec)   # one row per LIVE plant (largest stem)
+    # The physical channels are selected from the bundled protocol metadata.
+    # Never decide by comparing raw DBH cross-section with basal-cover totals;
+    # those are different measurements with different sampled areas.
+    rv$stype <- selected_channel
+    rv$spec  <- size_spec(rv$stype)
+    rv$snap  <- tree_snapshot(rv$trees, b$plots, rv$spec) # latest supported event per plot + plant
+    rv$one   <- one_per_tree(woody_only(live_only(rv$snap), rv$spec), rv$spec)
     rv$plots <- b$plots
+    rv$meta  <- b$meta
     rv$lb    <- plot_summary_veg(rv$snap, b$plots, rv$spec)
-    rv$pal   <- make_species_pal(species_level_only(rv$snap))
+    rv$pal   <- make_species_pal(species_level_only(woody_only(rv$snap, rv$spec)))
     rv$label <- label; rv$site <- b$meta$site; rv$is_demo <- is_demo; rv$tree <- NULL
-    # Treeless / single-census detection: no plot-level woody stand to scale.
+    # A held stand result is an explicit support state, never a treeless claim.
     rv$no_stand <- is.null(stand_site(rv$snap, rv$plots, rv$spec))
-    yrs <- range(b$trees$year, na.rm = TRUE)
-    rv$ctx <- paste0(b$meta$site, " · ", if (yrs[1] == yrs[2]) yrs[1] else paste0(yrs[1], "–", yrs[2]),
-                     if (isTRUE(rv$no_stand)) " · single-census / no woody stand" else "")
+    years <- sort(unique(suppressWarnings(as.integer(b$trees$year))))
+    years <- years[is.finite(years)]
+    year_text <- if (!length(years)) "no measurement records" else if (length(years) == 1) years else paste0(min(years), "–", max(years))
+    rv$ctx <- paste0(b$meta$site, " · ", rv$spec$channel_label, " · ", year_text,
+                     if (isTRUE(rv$no_stand)) " · plot estimate held" else "")
     shinyjs::show("mainTabsWrap"); shinyjs::show("treePickerWrap"); shinyjs::hide("splash")
     one <- rv$one; sz <- one[[rv$spec$col]]
     lab_meas <- ifelse(is.finite(sz), paste0(round(sz), "cm"),
                        ifelse(is.finite(one$height), paste0(round(one$height), "m tall"), "—"))
-    ch <- setNames(one$individualID, sprintf("%s · %s · %s",
-            short_tree(one$individualID), ifelse(is.na(one$scientificName), "—", one$scientificName), lab_meas))
-    updateSelectizeInput(session, "treeSel", choices = c("Pick a tree…" = "", ch), selected = "", server = TRUE)
+    ch <- setNames(plant_key_vec(one), sprintf("%s · %s · %s · %s",
+            short_tree(one$individualID), one$plotID,
+            ifelse(is.na(one$scientificName), "—", one$scientificName), lab_meas))
+    updateSelectizeInput(session, "treeSel", choices = c("Pick a plant…" = "", ch), selected = "", server = TRUE)
+    plant_controls <- c("treeSel", "pickBiggest", "pickTallest", "pickFastest", "surpriseBtn")
+    if (nrow(one) > 0L) {
+      lapply(plant_controls, shinyjs::enable)
+    } else {
+      lapply(plant_controls, shinyjs::disable)
+    }
     session$sendCustomMessage("siteCtx", list(site = rv$site %||% "site"))
     nav_select("tabs", "overview"); session$sendCustomMessage("countUp", list()); session$sendCustomMessage("loadDone", list())
     invisible(TRUE)
   }
-  load_site <- function(site) {
+  load_site <- function(site, requested_channel = NULL) {
     if (is.null(site) || site == "") { session$sendCustomMessage("loadDone", list()); return() }
-    b <- load_site_bundle(site)
-    if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That site isn't bundled in this demo.", type = "error"); return() }
-    row <- site_table[site_table$site == site, ]
-    # Keep the sidebar in step with the picked site (map Explore / browse list /
-    # Load button all flow through here). If the site is in another state, queue it
-    # and cascade the state selector; the stateSel observer then selects it. If it's
-    # already in the current state, set the site dropdown directly.
-    state <- if (nrow(row)) row$state[1] else NULL
-    if (!is.null(state) && !is.na(state)) {
-      if (identical(input$stateSel, state)) {
-        updateSelectInput(session, "site", choices = veg_sites_in_state(state), selected = site)
-      } else {
-        rv$pendingSite <- site
-        updateSelectInput(session, "stateSel", selected = state)
-      }
+    if (!isTRUE(VEG_FAMILY_READY)) {
+      session$sendCustomMessage("loadDone", list())
+      showNotification("The candidate data family is on hold. Site views and derived counts are unavailable.", type = "warning", duration = 8)
+      return(invisible(FALSE))
     }
-    ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site))
+    if (!site %in% BUNDLED) {
+      session$sendCustomMessage("loadDone", list())
+      showNotification("That site is not part of the exact validated 42-site family.", type = "warning", duration = 8)
+      return(invisible(FALSE))
+    }
+    b <- load_site_bundle(site)
+    if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That validated site bundle could not be read.", type = "error"); return() }
+    row <- site_table[site_table$site == site, ]
+    updateSelectizeInput(session, "site", selected = site, server = TRUE)
+    ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site),
+           expected_site = site, requested_channel = requested_channel)
   }
   observeEvent(input$loadBtn, load_site(input$site))
-  observeEvent(input$pickSite, load_site(input$pickSite))
 
-  # "Change site" (in the hero band) -> back to the picker-map landing.
-  # (v2 flow: the Harvard Forest demo path was removed — users pick a real site
-  #  on the map, the Browse-all list, or the by-name select panel. The demoBtn /
-  #  demoBtn2 inputs and their observers are gone with it.)
-  observeEvent(input$changeSite, {
-    rv$trees <- NULL; rv$snap <- NULL; rv$one <- NULL; rv$plots <- NULL; rv$lb <- NULL
-    rv$site <- NULL; rv$label <- NULL; rv$tree <- NULL
+  output$channelPicker <- renderUI({
+    req(rv$spec, rv$bundle)
+    labels <- c(
+      tree_dbh = "Tree DBH",
+      shrub_sapling_basal = "Shrub & sapling basal"
+    )
+    available <- rv$available_channels
+    counts <- vapply(available, function(id) {
+      summary <- rv$bundle$contract$channel_summary[[id]] %||% list()
+      as.integer(summary$n_supported_plots %||% 0L)
+    }, integer(1))
+    choices <- stats::setNames(
+      available,
+      sprintf("%s · %d plot%s", labels[available], counts,
+              ifelse(counts == 1L, "", "s"))
+    )
+    if (length(choices) <= 1L) {
+      return(div(class = "channel-picker channel-picker-single",
+        span(class = "channel-picker-label", "Measurement channel"),
+        span(class = "channel-picker-value", labels[[rv$stype]])))
+    }
+    div(class = "channel-picker",
+      radioButtons("activeChannel", "View measurement channel", choices = choices,
+                   selected = rv$stype, inline = TRUE))
+  })
+
+  observeEvent(input$activeChannel, {
+    requested <- input$activeChannel %||% ""
+    if (!nzchar(requested) || identical(requested, rv$stype) ||
+        is.null(rv$bundle) || !requested %in% rv$available_channels) return()
+    ingest(rv$bundle, rv$label, rv$is_demo, expected_site = rv$site,
+           requested_channel = requested)
+  }, ignoreInit = TRUE)
+
+  reset_to_places <- function() {
+    rv$trees <- NULL; rv$snap <- NULL; rv$one <- NULL; rv$plots <- NULL; rv$meta <- NULL; rv$lb <- NULL
+    rv$site <- NULL; rv$label <- NULL; rv$tree <- NULL; rv$bundle <- NULL
+    rv$available_channels <- character()
     shinyjs::hide("mainTabsWrap"); shinyjs::hide("treePickerWrap"); shinyjs::show("splash")
-    # the picker map was hidden while a site was loaded; nudge it to recompute
-    # size now that it's visible again, so it never paints blank/half-width
     session$sendCustomMessage("kickMaps", list())
+  }
+  observeEvent(input$changeSite, reset_to_places())
+  observeEvent(input$browsePlaces, reset_to_places())
+  observeEvent(input$searchNetworkBtn, {
+    if (!isTRUE(VEG_FAMILY_READY)) {
+      showNotification("Network search is held until the exact v2 site and search indexes agree.", type = "warning", duration = 8)
+      return()
+    }
+    shinyjs::hide("splash"); shinyjs::hide("treePickerWrap"); shinyjs::show("mainTabsWrap")
+    nav_select("tabs", "search")
   })
 
   # ---- the site-choice popup + "About this site" card --------------------
@@ -139,28 +293,38 @@ server <- function(input, output, session) {
   # Mammal Tracker. Both built from the clicked site code.
   site_popup_html <- function(row) {
     code  <- row$site[1]
-    shrub <- identical(row$structure_type[1], "shrubland")
-    emoji <- if (shrub) "\U0001F33F" else "\U0001F333"
-    noun  <- if (shrub) "shrubs" else "trees"
+    shrub <- identical(row$primary_channel[1], "shrub_sapling_basal")
+    supported <- identical(row$support_status[1], "supported_sampled_context")
+    emoji <- if (!supported) "\u26A0\uFE0F" else if (shrub) "\U0001F33F" else "\U0001F333"
+    noun  <- if (!supported) "live plants" else if (shrub) "shrubs & saplings" else "trees"
     where <- paste(stats::na.omit(c(as.character(row$name[1]), as.character(row$state[1]))),
                    collapse = ", ")
-    size_line <- if (!is.na(row$tallest_m[1]) || !is.na(row$biggest_diam_cm[1]))
+    size_line <- if (supported && (!is.na(row$tallest_m[1]) || !is.na(row$biggest_diam_cm[1])))
       sprintf("<div class='sp-years'>tallest %sm &middot; widest %scm</div>",
-              row$tallest_m[1] %||% "?", row$biggest_diam_cm[1] %||% "?") else ""
+              fmt_num(row$tallest_m[1]), fmt_num(row$biggest_diam_cm[1])) else ""
+    support_line <- if (supported) "" else
+      "<div class='sp-years'><b>No supported census; not zero.</b> Derived values are unavailable.</div>"
+    actions <- if (supported) sprintf(
+      "<button type='button' class='sp-btn sp-go' onclick=\"smtLoadStart('%s \\u00b7 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});\">Explore this site &rarr;</button>",
+      gsub("'", "", row$name[1] %||% code), code
+    ) else ""
+    actions <- paste0(actions, sprintf(
+      "<button type='button' class='sp-btn sp-info' onclick=\"Shiny.setInputValue('siteInfo','%s',{priority:'event'});\">About this site</button>",
+      code
+    ))
     htmltools::HTML(sprintf(
       "<div class='pm-pop site-pop'>
          <div class='pm-pop-t'>%s %s <span class='sp-code'>(%s)</span></div>
          <div class='pm-pop-s'>%s</div>
          <div class='pm-pop-n'><b>%s</b> %s &middot; <b>%s</b> species</div>
          %s
-         <div class='sp-actions'>
-           <button type='button' class='sp-btn sp-go' onclick=\"smtLoadStart('%s \\u00b7 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});\">Explore this site &rarr;</button>
-           <button type='button' class='sp-btn sp-info' onclick=\"Shiny.setInputValue('siteInfo','%s',{priority:'event'});\">About this site</button>
-         </div>
+         %s
+         <div class='sp-actions'>%s</div>
        </div>",
       emoji, row$name[1] %||% code, code, where,
-      format(row$n_trees[1] %||% 0, big.mark = ","), noun, row$n_species[1] %||% "?",
-      size_line, gsub("'", "", row$name[1] %||% code), code, code))
+      if (supported) fmt_count(row$n_trees[1]) else "—", noun,
+      if (supported) fmt_count(row$n_species[1]) else "—",
+      size_line, support_line, actions))
   }
 
   site_info_modal <- function(code) {
@@ -169,9 +333,10 @@ server <- function(input, output, session) {
       return(modalDialog(title = "Site info", easyClose = TRUE, footer = modalButton("Close"),
                          p("No details are available for this site.")))
     dash   <- function(x) if (length(x) == 0 || is.na(x) || !nzchar(as.character(x))) "—" else as.character(x)
-    shrub  <- identical(row$structure_type[1], "shrubland")
-    emoji  <- if (shrub) "\U0001F33F" else "\U0001F333"
-    noun   <- if (shrub) "shrubs" else "trees"
+    supported <- identical(row$support_status[1], "supported_sampled_context")
+    shrub  <- identical(row$primary_channel[1], "shrub_sapling_basal")
+    emoji  <- if (!supported) "\u26A0\uFE0F" else if (shrub) "\U0001F33F" else "\U0001F333"
+    noun   <- if (!supported) "live plants" else if (shrub) "shrubs & saplings" else "trees"
     coords <- if (!is.na(row$lat[1]) && !is.na(row$lng[1]))
       sprintf("%.3f, %.3f", row$lat[1], row$lng[1]) else "—"
     bio    <- site_bio(code)
@@ -183,10 +348,10 @@ server <- function(input, output, session) {
       easyClose = TRUE, size = "m",
       footer = tagList(
         modalButton("Close"),
-        tags$button(type = "button", class = "btn btn-primary",
-          onclick = sprintf("smtLoadStart('%s \\u00b7 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});",
-                            gsub("'", "\\\\'", dash(row$name[1])), code),
-          HTML("Explore this site&rsquo;s data &rarr;"))),
+        if (supported) tags$button(type = "button", class = "btn btn-primary",
+            onclick = sprintf("smtLoadStart('%s \\u00b7 loading\\u2026');Shiny.setInputValue('siteExplore','%s',{priority:'event'});",
+                              gsub("'", "\\\\'", dash(row$name[1])), code),
+            HTML("Explore this site&rsquo;s data &rarr;"))),
       div(class = "site-info",
         div(class = "si-sec",
           div(class = "si-h", "Where"),
@@ -194,32 +359,51 @@ server <- function(input, output, session) {
           if (!is.null(bio)) div(class = "si-row si-bio", bio),
           div(class = "si-coords", bs_icon("geo-alt"), " ", coords)),
         div(class = "si-sec",
-          div(class = "si-h", "What's standing here"),
-          div(class = "si-stats",
-            stat(row$n_trees[1], noun),
-            stat(row$n_species[1], "species")),
-          div(class = "si-row",
-            "Tallest ", dash(row$tallest_m[1]), "m · widest ", dash(row$biggest_diam_cm[1]), "cm")),
+          div(class = "si-h", "Supported sampled records"),
+          if (supported) tagList(
+            div(class = "si-stats",
+              stat(row$n_trees[1], noun),
+              stat(row$n_species[1], "species")),
+            div(class = "si-row",
+              "Tallest ", fmt_num(row$tallest_m[1]), "m · widest ", fmt_num(row$biggest_diam_cm[1]), "cm")
+          ) else tagList(
+            div(class = "si-stats", stat(NA, noun), stat(NA, "species")),
+            div(class = "si-row", tags$b("No supported census; not zero."),
+                " Derived record, size, and richness values are unavailable."))),
         div(class = "si-sec",
-          div(class = "si-h", "Structure"),
+          div(class = "si-h", "Default measurement view"),
           div(class = "si-row si-fam",
-            if (shrub) "Shrubland · basal-diameter sizing" else "Forest · DBH sizing"))))
+            if (!supported) "Held / unavailable" else if (shrub) "Shrub & sapling basal diameter" else "Tree DBH (trees ≥10 cm)"))))
   }
 
-  # national site-picker map on the splash: dot size = stems measured, colour =
-  # forest (teal) vs shrubland (ochre). Tap a dot to OPEN the Explore | About
+  # national site-picker map on the splash: dot size = sampled live plants, colour =
+  # active physical channel. Tap a dot to OPEN the Explore | About
   # popup — the flagship front door. The load now comes from the popup's Explore
   # button (input$siteExplore), so the module no longer drives picked().
   local({
     mapPickerServer("picker", site_table = site_table, radius_metric = "n_trees",
-      color_fn = function(st) ifelse(st$structure_type %in% "shrubland", DDL$bark, DDL$navy),
-      label_fn = function(r) sprintf(
-        "<b>%s</b> · %s, %s<br><b>%s</b> %s · <b>%s</b> species<br>tallest %sm · widest %scm<br><span style='color:#2f8fc4;font-weight:700'>Tap for site options</span>",
-        r$site, r$name %||% r$site, r$state %||% "",
-        format(r$n_trees %||% 0, big.mark = ","),
-        if (identical(r$structure_type, "shrubland")) "shrubs" else "trees",
-        r$n_species %||% "?", r$tallest_m %||% "?", r$biggest_diam_cm %||% "?"),
-      popup_fn = site_popup_html)
+      color_fn = function(st) ifelse(st$support_status != "supported_sampled_context", "#7b827d",
+        ifelse(st$primary_channel %in% "shrub_sapling_basal", DDL$bark, DDL$navy)),
+      dash_fn = function(st) ifelse(st$support_status != "supported_sampled_context", "2 4",
+        ifelse(st$primary_channel %in% "shrub_sapling_basal", "7 4", "")),
+      label_fn = function(r) {
+        supported <- identical(r$support_status, "supported_sampled_context")
+        if (!supported) return(sprintf(
+          "<b>%s</b> · %s, %s<br><b>—</b> live plants · <b>—</b> species<br><b>No supported census; not zero.</b><br><span style='color:#2f8fc4;font-weight:700'>Tap for site details</span>",
+          r$site, r$name %||% r$site, r$state %||% ""))
+        sprintf(
+          "<b>%s</b> · %s, %s<br><b>%s</b> %s · <b>%s</b> species<br>tallest %sm · widest %scm<br><span style='color:#2f8fc4;font-weight:700'>Tap for site options</span>",
+          r$site, r$name %||% r$site, r$state %||% "",
+          fmt_count(r$n_trees),
+          if (identical(r$primary_channel, "shrub_sapling_basal")) "shrubs & saplings" else "trees",
+          fmt_count(r$n_species), fmt_num(r$tallest_m), fmt_num(r$biggest_diam_cm))
+      },
+      popup_fn = site_popup_html,
+      legend_colors = c(DDL$navy, DDL$bark, "#7b827d"),
+      legend_labels = c("Tree DBH · solid ring", "Shrub & sapling basal · dashed ring",
+                        "Held / unknown · dotted ring"),
+      legend_dashes = c("", "7 4", "2 4"),
+      legend_title = "Measurement view")
   })
 
   # "Explore this site" (popup button OR About-modal footer button) -> load it.
@@ -228,33 +412,38 @@ server <- function(input, output, session) {
   # "About this site" -> instant info card (no bundle load)
   observeEvent(input$siteInfo, showModal(site_info_modal(input$siteInfo)))
 
-  pick_tree <- function(id, navigate = FALSE) {
-    if (is.null(id) || is.na(id) || id == "") return()
-    if (is.null(rv$snap) || !(id %in% rv$snap$individualID)) return()
-    rv$tree <- id
-    if (!identical(input$treeSel, id)) updateSelectizeInput(session, "treeSel", selected = id)
+  pick_tree <- function(key, navigate = FALSE) {
+    if (is.null(key) || is.na(key) || key == "" || is.null(rv$snap)) return()
+    # Backward-compatible bridge for old click payloads: accept a raw id only
+    # when it resolves unambiguously, then immediately promote it to the key.
+    if (!grepl("::", key, fixed = TRUE)) {
+      hits <- unique(plant_key_vec(rv$snap[rv$snap$individualID %in% key, , drop = FALSE]))
+      if (length(hits) != 1) return()
+      key <- hits[[1]]
+    }
+    if (!nrow(plant_rows(rv$snap, key))) return()
+    rv$tree <- key
+    if (!identical(input$treeSel, key)) updateSelectizeInput(session, "treeSel", selected = key)
     if (navigate) nav_select("tabs", "tree")
-    # celebrate a genuine standout: the site's biggest or tallest live plant
-    sp <- SP(); td <- woody_only(live_only(rv$snap), sp); lh <- live_only(rv$snap)
-    big_id  <- if (!is.null(td) && nrow(td)) td$individualID[which.max(td[[sp$col]])] else NA_character_
-    tall_id <- if (!is.null(lh) && nrow(lh) && any(is.finite(lh$height))) lh$individualID[which.max(lh$height)] else NA_character_
-    if (id %in% stats::na.omit(c(big_id, tall_id))) session$sendCustomMessage("confetti", list(big = TRUE))
   }
   observeEvent(input$treeSel, if (nzchar(input$treeSel %||% "")) pick_tree(input$treeSel, navigate = TRUE), ignoreInit = TRUE)
   observeEvent(input$qcCardRequest, if (nzchar(input$qcCardRequest %||% "")) pick_tree(input$qcCardRequest, navigate = TRUE), ignoreInit = TRUE)
-  observeEvent(input$surpriseBtn, { one <- rv$one; req(one); pick_tree(sample(one$individualID, 1), navigate = TRUE) })
+  observeEvent(input$surpriseBtn, {
+    one <- rv$one
+    if (is.null(one) || !nrow(one)) return()
+    pick_tree(sample(plant_key_vec(one), 1), navigate = TRUE)
+  })
 
   observeEvent(input$goStand,  nav_select("tabs", "stand"))
   observeEvent(input$goGrowth, nav_select("tabs", "growth"))
   observeEvent(input$goLab,    nav_select("tabs", "lab"))
-  observeEvent(input$goTree,   { if (is.null(rv$tree) && !is.null(rv$one) && nrow(rv$one)) { i <- which.max(rv$one[[SP()$col]]); if (length(i)) rv$tree <- rv$one$individualID[i] }; nav_select("tabs", "tree") })
-  observeEvent(input$goMap,    nav_select("tabs", "map"))
+  observeEvent(input$goSearch, nav_select("tabs", "search"))
 
   # ---- hero ---------------------------------------------------------------
   output$heroStats <- renderUI({
     one <- rv$one; snap <- rv$snap; if (is.null(one)) return(NULL)
     sp <- SP(); shrub <- identical(sp$type, "shrubland")
-    live_snap <- live_only(snap)
+    live_snap <- woody_only(live_only(snap), sp)
     woody_sp <- species_level_only(woody_only(one, sp))            # stand species
     tallest <- smax(live_snap$height)
     biggest <- smax(woody_only(live_snap, sp)[[sp$col]])
@@ -262,14 +451,17 @@ server <- function(input, output, session) {
     hero <- function(v, l, suf = "", icon, tone, ttl = NULL, click = NULL) {
       attrs <- list(class = paste0("hero-stat hero-", tone, if (!is.null(click)) " hero-click" else ""), title = ttl)
       if (!is.null(click)) {
+        attrs$type <- "button"
         attrs$onclick <- sprintf("Shiny.setInputValue('heroClick','%s',{priority:'event'})", click)
-        attrs$style <- "cursor:pointer"
       }
-      do.call(div, c(attrs, list(
+      tag_fn <- if (is.null(click)) div else tags$button
+      do.call(tag_fn, c(attrs, list(
         div(class = "hs-icon", bs_icon(icon)),
         div(div(class = "hs-v count-up", `data-target` = v, `data-suffix` = suf, "0"),
             div(class = "hs-l", l, if (!is.null(click)) tags$span(class = "stat-q", bs_icon("chevron-right")))))))
     }
+    st <- stand_site(snap, rv$plots, sp)
+    supported <- !is.null(st)
     div(class = "hero-band",
       div(class = "hero-title",
         bs_icon(if (shrub) "flower2" else "tree-fill"), tags$b(rv$label),
@@ -278,35 +470,38 @@ server <- function(input, output, session) {
                    class = "hero-change"),
         downloadLink("reportPdf", tagList(bs_icon("file-earmark-arrow-down"), " report (PDF)"),
                      class = "hero-report")),
+      source_gap_notice(),
       div(class = "hero-grid",
-        hero(nrow(woody_only(one, sp)), paste0("live ", sp$nouns), icon = if (shrub) "flower2" else "tree", tone = "pine",
+        hero(if (supported) nrow(one) else "—", paste0("live ", sp$nouns), icon = if (shrub) "flower2" else "tree", tone = "pine",
              ttl = sprintf("Live tagged %s %s, one count per individual.", sp$nouns, thresh)),
-        hero(dplyr::n_distinct(woody_sp$scientificName), paste0(sp$noun, " species"), icon = "diagram-3", tone = "sky",
-             ttl = sprintf("Species among live %s %s. The stand. Tap to rank species by basal area.", sp$nouns, thresh), click = "species"),
-        hero(ifelse(is.finite(tallest), round(tallest, 1), 0), "m tallest", icon = "arrows-vertical", tone = "gold",
+        hero(if (supported) dplyr::n_distinct(woody_sp$scientificName) else "—", "identified species", icon = "diagram-3", tone = "sky",
+             ttl = sprintf("Identified species among live %s %s. Tap to inspect measured taxon contribution within this channel.", sp$nouns, thresh), click = if (nrow(woody_sp)) "species" else NULL),
+        hero(if (is.finite(tallest)) round(tallest, 1) else "—", "m tallest", icon = "arrows-vertical", tone = "gold",
              ttl = sprintf("Tallest live %s at the site.", sp$noun)),
-        hero(ifelse(is.finite(biggest), round(biggest, 1), 0), paste0("cm biggest ", sp$size_lab), icon = "circle", tone = "bark",
-             ttl = sprintf("Largest live %s by %s. Tap to see the biggest.", sp$noun, sp$size_full), click = "biggest")))
+        hero(if (is.finite(biggest)) round(biggest, 1) else "—", paste0("cm biggest ", sp$size_lab), icon = "circle", tone = "bark",
+             ttl = sprintf("Largest live %s by %s. Tap to see the biggest.", sp$noun, sp$size_full), click = if (is.finite(biggest)) "biggest" else NULL)))
   })
 
   # ---- OVERVIEW -----------------------------------------------------------
   output$baBar <- renderPlotly({
-    ssall <- species_structure(rv$snap, rv$plots, SP()); if (is.null(ssall) || !nrow(ssall)) return(note_plot("No basal-area data"))
-    tot <- sum(ssall$ba_m2, na.rm = TRUE)
-    ss <- head(ssall, 18); ss$share <- if (is.finite(tot) && tot > 0) round(100 * ss$ba_m2 / tot) else 0
+    ssall <- species_structure(rv$snap, rv$plots, SP()); if (is.null(ssall) || !nrow(ssall)) return(note_plot("No supported measured contribution"))
+    tot <- sum(ssall$ba_m2_ha, na.rm = TRUE)
+    ss <- head(ssall, 18); ss$share <- if (is.finite(tot) && tot > 0) round(100 * ss$ba_m2_ha / tot) else 0
     ss$sciKey <- as.character(ss$scientificName)
     ss$scientificName <- factor(ss$scientificName, levels = rev(ss$scientificName))
     pal <- rv$pal %||% make_species_pal(rv$snap)
     # source + per-bar customdata(species) make the bars CLICKABLE: the
     # plotly_click observer below filters this site's live plants to the clicked
     # species and reveals them in a table + a "Download these (CSV)" button.
-    plot_ly(ss, x = ~ba_m2, y = ~scientificName, type = "bar", orientation = "h",
+    plot_ly(ss, x = ~ba_m2_ha, y = ~scientificName, type = "bar", orientation = "h",
       source = "baBar", customdata = ~sciKey,
       marker = list(color = unname(pal[as.character(ss$scientificName)] %||% DDL$green)),
-      text = ~paste0(share, "% of stand · ", stems, " stems · click to list its plants"),
-      hovertemplate = "%{y}<br>%{x:.1f} m² basal area · %{text}<extra></extra>") %>%
+      text = ~paste0(share, "% of measured total · ", stems, " stem records · click to list plants"),
+      hovertemplate = "%{y}<br>%{x:.1f} m²/ha mean plot contribution · %{text}<extra></extra>") %>%
       plotly_theme(legend = FALSE) %>%
-      plotly::layout(showlegend = FALSE, xaxis = list(title = "Total basal area (m²)"), yaxis = list(title = ""), margin = list(l = 200)) %>%
+      plotly::layout(showlegend = FALSE,
+        xaxis = list(title = "Mean sampled-plot contribution (m²/ha)"),
+        yaxis = list(title = ""), margin = list(l = 200)) %>%
       plotly::event_register("plotly_click")
   })
 
@@ -319,7 +514,8 @@ server <- function(input, output, session) {
     ev <- event_data("plotly_click", source = "baBar"); req(ev)
     sci <- ev$customdata; req(!is.null(sci), nzchar(sci))
     sp <- SP(); one <- rv$one; req(one)
-    m <- one[!is.na(one$scientificName) & one$scientificName == sci, , drop = FALSE]
+    one$.taxon_label <- .taxon_name(one)
+    m <- one[one$.taxon_label == sci, , drop = FALSE]
     if (!nrow(m)) return()
     m <- m[order(-m[[sp$col]]), , drop = FALSE]
     shown <- data.frame(
@@ -330,12 +526,13 @@ server <- function(input, output, session) {
       status = m$plantStatus,
       stringsAsFactors = FALSE)
     names(shown)[3] <- paste0(sp$size_lab, "_cm")
-    full <- tidy_trees_export(rv$trees[!is.na(rv$trees$scientificName) & rv$trees$scientificName == sci, , drop = FALSE])
+    all_labels <- .taxon_name(rv$trees)
+    full <- tidy_trees_export(rv$trees[all_labels == sci, , drop = FALSE], rv$meta)
     baBar_members(list(sci = sci, full = full %||% data.frame()))
     head_rows <- utils::head(shown, 80)
     showModal(modalDialog(easyClose = TRUE, size = "l",
       title = tagList(bs_icon("tree-fill"), tags$em(sci), sprintf(" · %d live %s", nrow(m), sp$nouns)),
-      p(class = "qc-why", sprintf("Live, species-identified %s at this site (one row per plant, biggest stem), ranked by %s. Download for the full per-measurement careers.", sp$nouns, sp$size_full)),
+      p(class = "qc-why", sprintf("Live %s with this identification at this site (one row per plant, biggest stem), ranked by %s. Download for the full preserved records.", sp$nouns, sp$size_full)),
       tags$div(class = "qc-modal-tbl",
         tags$table(class = "inspect-tbl",
           tags$thead(tags$tr(lapply(names(head_rows), function(nm) tags$th(nm)))),
@@ -352,24 +549,27 @@ server <- function(input, output, session) {
   output$overviewInsight <- renderUI({
     sp <- SP(); ss <- species_structure(rv$snap, rv$plots, sp); req(!is.null(ss), nrow(ss) > 0)
     st <- stand_site(rv$snap, rv$plots, sp)
-    stand_word <- if (identical(sp$type, "shrubland")) "shrubland" else "stand"
     insight_banner("stars", tone = "pine",
-      HTML(sprintf("<b><i>%s</i></b> dominates the %s by basal area (%d stems). It holds <span class='ci-hero'>%d</span> %s species at about <b>%s</b> m²/ha basal area.",
-        ss$scientificName[1], stand_word, ss$stems[1], dplyr::n_distinct(species_level_only(woody_only(rv$one, sp))$scientificName),
-        sp$noun, if (is.null(st)) "—" else st$ba_ha)))
+      HTML(sprintf("Within the supported <b>%s</b>, <b><i>%s</i></b> has the largest equal-plot measured contribution (%d stem records). <span class='ci-hero'>%d</span> identified species are represented; the channel mean is <b>%s</b> m²/ha. This is sampled measurement contribution—not ecological dominance.",
+        sp$channel_label, ss$scientificName[1], ss$stems[1],
+        dplyr::n_distinct(species_level_only(woody_only(rv$one, sp))$scientificName),
+        if (is.null(st)) "—" else fmt_num(st$ba_ha))))
   })
   output$siteInsights <- renderUI({
     snap <- rv$snap; one <- rv$one; req(snap, one); sp <- SP()
-    st <- stand_site(snap, rv$plots, sp); g <- tree_growth(rv$trees, sp); ss <- species_structure(snap, rv$plots, sp)
+    st <- stand_site(snap, rv$plots, sp); g <- tree_growth(rv$trees, sp, rv$plots); ss <- species_structure(snap, rv$plots, sp)
     one_d <- one[is.finite(one[[sp$col]]), ]; one_h <- one[is.finite(one$height), ]
     big  <- if (nrow(one_d)) one_d[which.max(one_d[[sp$col]]), ] else one[0, ]
     tall <- if (nrow(one_h)) one_h[which.max(one_h$height), ]      else one[0, ]
     pts <- c()
-    if (!is.null(st)) pts <- c(pts, sprintf("%s density is about <b>%s stems/ha</b> at <b>%s m²/ha</b> basal area%s (quadratic mean %s %s cm).", if (identical(sp$type,"shrubland")) "Shrubland" else "Stand", format(st$density_ha, big.mark=","), st$ba_ha, if (!is.null(st$ba_se) && is.finite(st$ba_se)) sprintf(" (±%s SE, n=%d plots)", st$ba_se, st$n_plots) else "", sp$size_lab, st$qmd))
+    if (!is.null(st)) pts <- c(pts, sprintf("Across <b>%d supported sampled plots</b>, the mean is <b>%s stems/ha</b> and <b>%s m²/ha</b>%s (stem-weighted quadratic mean %s: %s cm). This describes the sampled plot channel, not the whole site.", st$n_plots, fmt_count(st$density_ha), fmt_num(st$ba_ha), if (!is.null(st$ba_se) && is.finite(st$ba_se)) sprintf(" (plot SE %s m²/ha)", fmt_num(st$ba_se)) else "", sp$size_lab, fmt_num(st$qmd)))
     if (nrow(big) && nrow(tall)) pts <- c(pts, sprintf("The biggest %s is a <b><i>%s</i></b> at <b>%s cm</b> %s; the tallest reaches <b>%s m</b> (<i>%s</i>).", sp$noun, big$scientificName, round(big[[sp$col]],1), sp$size_lab, round(tall$height,1), tall$scientificName))
     else if (nrow(big)) pts <- c(pts, sprintf("The biggest %s is a <b><i>%s</i></b> at <b>%s cm</b> %s.", sp$noun, big$scientificName, round(big[[sp$col]],1), sp$size_lab))
-    if (!is.null(g) && nrow(g)) { gg <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5, ]; if (nrow(gg)) pts <- c(pts, sprintf("Across <b>%s</b> remeasured %s, %s grows a median of <b>%.2f cm/yr</b>.", format(nrow(gg), big.mark=","), sp$nouns, sp$size_lab, stats::median(gg$growth_cm_yr, na.rm=TRUE))) }
-    pts <- c(pts, "Basal area and density are stand indices from the sampled plots, not a wall-to-wall inventory; biomass isn't estimated (it needs an allometric model NEON doesn't publish here).")
+    if (!is.null(g) && nrow(g)) {
+      gg <- g[!g$mh_change & is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2, ]
+      if (nrow(gg)) pts <- c(pts, sprintf("Across <b>%s</b> comparable remeasured %s, median annualized %s change is <b>%.2f cm/yr</b>.", format(nrow(gg), big.mark=","), sp$nouns, sp$size_lab, stats::median(gg$growth_cm_yr, na.rm=TRUE)))
+    }
+    pts <- c(pts, "Sampled absence is retained as zero; impractical, dendrometer-only, or otherwise unsupported plot-events are held out rather than turned into zeros. Biomass is not estimated.")
     div(class = "insight-list", lapply(pts, function(t) div(class = "il-item", bs_icon("dot"), HTML(t))))
   })
 
@@ -382,52 +582,34 @@ server <- function(input, output, session) {
     forest <- !identical(sp$type, "shrubland")
     p <- plot_ly(sc, x = ~cls, y = ~yval, type = "bar", name = "observed", marker = list(color = DDL$green),
       hovertemplate = paste0("%{x} cm ", sp$size_lab, "<br>%{y} ", if (has_ha) "stems/ha" else "stems", "<extra></extra>"))
-    # FOREST only: overlay the expected reverse-J (de Liocourt negative-exponential)
-    # decline, fit log-linearly to the populated classes and drawn across ALL of
-    # them — so a recruitment gap shows as bars sitting BELOW the smooth reference.
-    # Shrublands use basal-diameter classes that don't follow de Liocourt, so it's
-    # omitted there (the insight text already characterises their shape).
-    if (forest) {
-      sc$idx <- seq_len(nrow(sc))
-      d <- sc[is.finite(sc$yval) & sc$yval > 0, , drop = FALSE]
-      if (nrow(d) >= 3) {
-        fit <- try(stats::lm(log(yval) ~ idx, data = d), silent = TRUE)
-        if (!inherits(fit, "try-error")) {
-          sc$exp <- exp(as.numeric(stats::predict(fit, sc)))
-          p <- p %>% add_trace(data = sc, x = ~cls, y = ~exp, type = "scatter", mode = "lines",
-            name = "expected reverse-J", inherit = FALSE,
-            line = list(color = DDL$bark, width = 2.5, dash = "dash"),
-            hovertemplate = paste0("expected reverse-J<br>~%{y:.0f} ", if (has_ha) "stems/ha" else "stems", "<extra></extra>"))
-        }
-      }
-    }
-    p %>% plotly_theme(legend = forest) %>%
-      plotly::layout(showlegend = forest,
-        legend = list(orientation = "h", y = 1.08, x = 0),
+    # A one-time size distribution is descriptive. Do not overlay an "expected"
+    # curve or infer recruitment, regeneration, or age from its shape alone.
+    p %>% plotly_theme(legend = FALSE) %>%
+      plotly::layout(showlegend = FALSE,
         xaxis = list(title = paste0(if (forest) "Diameter" else "Basal diameter", " class (cm ", sp$size_lab, ")")),
         yaxis = list(title = ylab))
   })
   output$sizeInsight <- renderUI({
-    sp <- SP(); sc <- size_class(rv$snap, NULL, sp); req(!is.null(sc))
+    sp <- SP(); sc <- size_class(rv$snap, rv$plots, sp); req(!is.null(sc))
     bk <- size_breaks(sp)
     small <- sum(sc$stems[sc$cls %in% bk$small]); big <- sum(sc$stems[sc$cls %in% bk$big])
     ratio <- if (big > 0) round(small / big, 1) else NA
     if (identical(sp$type, "shrubland")) {
-      shape <- if (is.na(ratio)) "concentrated in the smallest stems" else
-               if (ratio >= 3) "strongly bottom-heavy (many small stems, few large), an actively recruiting shrubland" else
-               if (ratio >= 1.2) "moderately bottom-heavy" else
-               "relatively even across basal sizes, with a notable share of large established shrubs"
+      shape <- if (is.na(ratio)) "concentrated in the smaller measured stems" else
+               if (ratio >= 3) "strongly weighted toward smaller measured stems" else
+               if (ratio >= 1.2) "moderately weighted toward smaller measured stems" else
+               "fairly even across the displayed basal-size classes"
       insight_banner("bar-chart-fill", tone = "pine",
-        HTML(sprintf("By <b>basal stem diameter</b>, the size distribution is <b>%s</b>%s. Desert shrubs are too short for a breast-height diameter, so basal diameter is the honest size measure here.",
-          shape, if (!is.na(ratio)) sprintf(" (a rough %.1f small per large stem)", ratio) else "")))
+        HTML(sprintf("By <b>basal stem diameter</b>, this sampled snapshot is <b>%s</b>%s. That is a descriptive size pattern—not evidence of recruitment, age, or regeneration.",
+          shape, if (!is.na(ratio)) sprintf(" (about %.1f small per large measured stem)", ratio) else "")))
     } else {
       shape <- if (is.na(ratio)) "concentrated in the smaller classes" else
-               if (ratio >= 3) "a clear descending, reverse-J-like shape, typical of a regenerating, uneven-aged stand" else
+               if (ratio >= 3) "strongly weighted toward the smaller displayed classes" else
                if (ratio >= 1.2) "a moderate descending shape" else
-               "top-heavy (relatively few small trees), which can indicate an aging or even-aged stand; verify against site history"
+               "weighted toward the larger displayed classes"
       insight_banner("bar-chart-fill", tone = "pine",
-        HTML(sprintf("Among trees ≥10 cm DBH, the size distribution is <b>%s</b>%s. The reverse-J / de Liocourt pattern. Smaller saplings are sampled in separate nested subplots and aren't shown here.",
-          shape, if (!is.na(ratio)) sprintf(" (a rough %.1f small per large stem)", ratio) else "")))
+        HTML(sprintf("Among trees ≥10 cm DBH, this sampled snapshot is <b>%s</b>%s. Smaller saplings use a different nested sampling channel and are not mixed into this chart; shape alone does not establish recruitment or stand age.",
+          shape, if (!is.na(ratio)) sprintf(" (about %.1f small per large measured stem)", ratio) else "")))
     }
   })
   # "this site vs the network" — all bundled sites by woody richness, current gold
@@ -443,8 +625,8 @@ server <- function(input, output, session) {
     # stems find more species). Label it honestly and surface effort (n_trees,
     # n_plots) in every bar's tooltip so the reader can see what drove the count.
     eff <- if (all(c("n_trees","n_plots") %in% names(d)))
-      paste0("<br>", format(d$n_trees, big.mark=","), " live stems over ", d$n_plots, " plots (effort varies)")
-      else if ("n_trees" %in% names(d)) paste0("<br>", format(d$n_trees, big.mark=","), " live stems (effort varies)")
+      paste0("<br>", format(d$n_trees, big.mark=","), " live plants over ", d$n_plots, " plots (effort varies)")
+      else if ("n_trees" %in% names(d)) paste0("<br>", format(d$n_trees, big.mark=","), " live plants (effort varies)")
       else ""
     d$tip <- paste0("<b>", d$site, "</b> · ", d$name, "<br>", d$n_species, " observed woody species", eff,
         ifelse(as.character(d$site) == cur, "<br>◀ this site", ""))
@@ -457,7 +639,7 @@ server <- function(input, output, session) {
         yaxis = list(title = "", automargin = TRUE, tickfont = list(size = 9)))
   })
   output$htPlot <- renderPlotly({
-    s <- live_only(rv$snap); h <- s$height[is.finite(s$height) & s$height > 0]; if (!length(h)) return(note_plot("No height data"))
+    s <- woody_only(live_only(rv$snap), SP()); h <- s$height[is.finite(s$height) & s$height > 0]; if (!length(h)) return(note_plot("No height data"))
     plot_ly(x = h, type = "histogram", nbinsx = 24, marker = list(color = DDL$bark),
       hovertemplate = "%{x} m<br>%{y} stems<extra></extra>") %>%
       plotly_theme(legend = FALSE) %>%
@@ -466,61 +648,59 @@ server <- function(input, output, session) {
   output$densityBanner <- renderUI({
     sp <- SP(); st <- stand_site(rv$snap, rv$plots, sp)
     if (is.null(st)) {
-      # Treeless / single-census site (e.g. WOOD): plants are tagged but there is
-      # no plot-level woody stand to scale to per-hectare values. Show a designed
-      # empty card instead of a blank space, so the absence is explained.
       return(div(class = "chart-insight ci-bark stand-empty", bs_icon("info-circle"),
-        div(class = "ci-text", HTML(sprintf(
-          "<b>No woody stand to summarise here.</b> %s has tagged plants but not the plot-level %s sampling needed to scale basal area and density to per-hectare values (a single-census or sparse-woody site). The individual growth, size, and quality views still work; the stand fingerprint does not apply.",
-          rv$site %||% "This site",
-          if (identical(sp$type, "shrubland")) "shrub/sapling" else "tree")))))
+        div(class = "ci-text", HTML(paste0(
+          "<b>Plot estimate held.</b> The bundled record does not contain a matched, supported ",
+          if (identical(sp$type, "shrubland")) "shrub/sapling" else "tree",
+          " sampling opportunity with a valid area denominator. That is an unknown/unsupported state—not evidence of zero woody vegetation."))),
+        source_gap_inline()))
     }
     pre  <- if (st$n_plots < 3) "Preliminary (few plots): " else ""
-    se_ba <- if (is.finite(st$ba_se)) sprintf(" ±%s SE", st$ba_se) else ""
-    se_d  <- if (is.finite(st$density_se)) sprintf(" ±%s", format(st$density_se, big.mark = ",")) else ""
+    se_ba <- if (is.finite(st$ba_se)) sprintf(" ±%s SE", fmt_num(st$ba_se)) else ""
+    se_d  <- if (is.finite(st$density_se)) sprintf(" ±%s", fmt_count(st$density_se)) else ""
     scope <- if (identical(sp$type, "shrubland")) "shrubs (basal diameter)" else "trees ≥10 cm DBH"
-    # 4th FIA number: the dominant species' share of total basal area (who owns the stand)
+    # Largest measured contributor within this channel; no ecological dominance claim.
     ss <- species_structure(rv$snap, rv$plots, sp)
-    dom_txt <- if (!is.null(ss) && nrow(ss) && is.finite(ss$ba_m2[1]) && sum(ss$ba_m2, na.rm = TRUE) > 0)
-      sprintf(" Dominated by <b><i>%s</i></b> (<b>%.0f%%</b> of basal area).",
-              ss$scientificName[1], 100 * ss$ba_m2[1] / sum(ss$ba_m2, na.rm = TRUE)) else ""
-    # Design-based path, behind a click only: when BOTH plot designs are present, the
-    # shipped number pools them — offer the distributed-only (spatially-balanced random)
-    # mean, the basis for an UNBIASED site estimate, inside a popover so the default view
-    # stays clean. Omitted entirely at single-design sites (nothing to disclose).
+    dom_txt <- if (!is.null(ss) && nrow(ss) && is.finite(ss$ba_m2_ha[1]) && sum(ss$ba_m2_ha, na.rm = TRUE) > 0)
+      sprintf(" Largest measured contributor: <b><i>%s</i></b> (<b>%.0f%%</b> of this channel's area).",
+              ss$scientificName[1], 100 * ss$ba_m2_ha[1] / sum(ss$ba_m2_ha, na.rm = TRUE)) else ""
+    # Keep plot designs visible as context, without promoting either subset to a
+    # certified site-wide estimator.
     design_pop <- NULL
-    types <- unique(rv$plots$plotType[rv$plots$plotID %in% rv$snap$plotID])
+    types <- if ("plotType" %in% names(rv$plots)) unique(rv$plots$plotType[rv$plots$plotID %in% rv$snap$plotID]) else character()
     if (sum(c("distributed", "tower") %in% types) == 2) {
       dst <- stand_site(rv$snap, rv$plots, sp, plot_types = "distributed")
       if (!is.null(dst)) design_pop <- bslib::popover(
         tags$span(class = "info-dot", tabindex = "0", role = "button",
-                  `aria-label` = "More info: Design-based estimate",
+                  `aria-label` = "More info: sampling-design context",
                   bs_icon("info-circle", `aria-hidden` = "true")),
-        title = "Design-based estimate",
+        title = "Sampling-design context",
         p("The headline pools ", tags$b("tower"), " (clustered at the flux tower) and ", tags$b("distributed"),
-          " (spatially-balanced random) plots. For an unbiased site mean, the ", tags$b("distributed-only"), " stratum is:"),
-        p(HTML(sprintf("<b>%s m²/ha</b>%s basal area, <b>%s stems/ha</b> across <b>%d</b> distributed plots.",
-          dst$ba_ha, if (is.finite(dst$ba_se)) sprintf(" ±%s SE", dst$ba_se) else "",
-          format(dst$density_ha, big.mark = ","), dst$n_plots))))
+          " plots. Shown separately for transparency, the ", tags$b("distributed-only"), " sampled subset is:"),
+        p(HTML(sprintf("<b>%s m²/ha</b>%s measured cross-sectional area, <b>%s stems/ha</b> across <b>%d</b> distributed plots.",
+          fmt_num(dst$ba_ha), if (is.finite(dst$ba_se)) sprintf(" ±%s SE", fmt_num(dst$ba_se)) else "",
+          fmt_count(dst$density_ha), dst$n_plots))),
+        p(class = "dim", "This remains a summary of supported sampled plots, not a wall-to-wall site estimate."))
     }
+    support_txt <- stand_support_message(st, rv$plots, sp)
     insight_banner("calculator", tone = "gold",
-      HTML(sprintf("%sAcross <b>%d</b> sampled plots (%s): <span class='ci-hero'>%s m²/ha</span>%s basal area, <b>%s stems/ha</b>%s, quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± SE across plots (the sampling unit), a stand fingerprint, not a wall-to-wall inventory.</span>",
-        pre, st$n_plots, scope, st$ba_ha, se_ba, format(st$density_ha, big.mark = ","), se_d, sp$size_lab, st$qmd, dom_txt)),
-      design_pop)
+      HTML(sprintf("%sAcross <b>%d supported sampled plots</b> (%s): <span class='ci-hero'>%s m²/ha</span>%s measured cross-sectional area, <b>%s stems/ha</b>%s, stem-weighted quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± plot SE. %s This is not a wall-to-wall inventory.</span>",
+        pre, st$n_plots, scope, fmt_num(st$ba_ha), se_ba, fmt_count(st$density_ha), se_d, sp$size_lab, fmt_num(st$qmd), dom_txt, support_txt)),
+      design_pop, source_gap_inline())
   })
 
   # ---- GROWTH & MORTALITY -------------------------------------------------
   output$growthPlot <- renderPlotly({
-    sp <- SP(); g <- tree_growth(rv$trees, sp); if (is.null(g) || !nrow(g)) return(note_plot(sprintf("No remeasured %s yet for a growth estimate", sp$nouns)))
+    sp <- SP(); g <- tree_growth(rv$trees, sp, rv$plots); if (is.null(g) || !nrow(g)) return(note_plot(sprintf("No supported remeasured %s yet for a growth estimate", sp$nouns)))
     gg <- g$growth_cm_yr[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2 & !g$mh_change]
     plot_ly(x = gg, type = "histogram", nbinsx = 30, marker = list(color = DDL$green),
       hovertemplate = paste0("%{x} cm/yr<br>%{y} ", sp$nouns, "<extra></extra>")) %>%
       plotly_theme(legend = FALSE) %>%
-      plotly::layout(showlegend = FALSE, xaxis = list(title = paste0(if (identical(sp$type,"shrubland")) "Basal-diameter" else "Diameter", " growth (cm/yr)")), yaxis = list(title = sp$Nouns),
+      plotly::layout(showlegend = FALSE, xaxis = list(title = paste0(if (identical(sp$type,"shrubland")) "Basal-diameter" else "Diameter", " change (cm/yr)")), yaxis = list(title = sp$Nouns),
         shapes = list(list(type="line", x0=0, x1=0, yref="paper", y0=0, y1=1, line=list(color="rgba(224,180,58,0.8)", dash="dot", width=1))))
   })
   output$growthInsight <- renderUI({
-    sp <- SP(); g <- tree_growth(rv$trees, sp); req(!is.null(g), nrow(g) > 0)
+    sp <- SP(); g <- tree_growth(rv$trees, sp, rv$plots); req(!is.null(g), nrow(g) > 0)
     nmh <- sum(g$mh_change, na.rm = TRUE)
     gv <- g[!g$mh_change & is.finite(g$growth_cm_yr), ]
     clean <- gv[gv$growth_cm_yr <= 5 & gv$growth_cm_yr >= -2, ]; req(nrow(clean) > 0)
@@ -529,10 +709,10 @@ server <- function(input, output, session) {
     q <- stats::quantile(clean$growth_cm_yr, c(.25, .75), na.rm = TRUE, names = FALSE)
     neg <- round(100 * mean(clean$growth_cm_yr < -0.1, na.rm = TRUE))
     insight_banner("graph-up", tone = "pine",
-      HTML(sprintf("Across <b>%s</b> remeasured %s, %s grows a median of <span class='ci-hero'>%.2f cm/yr</span> (IQR %.2f–%.2f). About <b>%d%%</b> show a decrease between visits, usually real (bark, drought), kept and flagged.%s%s",
-        format(nrow(clean), big.mark = ","), sp$nouns, sp$size_lab, med, q[1], q[2], neg,
+      HTML(sprintf("Across <b>%s</b> comparable remeasurements, median annualized %s change is <span class='ci-hero'>%.2f cm/yr</span> (IQR %.2f–%.2f). About <b>%d%%</b> decrease between events; decreases can reflect biology, damage, or measurement differences, so they are retained and flagged.%s%s",
+        format(nrow(clean), big.mark = ","), sp$size_lab, med, q[1], q[2], neg,
         if (nmh > 0) sprintf(" %s %s with a changed measurement height are excluded.", format(nmh, big.mark = ","), sp$nouns) else "",
-        if (trunc_n > 0) sprintf(" %s with >5 or <−2 cm/yr (likely measurement issues) are off-chart but kept in the data.", format(trunc_n, big.mark = ",")) else "")))
+        if (trunc_n > 0) sprintf(" %s outside the −2 to +5 cm/yr review screen are off-chart but kept in the data.", format(trunc_n, big.mark = ",")) else "")))
   })
   output$statusPlot <- renderPlotly({
     sp <- SP(); ss <- status_summary(rv$snap, sp); if (is.null(ss) || !nrow(ss)) return(note_plot("No status data"))
@@ -546,36 +726,35 @@ server <- function(input, output, session) {
   })
   # shared so a clicked row maps to the exact plant (DT row index = data index)
   fast_growers <- reactive({
-    sp <- SP(); g <- tree_growth(rv$trees, sp); if (is.null(g) || !nrow(g)) return(NULL)
+    sp <- SP(); g <- tree_growth(rv$trees, sp, rv$plots); if (is.null(g) || !nrow(g)) return(NULL)
     g <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 0 & g$growth_cm_yr <= 5 & !g$mh_change, , drop = FALSE]
     if (!nrow(g)) return(NULL)
     g[order(-g$growth_cm_yr), , drop = FALSE][seq_len(min(20, nrow(g))), , drop = FALSE]
   })
   output$fastTable <- DT::renderDT({
     sp <- SP(); g <- fast_growers()
-    if (is.null(g)) return(DT::datatable(data.frame(Message = sprintf("No clean remeasured %s growth yet.", sp$nouns)), rownames = FALSE, options = list(dom = "t")))
-    lab0 <- sprintf("%s start (cm)", sp$size_lab); lab1 <- sprintf("%s now (cm)", sp$size_lab)
-    df <- data.frame(Plant = short_tree(g$individualID), Species = g$scientificName,
+    if (is.null(g)) return(DT::datatable(data.frame(Message = sprintf("No comparable positive diameter-change records for %s yet.", sp$nouns)), rownames = FALSE, options = list(dom = "t")))
+    lab0 <- sprintf("First %s (cm)", sp$size_lab); lab1 <- sprintf("Last %s (cm)", sp$size_lab)
+    df <- data.frame(Plant = short_tree(g$individualID), Plot = g$plotID %||% "—", Species = g$scientificName,
                      v0 = round(g$d0,1), v1 = round(g$d1,1),
-                     `Growth (cm/yr)` = g$growth_cm_yr, check.names = FALSE)
-    names(df)[3:4] <- c(lab0, lab1)
+                     `Annualized change (cm/yr)` = g$growth_cm_yr, check.names = FALSE)
+    names(df)[4:5] <- c(lab0, lab1)
     DT::datatable(df, rownames = FALSE, selection = "single", class = "leader-dt",
-      options = list(pageLength = 8, dom = "tp", order = list(list(4, "desc"))))
+      options = list(pageLength = 8, dom = "tp", order = list(list(5, "desc"))))
   })
   # click a fast-grower row -> open that plant's career (matches the Champions table)
   observeEvent(input$fastTable_rows_selected, {
     g <- fast_growers(); i <- input$fastTable_rows_selected
-    if (!is.null(g) && length(i) && i <= nrow(g)) pick_tree(g$individualID[i], navigate = TRUE)
+    if (!is.null(g) && length(i) && i <= nrow(g)) pick_tree(growth_key_vec(g)[i], navigate = TRUE)
   })
 
-  # growth-allometry: does annual diameter increment slow as plants get bigger?
-  # (the structural twin of the mammal Size Lab — current size vs growth rate.)
+  # Descriptive last-recorded size versus annualized diameter change.
   output$growthSize <- renderPlotly({
-    sp <- SP(); g <- tree_growth(rv$trees, sp)
+    sp <- SP(); g <- tree_growth(rv$trees, sp, rv$plots)
     if (is.null(g) || !nrow(g)) return(note_plot(sprintf("No remeasured %s yet", sp$nouns)))
     g <- g[is.finite(g$d1) & g$d1 > 0 & is.finite(g$growth_cm_yr) &
            g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2 & !g$mh_change, , drop = FALSE]
-    if (nrow(g) < 5) return(note_plot(sprintf("Not enough remeasured %s for a size–growth view", sp$nouns)))
+    if (nrow(g) < 5) return(note_plot(sprintf("Not enough remeasured %s for a size–change view", sp$nouns)))
     topsp <- names(sort(table(g$scientificName[!is.na(g$scientificName)]), decreasing = TRUE))
     topsp <- topsp[seq_len(min(6, length(topsp)))]
     g$grp <- ifelse(g$scientificName %in% topsp, g$scientificName, "other species")
@@ -586,9 +765,9 @@ server <- function(input, output, session) {
     g$tip <- paste0(
       "<span class='smt-pin-emoji'>", sp$emoji, "</span> <b>", g$short, "</b><br/>",
       "<em>", ifelse(is.na(g$scientificName), "—", g$scientificName), "</em><br/>",
-      "<span class='smt-pin-stats'>", round(g$d1, 1), " cm ", sp$size_lab, " now · ",
+      "<span class='smt-pin-stats'>", round(g$d1, 1), " cm last recorded ", sp$size_lab, " · ",
         sprintf("%+.2f", g$growth_cm_yr), " cm/yr</span>",
-      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", g$individualID,
+      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", growth_key_vec(g),
         "'>", sp$emoji, " Open ", sp$noun, " career &rarr;</span>",
       "<br/><em class='smt-pin-hint'>Tap the dot to pin this card</em>")
     pal <- rv$pal; p <- plot_ly()
@@ -597,7 +776,7 @@ server <- function(input, output, session) {
       p <- p %>% add_trace(data = gs, x = ~d1, y = ~growth_cm_yr, type = "scatter", mode = "markers",
         name = s, customdata = ~tip, marker = list(size = 7, color = col, opacity = 0.7, line = list(color = "#fff", width = 0.5)),
         text = ~paste0(sp$noun, " ", short),
-        hovertemplate = paste0("<b>", s, "</b><br>%{x:.0f} cm now<br>%{y:.2f} cm/yr<extra></extra>"))
+        hovertemplate = paste0("<b>", s, "</b><br>%{x:.0f} cm last recorded<br>%{y:.2f} cm/yr change<extra></extra>"))
     }
     # gated trend line: drawn ONLY when n & |Spearman r| & p clear the bar (honest —
     # no fabricated line where the relationship isn't there)
@@ -610,36 +789,37 @@ server <- function(input, output, session) {
       p <- p %>% add_trace(x = xs, y = yh, type = "scatter", mode = "lines", inherit = FALSE,
         name = "trend", line = list(color = if (is_dark()) "#eaf4ec" else "#16261c", width = 2.5, dash = "dash"),
         hovertemplate = "trend<extra></extra>")
-      sprintf("Trend: %s (Spearman r = %+.2f, p = %.3f, n = %d)",
-        if (ct$estimate < 0) "growth slows as plants get bigger" else "growth rises with size",
+      sprintf("Observed association: %s (Spearman r = %+.2f, p = %.3f, n = %d)",
+        if (ct$estimate < 0) "larger last-recorded plants had lower changes" else "larger last-recorded plants had higher changes",
         ct$estimate, ct$p.value, nrow(g))
-    } else sprintf("No clear size–growth trend at this site, shown as scatter only (n = %d)", nrow(g))
+    } else sprintf("No clear size–change association at this site, shown as scatter only (n = %d)", nrow(g))
     p %>% plotly_theme(legend = TRUE) %>%
       plotly::layout(legend = list(orientation = "h", y = -0.25),
         title = list(text = sub, x = 0, xref = "paper", font = list(size = 12, color = DDL$muted)),
         margin = list(t = 46),
-        xaxis = list(title = paste0(if (identical(sp$type, "shrubland")) "Basal diameter" else "DBH", " now (cm)")),
-        yaxis = list(title = "Growth (cm/yr)", zeroline = TRUE))
+        xaxis = list(title = paste0(if (identical(sp$type, "shrubland")) "Basal diameter" else "DBH", " last supported record (cm)")),
+        yaxis = list(title = "Annualized diameter change (cm/yr)", zeroline = TRUE))
   })
 
   # compound ANNUAL mortality rate (distinct from the snapshot pie)
   output$mortalityBanner <- renderUI({
-    sp <- SP(); mr <- stand_mortality(rv$trees, sp)
+    sp <- SP(); mr <- stand_mortality(rv$trees, sp, rv$plots)
     if (is.null(mr)) return(insight_banner("info-circle", tone = "navy",
       HTML("<b>Annual mortality:</b> needs ≥2 censuses of a big-enough cohort, not estimable here yet, so only the live/standing-dead snapshot below is shown.")))
-    ci <- if (is.finite(mr$lo) && is.finite(mr$hi)) sprintf(" (95%% CI %.2f–%.2f)", mr$lo, mr$hi) else ""
+    ci <- if (is.finite(mr$lo) && is.finite(mr$hi))
+      sprintf(" (95%% plot-cluster jackknife interval %s–%s)", fmt_num(mr$lo, 2), fmt_num(mr$hi, 2)) else ""
     insight_banner("heart-pulse", tone = "pine",
-      HTML(sprintf("Compound <b>annual mortality ≈ <span class='ci-hero'>%.2f%%/yr</span></b>%s. <b>%s</b> of <b>%s</b> tracked %s died over a mean ~%.1f-yr interval. The forestry-standard rate; the breakdown below is a point-in-time snapshot, not a rate.",
-        mr$rate_pct, ci, format(mr$deaths, big.mark = ","), format(mr$n0, big.mark = ","), sp$nouns, mr$t_yrs)))
+      HTML(sprintf("Descriptive compound <b>annual cohort mortality ≈ <span class='ci-hero'>%s%%/yr</span></b>%s. <b>%s</b> of <b>%s</b> trackable plants transitioned from any-live to all-dead over a mean ~%s-year interval; lost/unknown fates are censored. The breakdown below is a separate point-in-time snapshot.",
+        fmt_num(mr$rate_pct, 2), ci, fmt_count(mr$deaths), fmt_count(mr$n0), fmt_num(mr$t_yrs, 1))))
   })
 
   # ---- SITE DATA-QUALITY scan (clickable inspector + downloadable report) -
-  veg_qc <- reactive({ req(rv$trees); tree_qc_site(rv$trees, SP()) })
+  veg_qc <- reactive({ req(rv$trees); tree_qc_site(rv$trees, SP(), rv$plots) })
   qc_modal_rows <- reactiveVal(NULL)
   output$vegQcFlags <- renderUI({
     q <- veg_qc()
     if (is.null(q) || !q$n_flag) return(div(class = "qc-flag qc-flag-clean", bs_icon("check2-circle"),
-      HTML(" <b>No data-quality flags.</b> No impossible status flips, implausible diameter jumps, or unexplained shrinks among the remeasured plants. All clean.")))
+      HTML(" <b>No listed checks triggered.</b> This is not proof that every record is error-free; it means the app's explicit status, measurement-point, and increment rules found no flags.")))
     ic <- c(high = "exclamation-octagon-fill", warn = "exclamation-triangle-fill", info = "info-circle-fill")
     div(class = "qc-flag-list", lapply(q$flags, function(f)
       tags$button(class = paste0("qc-flag qc-flag-", f$level), type = "button",
@@ -667,10 +847,19 @@ server <- function(input, output, session) {
   output$vegQcFlagCsv <- downloadHandler(
     filename = function() sprintf("NEON-veg-%s-QC-%s-%s.csv", rv$site %||% "site",
       (qc_modal_rows() %||% list(key = "flag"))$key, format(Sys.Date(), "%Y%m%d")),
-    content = function(file) utils::write.csv((qc_modal_rows() %||% list(rows = data.frame()))$rows %||% data.frame(), file, row.names = FALSE, na = ""))
+    content = function(file) {
+      payload <- qc_modal_rows() %||% list(key = "flag", rows = data.frame())
+      rows <- payload$rows %||% data.frame()
+      rows <- cbind(contract_id = VEG_CONTRACT_ID, flag = payload$key, rows, stringsAsFactors = FALSE)
+      utils::write.csv(with_export_receipt(rows, rv$meta), file, row.names = FALSE, na = "")
+    })
   output$vegQcReport <- downloadHandler(
     filename = function() sprintf("NEON-veg-%s-QC-report-%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
-    content = function(file) { q <- veg_qc(); utils::write.csv(if (is.null(q)) data.frame() else q$report, file, row.names = FALSE, na = "") })
+    content = function(file) {
+      q <- veg_qc()
+      rows <- with_export_receipt(if (is.null(q)) data.frame() else q$report, rv$meta)
+      utils::write.csv(rows, file, row.names = FALSE, na = "")
+    })
 
   # ---- SIZE LAB (flagship) -----------------------------------------------
   output$labScatter <- renderPlotly({
@@ -684,11 +873,11 @@ server <- function(input, output, session) {
       # Force-keep the currently viewed tree so its gold ★ diamond never gets
       # sampled out (it was vanishing on ~10/42 sites incl the HARV demo). Pull
       # the viewing row aside, downsample the rest, then re-bind and de-dup.
-      keep_row <- if (!is.null(rv$tree)) pts[pts$individualID %in% rv$tree, , drop = FALSE] else pts[0, ]
+      keep_row <- if (!is.null(rv$tree)) plant_rows(pts, rv$tree) else pts[0, ]
       set.seed(7); samp <- pts[sort(sample.int(nrow(pts), 1800)), , drop = FALSE]
       pts <- if (nrow(keep_row)) {
         rb <- rbind(keep_row, samp)
-        rb[!duplicated(rb$individualID), , drop = FALSE]
+        rb[!duplicated(plant_key_vec(rb)), , drop = FALSE]
       } else samp
     }
     keycol <- input$labColor %||% "species"
@@ -705,7 +894,7 @@ server <- function(input, output, session) {
       "<em>", ifelse(is.na(pts$scientificName), "—", pts$scientificName), "</em><br/>",
       "<span class='smt-pin-stats'>", round(pts$size,1), " cm ", sp$size_lab, " · ", round(pts$height,1), " m tall",
         ifelse(is.na(pts$canopyPosition), "", paste0("<br/>", pts$canopyPosition)), "</span>",
-      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", pts$individualID,
+      "<br/><span class='smt-open' role='button' tabindex='0' data-tag='", plant_key_vec(pts),
         "'>", sp$emoji, " Open ", sp$noun, " career &rarr;</span>",
       "<br/><em class='smt-pin-hint'>Tap the dot to pin this card</em>")
     p <- plot_ly()
@@ -726,7 +915,7 @@ server <- function(input, output, session) {
       qlab(xr[2]-px, yr[1]+py, sp$quad[["bigshort"]], "right", "bottom"),
       qlab(xr[1]+px, yr[1]+py, sp$quad[["smallshort"]], "left", "bottom"))
     tag <- rv$tree
-    if (!is.null(tag)) { ir <- pts[pts$individualID == tag, ]
+    if (!is.null(tag)) { ir <- plant_rows(pts, tag)
       if (nrow(ir) == 1) p <- p %>% add_trace(x = ir$size, y = ir$height, type="scatter", mode="markers",
         name = "★ viewing", customdata = ir$tip, showlegend = TRUE,
         marker = list(symbol="diamond", size=18, color="#ffd24a", line=list(color="#fff", width=1.6)),
@@ -742,17 +931,18 @@ server <- function(input, output, session) {
     donly <- sum(is.finite(sz) & sz > 0 & !(is.finite(one$height) & one$height > 0))
     if (donly == 0) return(NULL)
     div(class = "qc-cap-note", style = "margin-top:6px", bs_icon("info-circle"),
-      sprintf(" %s live stems were measured for %s but not height, so they can't be placed in this 2-D space, and they're not shown here.", format(donly, big.mark = ","), sp$size_full))
+      sprintf(" %s live plants were measured for %s but not height, so they can't be placed in this 2-D space, and they're not shown here.", format(donly, big.mark = ","), sp$size_full))
   })
   output$treeCardSlot <- renderUI({
     sp <- SP()
     if (is.null(rv$tree)) return(div(class = "qc-empty",
       div(class = "qc-empty-icon", sp$emoji), h4(sprintf("Tap a %s to see its card", sp$noun)),
-      p(sprintf("Tap a dot above and choose “Open %s career”, or pick one in the sidebar.", sp$noun))))
-    snap <- rv$snap; row <- one_per_tree(snap[snap$individualID == rv$tree, ], sp); if (!nrow(row)) return(NULL)
+      p(sprintf("Tap a dot above and choose “Open %s career”, or use the plant picker above.", sp$noun))))
+    snap <- rv$snap; row <- one_per_tree(plant_rows(snap, rv$tree), sp); if (!nrow(row)) return(NULL)
     div(class = "lab-sel", span(class = "ls-emoji", sp$emoji),
       div(class = "ls-body",
-        div(class = "ls-id", tags$b(short_tree(rv$tree)), sprintf(" · %s · %s cm %s · %s m",
+        div(class = "ls-id", tags$b(short_tree(row$individualID)), sprintf(" · %s · %s · %s cm %s · %s m",
+          row$plotID,
           ifelse(is.na(row$scientificName),"—",row$scientificName), round(row[[sp$col]],1), sp$size_lab, ifelse(is.na(row$height),"—",round(row$height,1)))),
         div(class = "ls-dom", ifelse(is.na(row$plantStatus),"",row$plantStatus))),
       actionButton("goTreeFromCard", tagList(bs_icon("arrows-fullscreen"), " Open full career"), class = "btn-outline-dark btn-sm"))
@@ -760,10 +950,13 @@ server <- function(input, output, session) {
   observeEvent(input$goTreeFromCard, nav_select("tabs", "tree"))
 
   # ---- TREE CAREER (profile, downloadable) -------------------------------
-  tree_card_ui <- function(id) {
+  tree_card_ui <- function(key) {
     SZ <- SP()
-    snap <- rv$snap; row <- one_per_tree(snap[snap$individualID == id, ], SZ); if (!nrow(row)) return(NULL)
-    hist <- tree_history(rv$trees, id); flags <- tree_qc_flags(hist, SZ)
+    snap <- rv$snap; selected <- plant_rows(snap, key)
+    row <- one_per_tree(selected, SZ); if (!nrow(row)) return(NULL)
+    id <- as.character(row$individualID[[1]])
+    career <- plant_rows(rv$trees, key)
+    hist <- tree_history(career, id); flags <- tree_qc_flags(hist, SZ, rv$plots)
     sp <- row$scientificName; dcol <- SZ$col
     # how big for its species (size percentile within species, this site)
     cohort <- rv$one[[dcol]][rv$one$scientificName %in% sp & is.finite(rv$one[[dcol]])]
@@ -771,17 +964,92 @@ server <- function(input, output, session) {
     d_now <- row[[dcol]]
     pct <- if (ncoh >= 5 && is.finite(d_now)) round(100 * mean(cohort <= d_now)) else NA
     tile <- function(v, l) div(class = "qc-tile", div(class = "qc-tile-v", v), div(class = "qc-tile-l", l))
-    growth <- { g <- tree_growth(rv$trees[rv$trees$individualID == id, ], SZ); if (!is.null(g) && nrow(g)) g$growth_cm_yr[1] else NA }
+    growth_all <- tree_growth(career, SZ, rv$plots)
+    measurement_unaligned <- !is.null(growth_all) && nrow(growth_all) &&
+      any(growth_all$mh_change %in% TRUE)
+    growth <- {
+      g <- if (!is.null(growth_all) && nrow(growth_all))
+        growth_all[!growth_all$mh_change & is.finite(growth_all$growth_cm_yr), , drop = FALSE] else NULL
+      if (!is.null(g) && nrow(g)) g$growth_cm_yr[1] else NA_real_
+    }
+    n_visits <- if (is.null(hist) || !nrow(hist)) 0L else
+      if ("eventID" %in% names(hist)) dplyr::n_distinct(hist$eventID) else dplyr::n_distinct(hist$date)
+    trajectory <- tree_trajectory(career, id, dcol, rv$plots)
+    supported_career <- .supported_history(career, rv$plots, SZ)
+    basal_unaligned <- FALSE
+    if (identical(SZ$channel, "shrub_sapling_basal") &&
+        !is.null(supported_career) && nrow(supported_career)) {
+      supported_career <- .ensure_event_columns(supported_career)
+      basal_d <- suppressWarnings(as.numeric(supported_career[[dcol]]))
+      basal_live <- if ("live" %in% names(supported_career)) {
+        supported_career$live %in% TRUE
+      } else {
+        rep(TRUE, nrow(supported_career))
+      }
+      basal_rows <- supported_career[
+        supported_career$growthForm %in% SZ$forms & basal_live &
+          is.finite(basal_d) & basal_d > 0 & basal_d >= SZ$min,
+        , drop = FALSE]
+      basal_unaligned <- nrow(basal_rows) > 0L &&
+        any(table(as.character(basal_rows$eventID)) > 1L)
+    }
+    n_comparable_events <- if (is.null(trajectory) || !nrow(trajectory$per_date)) {
+      0L
+    } else {
+      nrow(trajectory$per_date)
+    }
+    hist_evidence <- if (is.null(hist) || !nrow(hist)) character(0) else {
+      plot_key <- paste(rv$plots$plotID, rv$plots$eventID, sep = "\r")
+      history_key <- paste(hist$plotID, hist$eventID, sep = "\r")
+      support <- as.character(rv$plots[[SZ$support]][match(history_key, plot_key)])
+      source_gap <- if ("opportunity_source_missing" %in% names(hist)) {
+        hist$opportunity_source_missing %in% TRUE
+      } else {
+        rep(FALSE, nrow(hist))
+      }
+      comparable <- !is.na(support) & support == "sampled_with_records"
+      held_label <- function(value) {
+        labels <- c(
+          held_sampling_impractical = "Not used · sampling could not be completed",
+          held_dendrometer_only = "Not used · different field method",
+          held_missing_area = "Not used · sampled area missing",
+          held_opportunity_unknown = "Not used · sampling context unclear",
+          held_presence_record_conflict = "Not used · presence records conflict",
+          held_metric_invalid = "Not used · required measurement unavailable",
+          held_identity_conflict = "Not used · record identity conflict",
+          held_opportunity_source_missing = "Not used · missing sampling record",
+          held_snapshot_event_mismatch = "Not used · visit does not match snapshot"
+        )
+        out <- unname(labels[value])
+        out[is.na(out)] <- "Not used · comparison unavailable"
+        out
+      }
+      ifelse(
+        source_gap, "Not used · missing sampling record",
+        ifelse(
+          comparable & basal_unaligned, "Measured · stems not aligned for change",
+          ifelse(
+            comparable & measurement_unaligned, "Measured · measurement point changed",
+          ifelse(comparable, "Comparable for change",
+          ifelse(
+            is.na(support) | !nzchar(support), "Not used · sampling context unclear",
+            held_label(support)
+          )
+          )
+          )
+        )
+      )
+    }
     # honest size tier: by within-species percentile if the cohort is big enough,
     # else by absolute size (thresholds differ by paradigm).
     tier_hi <- if (identical(SZ$type, "shrubland")) 10 else 60
     tier_mid <- if (identical(SZ$type, "shrubland")) 3 else 25
-    tier_names <- if (identical(SZ$type, "shrubland")) c("Giant","Mature","Seedling") else c("Giant","Canopy","Sapling")
+    tier_names <- c("Upper size tier", "Middle size tier", "Lower size tier")
     tier <- if (!is.na(pct)) { if (pct >= 90) tier_names[1] else if (pct >= 50) tier_names[2] else tier_names[3] }
             else if (is.finite(d_now) && d_now >= tier_hi) tier_names[1]
             else if (is.finite(d_now) && d_now >= tier_mid) tier_names[2] else tier_names[3]
     tier_col <- stats::setNames(c("#1c4d2c", "#2f7d46", "#5aa46a"), tier_names)[[tier]]
-    sparkid <- paste0("spark_", gsub("[^A-Za-z0-9]", "", id))
+    sparkid <- paste0("spark_", gsub("[^A-Za-z0-9]", "", key))
     flag_ic <- c(high = "exclamation-octagon-fill", warn = "exclamation-triangle-fill", info = "info-circle-fill")
     flags_ui <- if (length(flags) == 0)
       div(class = "qc-flag clean", span(class = "qc-flag-ic", bs_icon("check-circle-fill")),
@@ -793,10 +1061,15 @@ server <- function(input, output, session) {
       dvals <- if (dcol %in% names(hist)) hist[[dcol]] else hist$stemDiameter
       tagList(div(class = "qc-section-h", bs_icon("clock-history"), " Every measurement"),
         div(class = "qc-cap-scroll", tags$table(class = "inspect-tbl",
-          tags$thead(tags$tr(lapply(c("Date", sprintf("%s (cm)", SZ$size_lab), "Height (m)", "Status"), tags$th))),
+          tags$thead(tags$tr(lapply(c("Date", sprintf("%s (cm)", SZ$size_lab), "Height (m)", "Status", "Evidence"), tags$th))),
           tags$tbody(lapply(seq_len(nrow(hist)), function(i) tags$tr(
-            tags$td(format(hist$date[i], "%Y-%m-%d")), tags$td(fnum(dvals[i])),
-            tags$td(fnum(hist$height[i])), tags$td(ifelse(is.na(hist$plantStatus[i]),"—",hist$plantStatus[i]))))))))
+            tags$td(ifelse(is.na(hist$date[i]), "—", format(hist$date[i], "%Y-%m-%d"))), tags$td(fnum(dvals[i])),
+            tags$td(fnum(hist$height[i])), tags$td(ifelse(is.na(hist$plantStatus[i]),"—",hist$plantStatus[i])),
+            tags$td(span(
+              class = if (identical(hist_evidence[[i]], "Comparable for change"))
+                "evidence-chip comparable" else "evidence-chip held",
+              hist_evidence[[i]]
+            ))))))))
     }
     body <- div(id = "qcCardNode", class = "qc-card", `data-short` = short_tree(id),
       div(class = "qc-head", span(class = "qc-emoji", SZ$emoji),
@@ -810,17 +1083,24 @@ server <- function(input, output, session) {
         tile(ifelse(is.finite(row$height), round(row$height,1), "—"), "m tall"),
         tile(ifelse(is.finite(growth), sprintf("%+.2f", growth), "—"), "cm/yr"),
         tile(ifelse(is.na(pct), "—", paste0(pct, "%")), if (!is.na(pct)) sprintf("%%ile of %d live", ncoh) else "size %ile"),
-        tile(if (is.null(hist)) "—" else nrow(hist), "visits"),
+        tile(if (!n_visits) "—" else sprintf("%d/%d", n_comparable_events, n_visits),
+             "comparable / recorded"),
         tile(ifelse(is.na(row$canopyPosition), "—", gsub(" .*","",row$canopyPosition)), "canopy")),
-      div(class = "qc-section-h", bs_icon("graph-up"), sprintf(" Growth trajectory (%s over time)", SZ$size_full)),
-      if (!is.null(hist) && sum(is.finite(if (dcol %in% names(hist)) hist[[dcol]] else hist$stemDiameter)) >= 2)
+      div(class = "qc-section-h", bs_icon("graph-up"), sprintf(" Recorded diameter by event (%s)", SZ$size_full)),
+      if (!is.null(trajectory) && nrow(trajectory$per_date) >= 2)
         tagList(
           div(class = "sizelab-toolbar", style = "margin-bottom:4px",
             tags$button(class = "smt-snap-btn", type = "button", onclick = sprintf("smtSave('treeSparkBox','NEON-VegStructure_<site>_trajectory-%s_<date>.png')", short_tree(id)), bsicons::bs_icon("camera-fill"), " Download (with pins)"),
             tags$button(class = "smt-clear-btn", type = "button", onclick = "smtClearPins('treeSparkBox')", bsicons::bs_icon("eraser-fill"), " Clear pins"),
             tags$span(class = "sizelab-hint", bs_icon("hand-index-thumb"), " tap a point to pin it")),
           div(class = "smt-pinnable", id = "treeSparkBox", plotlyOutput("treeSpark", height = "170px")))
-      else p(class = "qc-cap-note", "Single visit, no trajectory yet."),
+      else p(class = "qc-cap-note",
+        if (isTRUE(basal_unaligned))
+          "This plant has multiple basal stems in at least one visit. Those measurements still describe current structure, but the stem labels cannot be matched safely through time, so no change line or rate is shown."
+        else if (isTRUE(measurement_unaligned))
+          "The field measurement point changed between visits. Every measurement remains visible below, but they are not treated as like-for-like, so no change line or rate is shown."
+        else
+          "No like-for-like multi-visit change line is available. The preserved measurements and their evidence state remain listed below."),
       div(class = "qc-section-h", bs_icon("clipboard-check"), " Data-quality check"), flags_ui,
       cap_tbl,
       p(class = "qc-cap-note", style = "margin-top:8px", bs_icon("info-circle"),
@@ -839,7 +1119,7 @@ server <- function(input, output, session) {
           tcstat(ifelse(is.finite(d_now), round(d_now, 1), "—"), paste0("cm ", SZ$size_lab)),
           tcstat(ifelse(is.finite(row$height), round(row$height, 1), "—"), "m tall"),
           tcstat(ifelse(is.finite(growth), sprintf("%+.2f", growth), "—"), "cm/yr"),
-          tcstat(if (is.null(hist)) "—" else nrow(hist), "visits")),
+          tcstat(if (!n_visits) "—" else n_visits, "events")),
         div(class = "tc-foot", span(class = "tc-foot-app", "Vegetation Structure"),
             span(if (is.na(pct)) "" else paste0(pct, "%ile for species")))),
       div(class = "tc-toolbar",
@@ -853,11 +1133,13 @@ server <- function(input, output, session) {
   # ONE fixed output (not a per-tree id) — avoids accumulating a new binding for
   # every tree the user opens; recomputed on rv$tree change.
   output$treeSpark <- renderPlotly({
-    id <- rv$tree; req(id); sp <- SP(); dcol <- if (sp$col %in% names(rv$trees)) sp$col else "stemDiameter"
+    key <- rv$tree; req(key); sp <- SP(); dcol <- if (sp$col %in% names(rv$trees)) sp$col else "stemDiameter"
+    career <- plant_rows(rv$trees, key); req(nrow(career) > 0)
+    id <- as.character(career$individualID[[1]])
     # Plot the per-visit WHOLE-PLANT girth (the same D_eq the cm/yr stat uses), not
     # raw per-stem rows — otherwise a multi-stem shrub's line wanders/falls while
     # the plant is actually growing (the +cm/yr stat and the line must agree).
-    tr <- tree_trajectory(rv$trees, id, dcol)
+    tr <- tree_trajectory(career, id, dcol, rv$plots)
     if (is.null(tr) || nrow(tr$per_date) < 2) return(note_plot("—"))
     pd <- tr$per_date; multi <- any(pd$n_stems > 1)
     pd$lab <- ifelse(pd$n_stems > 1,
@@ -886,13 +1168,17 @@ server <- function(input, output, session) {
     sp <- SP()
     if (is.null(rv$tree)) return(div(class = "qc-empty",
       div(class = "qc-empty-icon", sp$emoji), h4(sprintf("Pick a %s to open its career", sp$noun)),
-      p("Use the Size Lab (tap a dot → “Open career”) or the sidebar picker.")))
+      p("Use the Size Lab (tap a dot → “Open career”) or the plant picker above.")))
     div(class = "plot-profile-wrap", tree_card_ui(rv$tree))
   })
   output$treeCsv <- downloadHandler(
-    filename = function() sprintf("NEON-VegStructure_%s_tree-%s_%s.csv", rv$site %||% "site", short_tree(rv$tree %||% "tree"), format(Sys.Date(), "%Y%m%d")),
-    content = function(file) { id <- rv$tree; req(id)
-      d <- tidy_trees_export(rv$trees[rv$trees$individualID == id, , drop = FALSE]); req(!is.null(d))
+    filename = function() {
+      d <- plant_rows(rv$trees, rv$tree)
+      id <- if (nrow(d)) d$individualID[[1]] else "tree"
+      sprintf("NEON-VegStructure_%s_tree-%s_%s.csv", rv$site %||% "site", short_tree(id), format(Sys.Date(), "%Y%m%d"))
+    },
+    content = function(file) {
+      d <- tidy_trees_export(plant_rows(rv$trees, rv$tree), rv$meta); req(!is.null(d), nrow(d) > 0)
       utils::write.csv(d, file, row.names = FALSE, na = "") }, contentType = "text/csv")
 
   # ---- FULL-SITE DATA EXPORT (tidy CSVs + codebook, zipped) ---------------
@@ -902,54 +1188,118 @@ server <- function(input, output, session) {
     content = function(file) {
       req(rv$trees)
       tmp <- tempfile("vstexport"); dir.create(tmp)
+      on.exit(unlink(tmp, recursive = TRUE, force = TRUE), add = TRUE)
       site <- rv$site %||% "site"; sp <- SP()
-      tl <- tidy_trees_export(rv$trees)
-      pl <- plots_export(rv$snap, rv$plots, sp)
-      cb <- veg_codebook()
+      tl <- tidy_trees_export(rv$trees, rv$meta)
+      pl <- plots_export(rv$snap, rv$plots, sp, rv$meta)
+      contexts <- with_export_receipt(as.data.frame(rv$plots, stringsAsFactors = FALSE), rv$meta)
+      opportunity_source <- with_export_receipt(
+        as.data.frame(rv$bundle$opportunity_source, stringsAsFactors = FALSE), rv$meta
+      )
+      exports <- list(trees_long = tl, plot_summary_latest = pl,
+                      plot_event_contexts_all = contexts,
+                      plot_opportunity_source = opportunity_source)
+      cb <- complete_veg_codebook(veg_codebook(), exports)
+      assert_veg_codebook(cb, exports)
+      q <- tree_qc_site(rv$trees, sp, rv$plots)
+      qr <- with_export_receipt(if (is.null(q)) data.frame() else q$report, rv$meta)
+      qcb <- qc_dictionary(qr)
+      assert_qc_dictionary(qcb, qr)
       st <- stand_site(rv$snap, rv$plots, sp)
-      scope <- if (identical(sp$type, "shrubland")) "live shrubs by basal stem diameter over totalSampledAreaShrubSapling" else "live trees >=10 cm DBH over totalSampledAreaTrees"
+      scope <- if (identical(sp$type, "shrubland")) "live shrubs and saplings by basal stem diameter over totalSampledAreaShrubSapling" else "live trees >=10 cm DBH over totalSampledAreaTrees"
       readme <- c(
-        sprintf("NEON Vegetation Structure Explorer: data export for site %s (%s)", site, sp$type),
+        sprintf("NEON Vegetation Structure Explorer: data export for site %s (%s)", site, sp$channel_label),
         sprintf("Generated %s by an unofficial Desert Data Labs explorer.", format(Sys.Date(), "%Y-%m-%d")),
-        "Source: NEON Vegetation structure DP1.10098.001 (vst_mappingandtagging x vst_apparentindividual; vst_perplotperyear).",
+        sprintf("Metric contract: %s", rv$meta$contract_id %||% "unverified / legacy HOLD"),
+        sprintf("Source release: %s", rv$meta$release %||% "unverified / legacy HOLD"),
+        sprintf("Raw source SHA-256: %s", rv$meta$source_receipt$raw_source_digest %||% "unverified / legacy HOLD"),
+        "Source: NEON Vegetation structure DP1.10098.001 (vst_mappingandtagging + vst_apparentindividual + vst_perplotperyear), DOI https://doi.org/10.48443/pypa-qf12.",
         "License: NEON DP1.10098.001, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); aggregated and derived by this app.",
         "",
         "FILES",
-        " trees_long.csv  · one row per individual x measurement bout (the raw growth career; aggregate it yourself).",
-        " plots.csv       · one row per plot: sampled area + per-hectare stand summary.",
+        " trees_long.csv  · every preserved apparent-individual source row; source_record_key is the published uid, while protocol_stem_key exposes plot-scoped eventID + individualID + tempStemID conflicts.",
+        " plot_summary_latest.csv · one canonical latest plot-event summary for the active channel, including support state and derived values.",
+        " plot_event_contexts_all.csv · one deterministic row per published opportunity key plus measurement-only audit contexts; source-missing rows invent no effort, absence, date, or area and are always held.",
+        " plot_opportunity_source.csv · every published vst_perplotperyear source row, including duplicate plot-event keys retained for audit.",
         " data_dictionary.csv · column definitions, types, units.",
-        " qc_report.csv   · every data-quality flag (level, issue, full individualID, sizes); join individualID to trees_long.",
+        " qc_report.csv   · every data-quality flag; join plotID + individualID to trees_long.",
         " qc_dictionary.csv · column definitions for qc_report.csv.",
         "",
         "NOTES",
-        sprintf(" * This is a %s site: plants are sized by %s (dbh_cm is ~empty for short desert shrubs; use basal_stem_diam_cm).", sp$type, sp$size_full),
-        " * 'snapshot' analyses elsewhere in the app use each plant's LATEST bout; here you get every bout.",
-        sprintf(" * Stand metrics scope to %s (an index, not a wall-to-wall inventory).", scope),
-        " * Tower vs distributed plots differ in selection probability; split on plots.csv$plotType before pooling.",
-        if (!is.null(st)) sprintf(" * Pooled stand: %s m2/ha (+/-%s SE) basal area, %s stems/ha, QMD %s cm, n=%d plots.",
-                                  st$ba_ha, st$ba_se, format(st$density_ha, big.mark=","), st$qmd, st$n_plots) else "")
+        sprintf(" * Active presentation channel: %s; plants are sized by %s.", sp$channel_label, sp$size_full),
+        " * Snapshot analyses use each plot + plant's latest supported event; the long table retains every event/stem row.",
+        sprintf(" * Plot metrics scope to %s and are not a wall-to-wall inventory.", scope),
+        " * Sampled absence is zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-metric, identity-conflict, and missing-opportunity-source states are held/NA with reasons.",
+        " * Tower and distributed designs remain labeled; pooled summaries are descriptive, not certified site-wide estimators.",
+        if (!is.null(st)) sprintf(" * Supported sampled-plot mean: %s m2/ha (+/-%s plot SE), %s stems/ha, stem-weighted QMD %s cm, n=%d plots.",
+                                  fmt_num(st$ba_ha), fmt_num(st$ba_se), fmt_count(st$density_ha), fmt_num(st$qmd), st$n_plots) else "")
       if (!is.null(tl)) utils::write.csv(tl, file.path(tmp, "trees_long.csv"), row.names = FALSE, na = "")
-      if (!is.null(pl)) utils::write.csv(pl, file.path(tmp, "plots.csv"), row.names = FALSE, na = "")
+      if (!is.null(pl)) utils::write.csv(pl, file.path(tmp, "plot_summary_latest.csv"), row.names = FALSE, na = "")
+      utils::write.csv(contexts, file.path(tmp, "plot_event_contexts_all.csv"), row.names = FALSE, na = "")
+      utils::write.csv(opportunity_source, file.path(tmp, "plot_opportunity_source.csv"), row.names = FALSE, na = "")
       utils::write.csv(cb, file.path(tmp, "data_dictionary.csv"), row.names = FALSE, na = "")
-      # QC report + its dictionary: the flagged rows carry the FULL individualID so
-      # they join back to trees_long; qc_dictionary.csv documents every QC column.
-      q <- tree_qc_site(rv$trees, sp)
-      utils::write.csv(if (is.null(q)) data.frame() else q$report, file.path(tmp, "qc_report.csv"), row.names = FALSE, na = "")
-      utils::write.csv(qc_dictionary(), file.path(tmp, "qc_dictionary.csv"), row.names = FALSE, na = "")
+      # QC rows carry the full plant key and exact release receipt so they join
+      # back to trees_long; the dictionary is checked against the emitted frame.
+      utils::write.csv(qr, file.path(tmp, "qc_report.csv"), row.names = FALSE, na = "")
+      utils::write.csv(qcb, file.path(tmp, "qc_dictionary.csv"), row.names = FALSE, na = "")
       writeLines(readme, file.path(tmp, "README.txt"))
       fs <- list.files(tmp, full.names = TRUE)
       old <- setwd(tmp); on.exit(setwd(old), add = TRUE)
       utils::zip(zipfile = file, files = basename(fs), flags = "-q")
     })
 
+  # A compact, direct audit path for the site-wide notice above. This ledger is
+  # one row per measurement-only plot visit and counts every apparent-individual
+  # row at that key, regardless of growth form. The full site ZIP remains the
+  # route to the exact measurement rows themselves.
+  source_gap_ledger <- reactive({
+    req(rv$plots, rv$trees, rv$meta, rv$site)
+    contexts <- as.data.frame(rv$plots, stringsAsFactors = FALSE)
+    keep <- contexts$opportunity_source_missing %in% TRUE
+    contexts <- contexts[keep, , drop = FALSE]
+    if (!nrow(contexts)) return(data.frame())
+    context_key <- paste(as.character(contexts$plotID), as.character(contexts$eventID), sep = "\r")
+    measurement_key <- paste(as.character(rv$trees$plotID), as.character(rv$trees$eventID), sep = "\r")
+    measurement_n <- as.integer(table(measurement_key)[context_key])
+    measurement_n[is.na(measurement_n)] <- 0L
+    field <- function(name, default = NA_character_) {
+      if (name %in% names(contexts)) contexts[[name]] else rep(default, nrow(contexts))
+    }
+    ledger <- data.frame(
+      plotID = as.character(contexts$plotID),
+      eventID = as.character(contexts$eventID),
+      measurement_records_all_growth_forms = measurement_n,
+      opportunity_source_missing = TRUE,
+      sampling_effort_known = FALSE,
+      sampled_area_known = FALSE,
+      absence_inferred = FALSE,
+      tree_support = as.character(field("tree_support")),
+      tree_support_reason = as.character(field("tree_support_reason")),
+      shrub_support = as.character(field("shrub_support")),
+      shrub_support_reason = as.character(field("shrub_support_reason")),
+      stringsAsFactors = FALSE
+    )
+    ledger <- ledger[order(ledger$plotID, ledger$eventID), , drop = FALSE]
+    with_export_receipt(ledger, rv$meta)
+  })
+  output$sourceGapCsv <- downloadHandler(
+    filename = function() sprintf("NEON-VegStructure_%s_source-gap-ledger_%s.csv",
+      rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      ledger <- source_gap_ledger()
+      req(nrow(ledger) > 0L)
+      utils::write.csv(ledger, file, row.names = FALSE, na = "")
+    },
+    contentType = "text/csv")
+
   # ---- STAND REPORT PDF ---------------------------------------------------
   output$reportPdf <- downloadHandler(
-    filename = function() sprintf("NEON-VegStructure_%s_stand-report_%s.pdf", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
+    filename = function() sprintf("NEON-VegStructure_%s_sampled-plot-brief_%s.pdf", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
     contentType = "application/pdf",
     content = function(file) {
       req(rv$snap)
       build_stand_report(file, snap = rv$snap, trees = rv$trees, plots = rv$plots,
-                         one = rv$one, label = rv$label %||% rv$site %||% "site", spec = SP())
+                         one = rv$one, label = rv$label %||% rv$site %||% "site", spec = SP(), meta = rv$meta)
     })
 
   # ---- MAP ----------------------------------------------------------------
@@ -960,9 +1310,10 @@ server <- function(input, output, session) {
         c(stats::median(rv$plots$lng, na.rm = TRUE), stats::median(rv$plots$lat, na.rm = TRUE)) else c(-98, 39)
       return(leaflet::leaflet() %>% leaflet::addProviderTiles("CartoDB.Positron") %>%
         leaflet::setView(ctr[1], ctr[2], zoom = if (all(is.finite(ctr))) 9 else 4) %>%
-        leaflet::addControl("No plot-level stand data to map for this site. Try another site.", position = "topright"))
+        leaflet::addControl("No supported, matched plot-event summary is available to map. This is held—not zero.", position = "topright"))
     }
     metric <- input$mapMetric %||% "ba_ha"
+    if (!metric %in% names(lb)) metric <- "ba_ha"
     val <- lb[[metric]]                                  # KEEP NA (do not coerce to 0)
     fin <- val[is.finite(val)]
     grey_na <- if (is_dark()) "#5a6a82" else "#cfd6dd"   # NA plots render distinct grey
@@ -977,13 +1328,16 @@ server <- function(input, output, session) {
     # Radius keyed to ba_ha on the SAME log1p channel as the picker map (so size
     # and colour move together and no single big plot dominates the radius range).
     lb$radius <- picker_radius(lb$ba_ha)
+    lb$ba_label <- ifelse(is.finite(lb$ba_ha), sprintf("%.1f", lb$ba_ha), "held / unsupported")
+    lb$density_label <- ifelse(is.finite(lb$density_ha), format(round(lb$density_ha), big.mark = ",", scientific = FALSE), "held")
+    lb$taxa_label <- ifelse(is.finite(lb$n_taxa), format(round(lb$n_taxa), big.mark = ",", scientific = FALSE), "—")
     leaflet::leaflet(lb) %>% leaflet::addProviderTiles(input$view %||% "CartoDB.Positron") %>%
       leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~radius, fillColor = ~pal(val),
         color = "#fff", weight = 1, fillOpacity = 0.85, layerId = ~plotID,
-        label = ~lapply(sprintf("<b>%s</b><br>%s m²/ha · %s stems/ha · %s species", short_plot(plotID),
-          ifelse(is.na(ba_ha), "no woody", ba_ha), format(density_ha, big.mark=","), n_species), htmltools::HTML)) %>%
+        label = ~lapply(sprintf("<b>%s</b><br>%s m²/ha · %s stems/ha · %s recorded taxa", short_plot(plotID),
+          ba_label, density_label, taxa_label), htmltools::HTML)) %>%
       leaflet::addLegend("bottomright", pal = pal, values = fin,
-        title = switch(metric, ba_ha = "m²/ha", density_ha = "stems/ha", "species"), na.label = "no woody stand")
+        title = switch(metric, ba_ha = "measured m²/ha", density_ha = "stems/ha", "recorded taxa"), na.label = "held / unsupported")
   })
 
   # ---- ABOUT --------------------------------------------------------------
@@ -991,17 +1345,21 @@ server <- function(input, output, session) {
     div(class = "about-wrap",
       div(class = "about-card", h4("\U0001F333 What this is"),
         p("An (unofficial) explorer for NEON's ", tags$b("Vegetation structure"), " product (", tags$code("DP1.10098.001"),
-          ") across ", tags$b("42 sites and every biome"), ": temperate and boreal forests, desert and sage shrublands, grasslands, alpine tundra, and tropical. NEON tags individual woody plants, maps them, and remeasures their ", tags$b("diameter, height, and status"), " over the years, so each plant has a growth career.")),
-      div(class = "about-card", h4(bs_icon("rulers"), " Two ways woody plants are measured"),
-        p("The app adapts to each site. In ", tags$b("forests"), ", trees are sized by ", tags$b("DBH"), " (diameter at breast height, ~130 cm) and tallied over the sampled tree area (≥10 cm). In ", tags$b("desert & shrubland"), " sites, plants are too short for a breast-height diameter, so they're sized by ", tags$b("basal stem diameter"), " (near the ground) over the shrub-sapling sampled area, the honest size measure NEON records for ~96–99% of desert stems."),
-        p(class = "caveat", bs_icon("exclamation-triangle"), " Stand metrics are scaled by each plot's sampled area to per-hectare values (mean ± SE across plots), but they're indices from the sampled plots, not a wall-to-wall inventory. Tower and distributed plots are pooled; split them on ", tags$code("plotType"), " in the data export for a design-based estimate. QMD is stem-weighted; basal area and density are averaged across plots (equal plot weight).")),
+          ") across ", tags$b("42 bundled sites"), ". NEON tags woody plants, maps them, and revisits their ", tags$b("diameter, height, and status"), ". This app turns those field records into an explorable sampled-plot story while keeping the original keys and support states visible.")),
+      div(class = "about-card", h4(bs_icon("rulers"), " Two measurement channels"),
+        p("Full-plot tree records use ", tags$b("DBH"), " (diameter at breast height) with the tree sampled area. Nested shrub and sapling records use basal diameter with their separate shrub/sapling sampled area. Small-tree DBH records stay in the preserved download but are intentionally withheld from summaries until a dedicated nested-area DBH channel is registered. The app never ranks unlike physical channels as though they were one quantity."),
+        p(class = "caveat", bs_icon("exclamation-triangle"), " Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched records are held as unsupported—not converted to zero. Per-hectare summaries are means across supported sampled plots, not wall-to-wall site estimates. QMD is stem-weighted.")),
       div(class = "about-card", h4(bs_icon("graph-up"), " Growth & status"),
-        p("Diameter increments come from remeasured plants (one rate each). Decreases are common and usually real (bark sloughing, drought, a changed measurement height), kept and flagged, not deleted. Live/dead is a snapshot ratio, not an annual mortality rate."),
-        p(class = "caveat", bs_icon("exclamation-triangle"), " Above-ground biomass is deliberately ", tags$b("not"), " estimated; it requires an allometric model whose error compounds; basal area (directly measured) is the honest stand measure shown here.")),
-      div(class = "about-card", h4(bs_icon("diagram-3"), " A NEONize sibling"),
-        p("Built to the Desert Data Labs NEON quality bar, with the same flow, bundling, and pin-card interaction as its siblings, plus a ", tags$b("cross-biome"), " identity and woody-structure-native analyses that adapt from old-growth conifers to desert shrubs. See the NEONize playbook."),
+        p("Comparable diameter increments require the same plot + plant identity, stable event order, and an unchanged measurement point. Multi-stem basal records whose temporary stem labels cannot be aligned are not forced into a growth rate. Lost/unknown fates are censored from mortality."),
+        p(class = "caveat", bs_icon("exclamation-triangle"), " Size distributions are descriptive snapshots; they do not establish recruitment or regeneration. Above-ground biomass is deliberately ", tags$b("not"), " estimated.")),
+      div(class = "about-card", h4(bs_icon("diagram-3"), " Part of the suite"),
+        p("One doorway in the unofficial NEON Explorer Suite. This app keeps tree DBH and shrub/sapling basal measurements in their own supported physical channels; ",
+          tags$a(href = "https://tgilbert14.github.io/NEON-Driver-Cascade/", target = "_blank", rel = "noopener", "Driver Cascade"),
+          " links the full suite."),
         p(bs_icon("envelope"), " ", tags$a(href = "mailto:desertdatalabs@gmail.com", "desertdatalabs@gmail.com"),
-          " · ", tags$a(href = "https://data.neonscience.org/data-products/DP1.10098.001", target = "_blank", "NEON data product"))),
+          " · ", tags$a(href = "https://data.neonscience.org/data-products/DP1.10098.001", target = "_blank", "NEON data product"),
+          " · ", tags$a(href = "https://doi.org/10.48443/pypa-qf12", target = "_blank", "RELEASE-2026 DOI"),
+          " · contract ", tags$code(rv$meta$contract_id %||% "unverified / legacy HOLD"))),
       div(class = "about-card", h4(bs_icon("award"), " Data attribution & license"),
         p(class = "caveat",
           "Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle. NEON data are provided under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (",
@@ -1014,20 +1372,21 @@ server <- function(input, output, session) {
     sp <- SP()
     if (identical(input$heroClick, "species")) {
       ss <- species_structure(rv$snap, rv$plots, sp); req(!is.null(ss), nrow(ss) > 0)
-      tot <- sum(ss$ba_m2, na.rm = TRUE)
+      tot <- sum(ss$ba_m2_ha, na.rm = TRUE)
       items <- lapply(seq_len(min(20, nrow(ss))), function(i) tags$li(class = "rank-row",
         span(class = paste("rank-num", if (i <= 3) "top"), i),
         span(class = "rank-name", em(ifelse(is.na(ss$scientificName[i]), "—", ss$scientificName[i]))),
-        span(class = "rank-metric", sprintf("%.1f m²", ss$ba_m2[i])),
-        span(class = "rank-sub", sprintf("%s%% · %s stems", round(100 * ss$ba_m2[i] / tot), ss$stems[i]))))
-      showModal(modalDialog(easyClose = TRUE, title = tagList(bs_icon("bar-chart-steps"), " Species by basal area"),
-        div(class = "rank-modal-sub", sprintf("Live %s, ranked by total basal area (relative dominance).", sp$nouns)),
+        span(class = "rank-metric", sprintf("%.1f m²/ha", ss$ba_m2_ha[i])),
+        span(class = "rank-sub", sprintf("%s%% · %s stem records", round(100 * ss$ba_m2_ha[i] / tot), ss$stems[i]))))
+      showModal(modalDialog(easyClose = TRUE, title = tagList(bs_icon("bar-chart-steps"), " Species by measured area"),
+        div(class = "rank-modal-sub", sprintf("Live %s, ranked within this supported physical channel. This is contribution to the sampled measurement, not proof of ecological dominance.", sp$nouns)),
         tags$ul(class = "rank-list", items), footer = modalButton("Close")))
     } else if (identical(input$heroClick, "biggest")) {
       one <- rv$one; req(one); d <- woody_only(one[is.finite(one[[sp$col]]), ], sp); req(nrow(d) > 0)
       d <- d[order(-d[[sp$col]]), ][seq_len(min(20, nrow(d))), ]
       items <- lapply(seq_len(nrow(d)), function(i) tags$li(class = "rank-row rank-click",
-        onclick = sprintf("Shiny.setInputValue('rankPick','%s',{priority:'event'})", d$individualID[i]),
+        role = "button", tabindex = "0",
+        onclick = sprintf("Shiny.setInputValue('rankPick','%s',{priority:'event'})", plant_key_vec(d)[i]),
         span(class = paste("rank-num", if (i <= 3) "top"), i),
         span(class = "rank-name", tags$b(short_tree(d$individualID[i])), " ",
              em(ifelse(is.na(d$scientificName[i]), "—", d$scientificName[i]))),
@@ -1045,24 +1404,29 @@ server <- function(input, output, session) {
     if (is.null(rv$one) || !nrow(rv$one)) return(NULL)
     one <- rv$one; sp <- SP()
     if (identical(metric, "fastest")) {
-      g <- tree_growth(rv$trees, sp); if (is.null(g) || !nrow(g)) return(NULL)
+      g <- tree_growth(rv$trees, sp, rv$plots); if (is.null(g) || !nrow(g)) return(NULL)
       g <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 0 & g$growth_cm_yr <= 5 & !g$mh_change, , drop = FALSE]
       if (!nrow(g)) return(NULL); g <- g[order(-g$growth_cm_yr), ]
-      data.frame(id = g$individualID, tree = short_tree(g$individualID), species = g$scientificName,
+      data.frame(id = growth_key_vec(g), tree = short_tree(g$individualID), species = g$scientificName,
                  value = g$growth_cm_yr, unit = "cm/yr", stringsAsFactors = FALSE)
     } else if (identical(metric, "career")) {
-      b <- rv$trees %>% dplyr::group_by(.data$individualID) %>%
-        dplyr::summarise(visits = dplyr::n_distinct(.data$date),
+      history <- .supported_history(rv$trees, rv$plots, sp)
+      if (is.null(history) || !nrow(history)) return(NULL)
+      history <- history[plant_key_vec(history) %in% plant_key_vec(rv$one), , drop = FALSE]
+      if ("permanent" %in% names(history)) history <- history[history$permanent %in% TRUE, , drop = FALSE]
+      if (!nrow(history)) return(NULL)
+      b <- history %>% dplyr::group_by(.data$plotID, .data$individualID) %>%
+        dplyr::summarise(events = dplyr::n_distinct(.data$eventID),
                          yrs = round(as.numeric(max(.data$date) - min(.data$date)) / 365.25, 1),
                          species = dplyr::first(.data$scientificName), .groups = "drop")
-      b <- b[order(-b$visits, -b$yrs), ]
-      data.frame(id = b$individualID, tree = short_tree(b$individualID), species = b$species,
-                 value = b$visits, unit = "visits", stringsAsFactors = FALSE)
+      b <- b[order(-b$events, -b$yrs), ]
+      data.frame(id = plant_key_vec(b), tree = short_tree(b$individualID), species = b$species,
+                 value = b$events, unit = "events", stringsAsFactors = FALSE)
     } else {
       col <- if (identical(metric, "tallest")) "height" else sp$col
       d <- one[is.finite(one[[col]]), ]; if (identical(metric, "biggest")) d <- woody_only(d, sp)
       if (!nrow(d)) return(NULL); d <- d[order(-d[[col]]), ]
-      data.frame(id = d$individualID, tree = short_tree(d$individualID), species = d$scientificName,
+      data.frame(id = plant_key_vec(d), tree = short_tree(d$individualID), species = d$scientificName,
                  value = round(d[[col]], 1), unit = if (identical(metric, "tallest")) "m" else paste0("cm ", sp$size_lab),
                  stringsAsFactors = FALSE)
     }
@@ -1072,7 +1436,7 @@ server <- function(input, output, session) {
     top <- utils::head(df, 3); medals <- c("\U0001F947", "\U0001F948", "\U0001F949")
     cls <- c("podium-1", "podium-2", "podium-3"); cols <- c(DDL$gold, DDL$muted, DDL$bark)
     cards <- lapply(c(2, 1, 3), function(k) { if (k > nrow(top)) return(NULL); r <- top[k, ]
-      div(class = paste("podium-card", cls[k]), style = sprintf("--rc:%s", cols[k]),
+      tags$button(type = "button", class = paste("podium-card", cls[k]), style = sprintf("--rc:%s", cols[k]),
         onclick = sprintf("Shiny.setInputValue('famePick','%s',{priority:'event'})", r$id),
         div(class = "podium-medal", medals[k]), div(class = "podium-emoji", SP()$emoji),
         div(class = "podium-id", r$tree),
@@ -1096,8 +1460,6 @@ server <- function(input, output, session) {
     i <- input$fameTable_rows_selected; if (length(i) && i <= nrow(df)) pick_tree(df$id[i], navigate = TRUE)
   })
   observeEvent(input$famePick, pick_tree(input$famePick, navigate = TRUE))
-  observeEvent(input$goFame, nav_select("tabs", "fame"))
-
   # ---- quick-pick chips (Biggest / Tallest / Fastest) --------------------
   observeEvent(input$pickBiggest, { df <- champion_df("biggest"); if (!is.null(df) && nrow(df)) pick_tree(df$id[1], navigate = TRUE) })
   observeEvent(input$pickTallest, { df <- champion_df("tallest"); if (!is.null(df) && nrow(df)) pick_tree(df$id[1], navigate = TRUE) })
@@ -1106,14 +1468,19 @@ server <- function(input, output, session) {
   # ---- COMPARE TWO STANDS ------------------------------------------------
   compare_stats <- function(site) {
     b <- load_site_bundle(site); if (is.null(b)) return(NULL)
-    snap <- tree_snapshot(b$trees)
-    spc <- size_spec(b$meta$structure_type %||% classify_structure(snap))
+    contract_check <- bundle_contract_check(b, expected_site = site)
+    if (!isTRUE(contract_check$ok) ||
+        !identical(.veg_scalar_chr(b$contract$index$site$support_status), "supported_sampled_context") ||
+        !(.veg_scalar_chr(b$meta$primary_channel) %in% c("tree_dbh", "shrub_sapling_basal"))) return(NULL)
+    spc <- size_spec(b$meta$primary_channel)
+    snap <- tree_snapshot(b$trees, b$plots, spc)
     st <- stand_site(snap, b$plots, spc)
-    one <- one_per_tree(live_only(snap), spc); woody_sp <- species_level_only(woody_only(one, spc))
-    list(site = site, st = st, type = spc$type, size_lab = spc$size_lab,
+    active <- woody_only(live_only(snap), spc)
+    one <- one_per_tree(active, spc); woody_sp <- species_level_only(one)
+    list(site = site, st = st, channel = spc$channel, channel_label = spc$channel_label, size_lab = spc$size_lab,
          n_species = dplyr::n_distinct(woody_sp$scientificName),
-         tallest = round(smax(live_only(snap)$height), 1),
-         biggest = round(smax(woody_only(live_only(snap), spc)[[spc$col]]), 1))
+         tallest = round(smax(active$height), 1),
+         biggest = round(smax(active[[spc$col]]), 1))
   }
   observeEvent(input$compareBtn, {
     sites <- stats::setNames(site_table$site, sprintf("%s · %s", site_table$site, site_table$name))
@@ -1131,8 +1498,8 @@ server <- function(input, output, session) {
     a <- isolate(compare_stats(input$cmpA)); b <- isolate(compare_stats(input$cmpB))
     if (is.null(a) || is.null(b) || is.null(a$st) || is.null(b$st))
       return(div(class = "compare-hint", bs_icon("exclamation-triangle"), " One of those sites isn't bundled with usable plot data."))
-    mixed <- !identical(a$type, b$type)
-    rowf <- function(lab, va, vb, fmt = "%s", comparable = TRUE) {
+    mixed <- !identical(a$channel, b$channel)
+    rowf <- function(lab, va, vb, digits = 1, comparable = TRUE) {
       na <- suppressWarnings(as.numeric(va)); nb <- suppressWarnings(as.numeric(vb))
       # Suppress the winner-highlight on diameter-based rows across the paradigm fork:
       # forest DBH basal area is bole stocking at breast height, shrubland is basal
@@ -1141,26 +1508,26 @@ server <- function(input, output, session) {
       wa <- comparable && is.finite(na) && is.finite(nb) && na > nb
       wb <- comparable && is.finite(na) && is.finite(nb) && nb > na
       tags$tr(tags$td(class = "cmp-lab", lab),
-        tags$td(class = paste("cmp-val", if (wa) "cmp-win"), sprintf(fmt, va)),
-        tags$td(class = paste("cmp-val", if (wb) "cmp-win"), sprintf(fmt, vb)))
+        tags$td(class = paste("cmp-val", if (wa) "cmp-win"), fmt_num(va, digits, big = digits == 0)),
+        tags$td(class = paste("cmp-val", if (wb) "cmp-win"), fmt_num(vb, digits, big = digits == 0)))
     }
     sizelab <- if (mixed) "stem ø" else a$size_lab
     cmp <- !mixed   # diameter-based rows are only comparable within one paradigm
     tbl <- tags$table(class = "compare-table",
       tags$thead(tags$tr(tags$th(""),
-        tags$th(div(class = "cmp-head", a$site, tags$small(sprintf(" · %s", a$type)))),
-        tags$th(div(class = "cmp-head", b$site, tags$small(sprintf(" · %s", b$type)))))),
+        tags$th(div(class = "cmp-head", a$site, tags$small(sprintf(" · %s", a$channel_label)))),
+        tags$th(div(class = "cmp-head", b$site, tags$small(sprintf(" · %s", b$channel_label)))))),
       tags$tbody(
-        rowf("Basal area (m²/ha)", a$st$ba_ha, b$st$ba_ha, comparable = cmp),
-        rowf("Stem density (/ha)", a$st$density_ha, b$st$density_ha),
+        rowf("Measured cross-sectional area (m²/ha)", a$st$ba_ha, b$st$ba_ha, comparable = cmp),
+        rowf("Stem density (/ha)", a$st$density_ha, b$st$density_ha, digits = 0, comparable = cmp),
         rowf(sprintf("Quadratic mean %s (cm)", sizelab), a$st$qmd, b$st$qmd, comparable = cmp),
-        rowf("Species", a$n_species, b$n_species),
-        rowf("Tallest (m)", a$tallest, b$tallest),
+        rowf("Observed species", a$n_species, b$n_species, digits = 0, comparable = FALSE),
+        rowf("Tallest measured (m)", a$tallest, b$tallest, comparable = FALSE),
         rowf(sprintf("Biggest %s (cm)", sizelab), a$biggest, b$biggest, comparable = cmp),
-        rowf("Plots sampled", a$st$n_plots, b$st$n_plots)))
+        rowf("Plots sampled", a$st$n_plots, b$st$n_plots, digits = 0)))
     div(tbl, div(class = "compare-foot", bs_icon("info-circle"),
-      if (mixed) " Note: one site is a forest (sized by DBH) and one a shrubland (sized by basal diameter), so size rows aren't directly comparable. " else " ",
-      "Stand indices from the sampled plots (mean across plots), not a wall-to-wall inventory; tower and distributed plots are pooled."))
+      if (mixed) " The sites use different physical channels and sampled areas, so diameter, area, and density rows are context—not a ranking. " else " ",
+      "Summaries cover supported sampled plots; observed species and record sizes also vary with sampling effort. No row is a wall-to-wall site inventory."))
   })
 
   # ---- guided tour (on demand) -------------------------------------------
@@ -1168,11 +1535,19 @@ server <- function(input, output, session) {
 
   # ---- SEARCH THE NETWORK -------------------------------------------------
   # Filters the small bundled SEARCH_INDEX in memory (no fetch). Two modes:
-  # (a) find a species -> every site it grows at + the per-site measure; (b) a
+  # (a) find a species -> supported sampled-channel records + the per-site measure; (b) a
   # size-threshold query over the reused site_index. Both jump to the picked
   # site through the shared load_site() path, landing on the Overview.
   SI_TAXA  <- if (!is.null(SEARCH_INDEX)) SEARCH_INDEX$taxa else NULL
+  if (!is.null(SI_TAXA)) {
+    if (!"is_species" %in% names(SI_TAXA)) SI_TAXA <- NULL
+    else SI_TAXA <- SI_TAXA[SI_TAXA$is_species %in% TRUE, , drop = FALSE]
+  }
   SI_SITES <- if (!is.null(SEARCH_INDEX) && !is.null(SEARCH_INDEX$sites)) SEARCH_INDEX$sites else SITE_INDEX
+  SI_CHANNEL_SITES <- if (!is.null(SEARCH_INDEX) &&
+                          is.data.frame(SEARCH_INDEX$channel_sites)) {
+    SEARCH_INDEX$channel_sites
+  } else NULL
   site_name_of <- function(s) { r <- site_table[match(s, site_table$site), ]; ifelse(is.na(r$name), s, r$name) }
 
   # populate the species autocomplete once the session is up (server-side for speed)
@@ -1188,16 +1563,18 @@ server <- function(input, output, session) {
     if (is.null(SI_TAXA)) return(NULL)
     h <- SI_TAXA[SI_TAXA$scientificName == input$taxonPick, , drop = FALSE]
     if (!nrow(h)) return(h)
-    h[order(-h$ba_m2_ha, -h$n_stems), , drop = FALSE]
+    # Keep unlike physical channels adjacent but never rank DBH area against
+    # basal-cover area. Users can inspect each row and open the source site.
+    h[order(h$channel, h$site), , drop = FALSE]
   })
 
   output$taxonCount <- renderUI({
     if (is.null(SI_TAXA)) return(div(class = "search-empty", bs_icon("exclamation-triangle"), " The search index isn't bundled in this build."))
     if (is.null(input$taxonPick) || input$taxonPick == "")
-      return(div(class = "search-empty", bs_icon("search"), " Pick a species above to see every site it grows at."))
+      return(div(class = "search-empty", bs_icon("search"), " Pick a species above to see where it was recorded in a supported sampled channel."))
     h <- taxon_hits(); n <- nrow(SI_SITES %||% data.frame())
     div(class = "search-count",
-      tags$b(sprintf("%d", nrow(h))), sprintf(" of %d sites", n),
+      tags$b(sprintf("%d", dplyr::n_distinct(h$site))), sprintf(" of %d sites · %d channel rows", n, nrow(h)),
       tags$span(class = "sc-taxon", sprintf(" · %s", input$taxonPick)))
   })
 
@@ -1207,58 +1584,62 @@ server <- function(input, output, session) {
                                        rownames = FALSE, options = list(dom = "t")))
     df <- data.frame(
       Site = sprintf("%s · %s", h$site, site_name_of(h$site)),
-      Structure = h$structure_type,
-      `Basal area (m²/ha)` = h$ba_m2_ha,
-      `Live stems` = h$n_stems,
-      Years = ifelse(is.na(h$year_min), "—", sprintf("%d–%d", h$year_min, h$year_max)),
+      Channel = ifelse(h$channel == "tree_dbh", "Tree DBH", "Shrub & sapling basal"),
+      `Measured area index (m²/ha)` = round(h$ba_m2_ha, 1),
+      `Live stem records` = round(h$n_stems),
+      `Latest supported plot years` = ifelse(
+        is.na(h$year_min), "—",
+        ifelse(h$year_min == h$year_max, as.character(h$year_min), sprintf("%d–%d", h$year_min, h$year_max))
+      ),
       check.names = FALSE, stringsAsFactors = FALSE)
     DT::datatable(df, rownames = FALSE, selection = "single", class = "leader-dt",
-      options = list(pageLength = 12, dom = "tp", order = list(list(2, "desc"))))
+      options = list(pageLength = 12, dom = "tp", order = list(list(1, "asc"), list(0, "asc"))))
   })
   observeEvent(input$taxonHits_rows_selected, {
     h <- taxon_hits(); i <- input$taxonHits_rows_selected
     if (!is.null(h) && length(i) && i <= nrow(h)) {
       session$sendCustomMessage("smtLoadStart", list(label = paste0(h$site[i], " · loading…")))
-      load_site(h$site[i])
+      load_site(h$site[i], requested_channel = h$channel[i])
     }
   })
 
-  # ---- threshold query (size over the reused site_index) ------------------
+  # ---- threshold query (one explicit row per site x physical channel) -----
   thresh_col <- function(metric) switch(metric,
     ba_ha = "ba_ha", biggest = "biggest_diam_cm", tallest = "tallest_m", "tallest_m")
 
-  # site_index has no per-site basal area column; derive a stand basal-area
-  # column once from the bundles is heavy, so we offer biggest/tallest from the
-  # index and a basal-area proxy via the per-taxon index summed per site.
-  site_ba <- reactive({
-    if (is.null(SI_TAXA)) return(NULL)
-    SI_TAXA %>% dplyr::group_by(.data$site) %>%
-      dplyr::summarise(ba_ha = round(sum(.data$ba_m2_ha, na.rm = TRUE), 1), .groups = "drop")
-  })
-
   thresh_base <- reactive({
-    if (is.null(SI_SITES) || !nrow(SI_SITES)) return(NULL)
-    d <- SI_SITES
-    ba <- site_ba()
-    d$ba_ha <- if (!is.null(ba)) ba$ba_ha[match(d$site, ba$site)] else NA_real_
+    if (is.null(SI_CHANNEL_SITES) || !nrow(SI_CHANNEL_SITES)) return(NULL)
+    d <- SI_CHANNEL_SITES[
+      SI_CHANNEL_SITES$support_status == "supported_sampled_context", , drop = FALSE
+    ]
+    # ba_ha must be emitted by the same canonical builder as the app/export.
+    # Never reconstruct a divergent proxy by summing rounded taxon rows.
+    if (!"ba_ha" %in% names(d)) d$ba_ha <- NA_real_
     if (!is.null(input$threshType) && input$threshType != "all")
-      d <- d[d$structure_type %in% input$threshType, , drop = FALSE]
+      d <- d[d$channel %in% input$threshType, , drop = FALSE]
     d
   })
 
   output$threshSliderUI <- renderUI({
     d <- thresh_base(); req(!is.null(d), nrow(d) > 0)
+    needs_channel <- (input$threshMetric %||% "ba_ha") %in% c("ba_ha", "biggest")
+    if (needs_channel && identical(input$threshType %||% "all", "all"))
+      return(div(class = "search-empty", bs_icon("arrow-left-right"),
+        " Choose Tree DBH or Shrub & sapling basal before filtering a channel-specific area or diameter measure."))
     col <- thresh_col(input$threshMetric %||% "ba_ha")
     v <- suppressWarnings(as.numeric(d[[col]])); v <- v[is.finite(v)]
     if (!length(v)) return(NULL)
     lo <- floor(min(v)); hi <- ceiling(max(v))
     lab <- switch(input$threshMetric %||% "ba_ha",
-      ba_ha = "Min basal area (m²/ha)", biggest = "Min biggest stem (cm)", tallest = "Min tallest plant (m)")
+      ba_ha = "Min measured area (m²/ha)", biggest = "Min biggest measured stem (cm)", tallest = "Min tallest measured plant (m)")
     sliderInput("threshMin", lab, min = lo, max = hi, value = lo, step = max(1, round((hi - lo) / 50)), width = "260px")
   })
 
   thresh_hits <- reactive({
     d <- thresh_base(); req(!is.null(d), nrow(d) > 0)
+    needs_channel <- (input$threshMetric %||% "ba_ha") %in% c("ba_ha", "biggest")
+    if (needs_channel && identical(input$threshType %||% "all", "all"))
+      return(d[0, , drop = FALSE])
     col <- thresh_col(input$threshMetric %||% "ba_ha")
     d$.v <- suppressWarnings(as.numeric(d[[col]]))
     mn <- input$threshMin %||% -Inf
@@ -1267,12 +1648,13 @@ server <- function(input, output, session) {
   })
 
   output$threshCount <- renderUI({
-    if (is.null(SI_SITES)) return(div(class = "search-empty", bs_icon("exclamation-triangle"), " The search index isn't bundled in this build."))
+    if (is.null(SI_CHANNEL_SITES)) return(div(class = "search-empty", bs_icon("exclamation-triangle"), " The channel search index isn't bundled in this build."))
     d <- thresh_hits(); base <- thresh_base()
     div(class = "search-count", tags$b(sprintf("%d", nrow(d))),
-      sprintf(" of %d sites", nrow(base)),
+      sprintf(" of %d supported site-channel views", nrow(base)),
       tags$span(class = "sc-taxon",
-        if (!is.null(input$threshType) && input$threshType != "all") sprintf(" · %s only", input$threshType) else ""))
+        if (!is.null(input$threshType) && input$threshType != "all")
+          sprintf(" · %s", if (input$threshType == "tree_dbh") "Tree DBH channel" else "Shrub & sapling basal channel") else ""))
   })
 
   output$threshHits <- DT::renderDT({
@@ -1281,10 +1663,10 @@ server <- function(input, output, session) {
                                        rownames = FALSE, options = list(dom = "t")))
     df <- data.frame(
       Site = sprintf("%s · %s", d$site, site_name_of(d$site)),
-      Structure = d$structure_type,
-      `Basal area (m²/ha)` = d$ba_ha,
-      `Biggest stem (cm)` = d$biggest_diam_cm,
-      `Tallest (m)` = d$tallest_m,
+      Channel = ifelse(d$channel == "tree_dbh", "Tree DBH", "Shrub & sapling basal"),
+      `Measured area index (m²/ha)` = round(d$ba_ha, 1),
+      `Biggest stem (cm)` = round(d$biggest_diam_cm, 1),
+      `Tallest (m)` = round(d$tallest_m, 1),
       Species = d$n_species,
       check.names = FALSE, stringsAsFactors = FALSE)
     ord <- switch(thresh_col(input$threshMetric %||% "ba_ha"),
@@ -1296,20 +1678,30 @@ server <- function(input, output, session) {
     d <- thresh_hits(); i <- input$threshHits_rows_selected
     if (!is.null(d) && length(i) && i <= nrow(d)) {
       session$sendCustomMessage("smtLoadStart", list(label = paste0(d$site[i], " · loading…")))
-      load_site(d$site[i])
+      load_site(d$site[i], requested_channel = d$channel[i])
     }
   })
 
   observeEvent(input$help, {
     showModal(modalDialog(easyClose = TRUE, title = tagList(bs_icon("question-circle"), " How it works"),
-      tags$ul(
-        tags$li(HTML("Pick a <b>site</b> on the map (or the Browse-all list, or by name). Numbers describe each plant's <b>most recent measurement</b>. Forest sites are sized by tree <b>DBH</b>; desert/shrubland sites by <b>basal stem diameter</b>, and the app adapts.")),
-        tags$li(HTML("<b>Stand Structure</b>: the size-class curve, height profile, and per-hectare basal area & density.")),
-        tags$li(HTML("<b>Growth & Mortality</b>: how fast stems grow between visits, the fastest growers, and the live/dead split.")),
-        tags$li(HTML("<b>Size Lab</b>: every plant as a dot (size × height); <b>tap one</b> to pin its card, then “Open career” for its full growth history.")),
-        tags$li(HTML("<b>Champion plants</b>: the biggest, tallest, fastest-growing, and longest-tracked; tap one to open it.")),
-        tags$li(HTML("<b>Compare</b> two stands head-to-head, and download the <b>full data</b> (CSV + codebook) or a <b>stand report PDF</b>.")),
-        tags$li(HTML("Most plots are remeasured every ~5 years, so growth is per-year between visits."))),
+      tags$ol(class = "help-steps",
+        tags$li(div(class = "help-step-number", "1"), div(
+          tags$b("Pick a place"),
+          p("Tap a map dot, type a place name, or search the whole network."))),
+        tags$li(div(class = "help-step-number", "2"), div(
+          tags$b("Choose a story"),
+          p("See what crews measured, how comparable measurements changed, or open one tagged plant."))),
+        tags$li(div(class = "help-step-number", "3"), div(
+          tags$b("Check the evidence"),
+          p("Every summary shows its support. Grey or unavailable means “we cannot make that comparison”—never zero plants.")))),
+      tags$details(class = "help-methods",
+        tags$summary(bs_icon("shield-check"), " How we keep comparisons fair"),
+        tags$ul(
+          tags$li("Tree diameter and shrub/sapling basal diameter stay in separate measurement views."),
+          tags$li("A current snapshot uses the latest supported visit for each sampled plot; the download keeps every original visit and stem key."),
+          tags$li("Change uses only like-for-like remeasurements. Changed measuring points and records that cannot be aligned stay out of the rate."),
+          tags$li("A confirmed sampled absence is zero. Missing effort, area, identity, or sampling records remain unavailable with a reason."),
+          tags$li("Downloads include the preserved records, support ledger, codebook, QC report, and sampled-plot PDF brief."))),
       footer = tagList(tags$button(type = "button", class = "btn btn-outline-dark btn-sm",
         onclick = "(function(){var m=document.querySelector('.modal.show button[data-bs-dismiss=modal],.modal.show .btn-close');if(m)m.click();setTimeout(vegTour,250);})()",
         bsicons::bs_icon("signpost-2"), " Take the tour"), modalButton("Got it"))))

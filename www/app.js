@@ -1,7 +1,7 @@
 /* =========================================================================
    app.js — NEON Vegetation Structure Explorer
-   count-up stat counters, celebratory confetti, loading overlay, the on-demand
-   guided tour, and the Shiny custom-message handlers. (Forest theme.)
+   count-up stat counters, accessible loading state, the on-demand guided tour,
+   and the Shiny custom-message handlers.
    ========================================================================= */
 
 // ---- animated count-up for the hero stat band ----------------------------
@@ -12,7 +12,12 @@ function animateCount(el) {
   // most reliable signal to dismiss the loading overlay (no reliance on a
   // custom Shiny message, which doesn't always register in time).
   if (typeof smtLoadDone === "function") smtLoadDone();
-  const target = parseFloat(el.getAttribute("data-target")) || 0;
+  const rawTarget = el.getAttribute("data-target") || "—";
+  const target = parseFloat(rawTarget);
+  if (!Number.isFinite(target)) {
+    el.textContent = rawTarget;
+    return;
+  }
   const suffix = el.dataset.suffix || "";
   const isFloat = !Number.isInteger(target);
   const fmt = (v) => (isFloat ? v.toFixed(1) : Math.round(v).toLocaleString()) + suffix;
@@ -49,55 +54,16 @@ document.addEventListener("DOMContentLoaded", function () {
   runCounters();
 });
 
-// ---- confetti on standout trees (biggest / tallest / record grower) ------
-function forestConfetti(big) {
-  if (typeof confetti !== "function") return;
-  // Canopy & Bark palette: canopy green, bark bronze, gold, bright canopy, sky.
-  const colors = ["#4eb86a", "#c98a4c", "#ffd24a", "#7fe096", "#2f8fc4"];
-  const burst = (opts) => confetti(Object.assign({ colors, disableForReducedMotion: true }, opts));
-  burst({ particleCount: big ? 140 : 70, spread: big ? 100 : 70, origin: { y: 0.3 }, startVelocity: 42 });
-  if (big) {
-    setTimeout(() => burst({ particleCount: 80, angle: 60, spread: 70, origin: { x: 0 } }), 180);
-    setTimeout(() => burst({ particleCount: 80, angle: 120, spread: 70, origin: { x: 1 } }), 320);
-  }
-  mascotCheer(big);
-}
-
-// ---- mascot celebration: a little shrub hops up + fades on a standout find ----
-function mascotCheer(big) {
-  try {
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    var src = document.querySelector("#loadOverlay .mascot");
-    if (!src) return;
-    var wrap = document.createElement("div");
-    wrap.className = "mascot-cheer";
-    wrap.appendChild(src.cloneNode(true));
-    document.body.appendChild(wrap);
-    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 1700);
-  } catch (e) {}
-}
-
-// ---- first-visit: the splash mascot waves hello once (localStorage-gated) ----
-document.addEventListener("DOMContentLoaded", function () {
-  try {
-    if (localStorage.getItem("smtMascotSeen") === "1") return;
-    var g = document.querySelector(".splash-guide");
-    if (g) {
-      g.classList.add("wave");
-      localStorage.setItem("smtMascotSeen", "1");
-      setTimeout(function () { g.classList.remove("wave"); }, 3300);
-    }
-  } catch (e) {}
-});
-
 // ---- loading overlay (opaque, indeterminate) -----------------------------
 // A site load is one synchronous blocking call (decompress + clean + build the
 // stand/size profiles) whose duration we can't know, so we show an INDETERMINATE
 // animated bar (no fake %) on an OPAQUE backdrop, raised client-side on the click.
 var smtSafetyTimer = null;
+var smtLastFocus = null;
 function smtLoadStart(label) {
   var ov = document.getElementById("loadOverlay");
   if (!ov) return;
+  smtLastFocus = document.activeElement;
   var siteText = label || "";
   if (!siteText) {
     var sel = document.getElementById("site");
@@ -105,19 +71,32 @@ function smtLoadStart(label) {
   }
   var siteEl = document.getElementById("loadSite");
   if (siteEl) siteEl.textContent = siteText;
+  var note = document.querySelector(".load-note");
+  if (note) note.textContent = "Opening the measurements and building this place's view.";
   ov.style.display = "flex";
+  ov.setAttribute("aria-hidden", "false");
+  ov.setAttribute("aria-busy", "true");
+  try { ov.focus({ preventScroll: true }); } catch (e) { ov.focus(); }
   if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }  // tactile "got it"
   clearTimeout(smtSafetyTimer);
-  smtSafetyTimer = setTimeout(function () {  // safety net so it can never stick
-    var note = document.querySelector(".load-note");
-    if (note) note.textContent = "Still working — building the stand-structure and size profiles. You can close this and try again.";
-    setTimeout(smtLoadDone, 4000);
+  smtSafetyTimer = setTimeout(function () {
+    var slowNote = document.querySelector(".load-note");
+    if (slowNote) slowNote.textContent = "Still working—this place has more measurements to open.";
   }, 25000);
 }
 function smtLoadDone() {
   clearTimeout(smtSafetyTimer);
   var ov = document.getElementById("loadOverlay");
-  if (ov) ov.style.display = "none";
+  if (ov) {
+    ov.style.display = "none";
+    ov.setAttribute("aria-hidden", "true");
+    ov.setAttribute("aria-busy", "false");
+  }
+  var target = document.querySelector("#mainTabsWrap .nav-link.active") || smtLastFocus;
+  if (target && typeof target.focus === "function") {
+    try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+  }
+  smtLastFocus = null;
 }
 
 // ---- guided tour (driver.js) — ON DEMAND only (no auto-fire) --------------
@@ -129,15 +108,20 @@ function vegTour() {
   }
   var D = window.driver.js.driver;
   var steps = [
-    { element: ".site-cards", popover: { title: "Pick a forest", side: "bottom",
-        description: "Tap a <b>site card</b> to load it, or open the Harvard Forest demo below — it loads instantly." } },
-    { element: "#demoBtn2", popover: { title: "In a hurry?", side: "top",
-        description: "Jump straight into the <b>Harvard Forest</b> demo — a New England mixed hardwood–conifer stand." } },
-    { element: ".home-nav", popover: { title: "Five ways in", side: "bottom",
-        description: "From the Overview, jump to <b>Stand Structure</b>, <b>Growth &amp; Mortality</b>, the <b>Forest Size Lab</b>, a single <b>Tree Career</b>, or the <b>Map</b>." } },
-    { element: ".home-btn-star", popover: { title: "The Forest Size Lab", side: "top",
-        description: "Every tree is a dot in <b>diameter × height</b> space. <b>Tap a dot</b> to pin its card, drag &amp; resize, then download the chart with the cards on it." } }
-  ].filter(function (s) { return document.querySelector(s.element); });
+    { element: ".living-poster-app", popover: { title: "A living record", side: "bottom",
+        description: "This app follows <b>tagged woody plants</b>—trees and shrubs that NEON crews measure again over time." } },
+    { element: ".map-picker-wrap", popover: { title: "Pick a place", side: "top",
+        description: "Tap any dot for a short place card, then choose <b>Open this place</b>." } },
+    { element: ".select-panel-compact", popover: { title: "Or type a name", side: "top",
+        description: "Search by site code, place, or state. There is only one choice to make." } },
+    { element: "#searchNetworkBtn", popover: { title: "No place required", side: "left",
+        description: "Search species and stand sizes across all 42 bundled places before opening one." } },
+    { element: ".home-nav", popover: { title: "Three questions", side: "bottom",
+        description: "After a place opens, explore what stands there, what changed, or a single tagged plant." } }
+  ].filter(function (s) {
+    var el = document.querySelector(s.element);
+    return el && el.getClientRects().length > 0;
+  });
   if (!steps.length) return;
   var d = D({ showProgress: true, allowClose: true, steps: steps, popoverClass: "driverjs-theme",
     nextBtnText: "Next", prevBtnText: "Back", doneBtnText: "Got it" });
@@ -177,11 +161,10 @@ document.addEventListener("keydown", function (e) {
 // ---- Shiny custom message handlers ---------------------------------------
 document.addEventListener("DOMContentLoaded", function () {
   if (window.Shiny) {
-    Shiny.addCustomMessageHandler("countUp", function () { setTimeout(runCounters, 60); });
-    Shiny.addCustomMessageHandler("confetti", function (msg) { forestConfetti(msg && msg.big); });
-    Shiny.addCustomMessageHandler("loadDone", function () { smtLoadDone(); });
+    Shiny.addCustomMessageHandler("countUp", function (_msg) { setTimeout(runCounters, 60); });
+    Shiny.addCustomMessageHandler("loadDone", function (_msg) { smtLoadDone(); });
     Shiny.addCustomMessageHandler("smtLoadStart", function (msg) { smtLoadStart(msg && msg.label); });
-    Shiny.addCustomMessageHandler("startTour", function () { setTimeout(vegTour, 150); });
+    Shiny.addCustomMessageHandler("startTour", function (_msg) { setTimeout(vegTour, 150); });
     // remember the current site so exported PNG filenames are self-describing
     Shiny.addCustomMessageHandler("siteCtx", function (msg) { window.__vegSite = msg && msg.site; });
     // A Leaflet map that initialised inside a hidden container (the picker map
@@ -190,7 +173,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // invalidateSize. Fire across several frames so the page_fillable layout
     // (and the relocated select-panel) settles its width before Leaflet measures,
     // or the map captures a half-width and paints narrow.
-    Shiny.addCustomMessageHandler("kickMaps", function () {
+    Shiny.addCustomMessageHandler("kickMaps", function (_msg) {
       var kick = function () { try { window.dispatchEvent(new Event("resize")); } catch (e) {} };
       requestAnimationFrame(kick);
       [80, 250, 500, 900].forEach(function (t) { setTimeout(kick, t); });

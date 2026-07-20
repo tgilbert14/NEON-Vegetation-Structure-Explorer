@@ -1,0 +1,200 @@
+name: Validate Vegetation Structure Explorer
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vegetation-structure-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  RENV_CONFIG_REPOS_OVERRIDE: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  VST_RSPM: https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15
+  OPENBLAS_CORETYPE: Haswell
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  VST_LIVE: "0"
+  VST_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  release_contracts:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - name: Checkout the immutable app revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.VST_SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove the exact reviewed revision is checked out
+        run: |
+          set -euo pipefail
+          actual_sha=$(git rev-parse HEAD)
+          if [[ "$actual_sha" != "$VST_SOURCE_SHA" ]]; then
+            printf 'Checked out %s; expected exact reviewed revision %s\n' \
+              "$actual_sha" "$VST_SOURCE_SHA" >&2
+            exit 1
+          fi
+
+      - name: Require human review surfaces when source bundles change
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git diff --quiet "$BASE_SHA" "$VST_SOURCE_SHA" -- \
+            data/sites data/source data/site_index.rds data/search_index.rds \
+            data-sample/demo.rds; then
+            echo "Vegetation source family unchanged."
+            exit 0
+          fi
+          required=(
+            docs/VEGETATION-SOURCE-RECEIPT.md
+            docs/SCIENCE-CONTRACT.md
+            docs/DATA-TAKEAWAYS.md
+            docs/EXPERT-REVIEW.md
+            docs/DRIVER-KNOWLEDGE-PACKAGE.md
+            docs/SUITE-LEARNING-HANDOFF.md
+            docs/BUILD-TEST-HANDOFF.md
+            docs/index.html
+            docs/social-card.html
+            docs/og-image.png
+            docs/IMAGE-PROVENANCE.md
+          )
+          missing=()
+          for path in "${required[@]}"; do
+            if [[ ! -e "$path" ]] || git diff --quiet "$BASE_SHA" "$VST_SOURCE_SHA" -- "$path"; then
+              missing+=("$path")
+            fi
+          done
+          if [[ ${#missing[@]} -ne 0 ]]; then
+            echo "::error title=Vegetation refresh review incomplete::an event-keyed source rebuild requires reviewed science, provenance, Driver, release, and empirical cover surfaces"
+            printf 'missing reviewed change: %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Set up pinned R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: '4.5.2'
+          use-public-rspm: false
+
+      - name: Install runtime and verification closure
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          packages: >
+            shiny, bslib, bsicons, dplyr, tidyr, stringr, tibble, plotly,
+            leaflet, DT, shinyjs, shinycssloaders, RColorBrewer, htmltools,
+            digest, jsonlite, rsconnect, cpp11,
+            url::https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz,
+            url::https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz,
+            url::https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz,
+            url::https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz,
+            url::https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz,
+            url::https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz,
+            url::https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz,
+            url::https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz
+          pak-version: stable
+          dependencies: '"hard"'
+          cache-version: vegetation-geo-closure-v2
+          cache: always
+          install-pandoc: 'false'
+          install-quarto: 'false'
+
+      - name: Verify deterministic numeric runtime
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ctypes
+          lib = ctypes.CDLL("libopenblas.so.0")
+          lib.openblas_get_corename.restype = ctypes.c_char_p
+          core = lib.openblas_get_corename().decode("ascii")
+          threads = lib.openblas_get_num_threads()
+          print(f"OpenBLAS core={core} threads={threads}")
+          if core.lower() != "haswell" or threads != 1:
+              raise SystemExit("numeric runtime contract failed")
+          PY
+
+      - name: Parse source and verify static contracts
+        run: |
+          set -euo pipefail
+          Rscript --vanilla -e 'for (f in c("global.R","ui.R","server.R",list.files("R",pattern="[.]R$",full.names=TRUE),list.files("scripts",pattern="[.]R$",full.names=TRUE))) parse(f)'
+          node --check www/app.js
+          node --check www/pincards.js
+          node --check scripts/check_cover.mjs
+          node --check scripts/check_browser_contracts.mjs
+          node scripts/check_cover.mjs
+          node scripts/check_browser_contracts.mjs
+          Rscript --vanilla scripts/test_build_script_portability.R
+          bash -n scripts/check_source_family.sh
+          bash scripts/check_source_family.sh
+
+      - name: Run helper and current-data contracts
+        run: |
+          set -euo pipefail
+          Rscript --vanilla scripts/validation/test_bundle_contract.R
+          Rscript --vanilla scripts/test_helpers.R
+
+      - name: Rebuild the search index twice and require identical bytes
+        run: |
+          set -euo pipefail
+          Rscript --vanilla scripts/build_search_index.R
+          sha256sum data/search_index.rds > "$RUNNER_TEMP/search-first.txt"
+          Rscript --vanilla scripts/build_search_index.R
+          sha256sum data/search_index.rds > "$RUNNER_TEMP/search-second.txt"
+          diff -u "$RUNNER_TEMP/search-first.txt" "$RUNNER_TEMP/search-second.txt"
+
+      - name: Verify bundles and source/denominator diagnostics
+        run: Rscript --vanilla scripts/verify_bundle.R
+
+      - name: Verify independent consumer parity and runtime mutation fixtures
+        run: |
+          set -euo pipefail
+          Rscript --vanilla scripts/verify_derived_parity.R
+          Rscript --vanilla scripts/validation/test_runtime_bundle_gate.R
+
+      - name: Source the complete application offline
+        run: >-
+          Rscript --vanilla -e
+          'Sys.setenv(VST_LIVE="0"); source("global.R"); source("ui.R");
+          source("server.R"); stopifnot((inherits(ui,"shiny.tag.list") ||
+          inherits(ui,"shiny.tag")), is.function(server), length(BUNDLED) == 42L)'
+
+      - name: Regenerate the manifest twice and require identical bytes
+        id: manifest
+        run: |
+          set -euo pipefail
+          Rscript --vanilla scripts/write_manifest.R
+          sha256sum manifest.json > "$RUNNER_TEMP/manifest-first.txt"
+          Rscript --vanilla scripts/write_manifest.R
+          sha256sum manifest.json > "$RUNNER_TEMP/manifest-second.txt"
+          diff -u "$RUNNER_TEMP/manifest-first.txt" "$RUNNER_TEMP/manifest-second.txt"
+          Rscript --vanilla scripts/verify_manifest.R
+
+      - name: Require committed derived bytes to match the validator
+        run: |
+          set -euo pipefail
+          git ls-files --error-unmatch data/search_index.rds manifest.json
+          test -z "$(git status --porcelain -- data/search_index.rds manifest.json)"
+          git diff --check
+
+      - name: Upload validator-produced derived bytes
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vegetation-structure-derived-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}
+          path: |
+            data/search_index.rds
+            manifest.json
+          if-no-files-found: error
+          retention-days: 3

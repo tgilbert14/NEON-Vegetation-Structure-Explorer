@@ -66,6 +66,18 @@
     pin.__line.setAttribute("y2", r.top - b.top + r.height / 2);
   }
 
+  /* Keep the whole rendered card—not merely a 40px grab strip—inside its
+     chart. Because cards resize with transform: scale(), use the rendered
+     rectangle for the clamp and CSS offsets for the requested position. */
+  function clampPin(pin, left, top) {
+    var boxRect = pin.__box.getBoundingClientRect();
+    var pinRect = pin.getBoundingClientRect();
+    var maxLeft = Math.max(4, boxRect.width - pinRect.width - 4);
+    var maxTop = Math.max(4, boxRect.height - pinRect.height - 4);
+    pin.style.left = Math.max(4, Math.min(left, maxLeft)) + "px";
+    pin.style.top = Math.max(4, Math.min(top, maxTop)) + "px";
+  }
+
   /* clear pins. With a boxId, scope to that one chart's box (so a multi-chart page
      can clear one without wiping the others); with no arg, clear every box. */
   window.smtClearPins = function (boxId) {
@@ -83,6 +95,7 @@
       if (!a) return;
       pin.__line.setAttribute("x1", a.ax); pin.__line.setAttribute("y1", a.ay);
       if (pin.__dot) { pin.__dot.setAttribute("cx", a.ax); pin.__dot.setAttribute("cy", a.ay); }
+      clampPin(pin, pin.offsetLeft, pin.offsetTop);
       updateLine(pin);
     });
   }
@@ -109,6 +122,7 @@
     pin.style.left = Math.max(4, Math.min(a.ax + 24, bR.width - 250)) + "px";
     pin.style.top = Math.max(4, Math.min(a.ay + 14, bR.height - 150)) + "px";
     box.appendChild(pin);
+    clampPin(pin, pin.offsetLeft, pin.offsetTop);
 
     var layer = linesLayer(box);
     var ln = document.createElementNS(NS, "line");
@@ -144,9 +158,7 @@
           try { pin.setPointerCapture(ev.pointerId); } catch (e) {}
         }
         em.preventDefault();
-        var nb = pin.__box.getBoundingClientRect();
-        pin.style.left = Math.max(4, Math.min(em.clientX - sx, nb.width - 40)) + "px";
-        pin.style.top = Math.max(4, Math.min(em.clientY - sy, nb.height - 28)) + "px";
+        clampPin(pin, em.clientX - sx, em.clientY - sy);
         updateLine(pin);
       }
       function up() {
@@ -166,10 +178,20 @@
       ev.preventDefault(); ev.stopPropagation();
       try { grip.setPointerCapture(ev.pointerId); } catch (e) {}
       var startX = ev.clientX, startScale = pin.__scale || 1;
-      var baseW = pin.getBoundingClientRect().width / startScale;
+      var startRect = pin.getBoundingClientRect();
+      var baseW = startRect.width / startScale;
+      var baseH = startRect.height / startScale;
       function mv(em) {
-        var s = Math.min(2.4, Math.max(0.5, startScale + (em.clientX - startX) / baseW));
-        pin.__scale = s; pin.style.transform = "scale(" + s + ")"; updateLine(pin);
+        var boxRect = pin.__box.getBoundingClientRect();
+        var fitScale = Math.max(0.5, Math.min(
+          2.4,
+          (boxRect.width - 8) / baseW,
+          (boxRect.height - 8) / baseH
+        ));
+        var s = Math.min(fitScale, Math.max(0.5, startScale + (em.clientX - startX) / baseW));
+        pin.__scale = s; pin.style.transform = "scale(" + s + ")";
+        clampPin(pin, pin.offsetLeft, pin.offsetTop);
+        updateLine(pin);
       }
       function up() {
         window.removeEventListener("pointermove", mv);
@@ -182,7 +204,9 @@
       window.addEventListener("pointercancel", up);
     });
     grip.addEventListener("dblclick", function () {
-      pin.__scale = 1; pin.style.transform = ""; updateLine(pin);
+      pin.__scale = 1; pin.style.transform = "";
+      clampPin(pin, pin.offsetLeft, pin.offsetTop);
+      updateLine(pin);
     });
     return pin;
   }
@@ -273,23 +297,47 @@
     var a = document.createElement("a"); a.download = name; a.href = url; a.click();
   }
   var saving = false;
-  function snap(node, name, beforeEl) {
-    if (!node || typeof htmlToImage === "undefined" || saving) return;
+  function snap(node, name, exportOptions) {
+    if (!node || saving) return;
+    if (typeof htmlToImage === "undefined") {
+      toastDone("Image export is unavailable in this build", true);
+      return;
+    }
     saving = true;
+    var captureNode = node;
+    var cleanup = function () {};
+    var fixedWidth = exportOptions && exportOptions.fixedWidth;
+    if (fixedWidth) {
+      captureNode = node.cloneNode(true);
+      captureNode.removeAttribute("id");
+      captureNode.setAttribute("aria-hidden", "true");
+      captureNode.classList.add("smt-export-card");
+      captureNode.style.position = "fixed";
+      captureNode.style.left = "-10000px";
+      captureNode.style.top = "0";
+      captureNode.style.width = fixedWidth + "px";
+      captureNode.style.maxWidth = fixedWidth + "px";
+      captureNode.style.minWidth = fixedWidth + "px";
+      document.body.appendChild(captureNode);
+      cleanup = function () {
+        if (captureNode.parentNode) captureNode.parentNode.removeChild(captureNode);
+      };
+    }
     // force the plotly chart to its current size first (a tab that rendered while
     // hidden, or a just-toggled fullscreen, can leave a 0-sized / stale SVG)
-    var gd = node.querySelector ? node.querySelector(".js-plotly-plot") : null;
+    var gd = captureNode.querySelector ? captureNode.querySelector(".js-plotly-plot") : null;
     if (gd && window.Plotly && Plotly.Plots) { try { Plotly.Plots.resize(gd); } catch (e) {} }
-    node.querySelectorAll(".smt-pin.smt-pulse").forEach(function (p) { p.classList.remove("smt-pulse"); });
+    captureNode.querySelectorAll(".smt-pin.smt-pulse").forEach(function (p) { p.classList.remove("smt-pulse"); });
     toastStart("Rendering image…");
     setTimeout(function () {
-      htmlToImage.toPng(node, { pixelRatio: 2, backgroundColor: bgColor(), cacheBust: true, skipFonts: true,
+      htmlToImage.toPng(captureNode, { pixelRatio: 2, width: fixedWidth || undefined,
+        backgroundColor: bgColor(), cacheBust: true, skipFonts: true,
         filter: function (n) { return !(n.classList && (n.classList.contains("smt-pin-close") ||
           n.classList.contains("smt-pin-resize") || n.classList.contains("smt-snap-btn") ||
           n.classList.contains("smt-clear-btn"))); } })   // keep cards + leader lines; drop chrome buttons
         .then(function (url) { downloadUrl(url, name); toastDone("Saved ✓"); })
         .catch(function () { toastDone("Render failed — try again", true); })
-        .then(function () { saving = false; });
+        .then(function () { cleanup(); saving = false; });
     }, 90);
   }
   function stamp() {
@@ -324,7 +372,8 @@
     var node = document.getElementById("treeCardNode");
     if (!node) return;
     var short = node.getAttribute("data-short") || "tree";
-    snap(node, "NEON-VegStructure_" + siteTag() + "_treecard-" + short.replace(/[^A-Za-z0-9]+/g, "") + "_" + stamp() + ".png");
+    snap(node, "NEON-VegStructure_" + siteTag() + "_treecard-" + short.replace(/[^A-Za-z0-9]+/g, "") + "_" + stamp() + ".png",
+      { fixedWidth: 340 });
   };
 
   /* Scroll the rendered QC/tree card into view once it materialises. Hard-won:
@@ -384,7 +433,7 @@
   (function registerReveal() {
     try {
       if (window.Shiny && Shiny.addCustomMessageHandler) {
-        Shiny.addCustomMessageHandler("smtRevealQc", function () { revealQcCard(); });
+        Shiny.addCustomMessageHandler("smtRevealQc", function (_msg) { revealQcCard(); });
         return;
       }
     } catch (e) { return; }

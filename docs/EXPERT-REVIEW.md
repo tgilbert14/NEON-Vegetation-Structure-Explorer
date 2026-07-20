@@ -1,91 +1,132 @@
-# Woody vegetation structure (mapped & measured stems) — Expert Review by Cedar (NEON DP1.10098.001)
-_Devoted product-expert review — June 2026._
+# Vegetation structure — critical expert review
 
-> Cedar here — I walked the Vegetation Structure Explorer's `stand_site()` against the NEON TOS protocol (NEON.DOC.000987), Avery & Burkhart, the CTFS/ForestGEO census tradition, and Sheil & May. The verdict holds and it is an honest one: this app reports live woody **basal area (m²/ha)** as a directly-measured standing-stock STATE, it never pretends that STATE is an annual flux, and it carries the one feature that makes a desert rung possible at all — the adaptive DBH-vs-basal-diameter paradigm fork, re-derived through a single `size_spec()` so every label, axis, size class and export stays internally consistent. The QMD is the textbook pooled RMS, the SE is across plots (the real sampling unit), mortality is the Sheil–May compound rate with a binomial CI and an honest n-gate, and biomass is *correctly* left un-estimated. What's left for me to push on is mostly labelling discipline on cross-biome figures, a few `max()`/single-census edge guards, and surfacing the design-based (distributed-only) path the data already supports. The brick is clean. I'd certify `veg_ba_ha` into the cascade today — as a slow floor, never as a year-indexed link.
+_Pass 4 re-review · 2026-07-19 · supersedes the June 2026 “Cedar” certification_
 
-## Method fidelity (is the NEON protocol represented correctly?)
+## Verdict
 
-**Faithful to the protocol, and unusually so.** DP1.10098.001 maps, tags and **remeasures individual woody plants** — a permanent-tag mapped-stem census in the Condit (1998) / ForestGEO lineage. This app's unit of analysis is the tagged plant (`individualID`), not the plot, which is exactly right for a remeasurement product and is what separates it from a cover/quadrat tool. The three-table spine is correct: `vst_mappingandtagging` for identity (joined once per individual, `bundle_veg_data.R:48-49`), `vst_apparentindividual` for the repeated bouts (`bundle_veg_data.R:51-61`), and `vst_perplotperyear` for the per-hectare denominators `totalSampledAreaTrees` / `totalSampledAreaShrubSapling` (`bundle_veg_data.R:70-71`). Without the right sampled-area column you cannot turn a tally into a per-ha estimate, and the app carries both and selects by paradigm (`veg_helpers.R:147`).
+**The public product direction is strong; the legacy metric contract is not certifiable.**
 
-**The two-paradigm fork is the defining feature and it is handled correctly.** NEON does not force a breast-height diameter onto a creosote bush: trees get `stemDiameter` (DBH @ ~130 cm), shrubs get `basalStemDiameter` (at the base). The app encodes this in `size_spec()` (`veg_helpers.R:44-58`) — forest sizes by `stemDiameter` over `area_trees` with a 10 cm floor; shrubland by `basalStemDiameter` over `area_shrub` with no floor — and **every** size-dependent function takes that `spec`, so a single edit re-themes the whole app. The verified facts justify it: at SRER 99.9% of live stems carry a basal diameter and only 8.3% a DBH; JORN is 100% basal / 1.9% DBH (`DATA-TAKEAWAYS.md`). A DBH-only stand metric would silently drop ~92% of desert stems. The README's "~96–99%" claim is verified.
+The Living Poster framing is faithful to the product: NEON tags plants, maps them, and revisits their
+diameter, height, and status. The app can be an excellent discovery and record-exploration tool.
+However, the prior expert review certified `veg_ba_ha` after inspecting formulas without first proving
+that the bundled tables retained NEON's event keys and sampling-opportunity semantics. They do not.
+The certification and all WOOD “treeless” language are withdrawn.
 
-**The 10 cm tree threshold is a sampling-area fact, not an arbitrary cutoff, and the code says so** (`veg_helpers.R:30-36`). Stems ≥10 cm DBH are tallied over the full plot tree area; smaller stems are nested-sampled in a smaller subplot, so dividing them by the tree area would under-count them. Forest stand metrics are correctly scoped to trees ≥10 cm DBH; shrublands have no floor because the shrub *is* the nested-sampled class. The size-class panel even tells the user the small saplings are "sampled in separate nested subplots and aren't shown here" (`server.R:342`) — that is the right honesty.
+## Protocol interpretation
 
-**Adaptive site classification by basal-area dominance** (`classify_structure()`, `veg_helpers.R:65-75`; mirrored in `bundle_veg_data.R:79-90`) is the correct call: a forest with a dense shrub understory stays a forest because its trees dominate cross-sectional area, not because it has fewer shrub *individuals*. Classifying by basal area rather than stem count is the mensuration-literate choice, and the bundler and app run the *same* logic — no drift.
+The three-table spine is necessary but must remain at its native grain:
 
-**One protocol nuance to surface, not a bug.** `changedMeasurementLocation` is carried and used (`veg_helpers.R:241`, `tree_qc_site` mh flag), which is the right field, but NEON's POM (point-of-measurement) story is richer than a single boolean: a tree buttressing or forking above breast height gets its POM *raised*, and the standard forest-dynamics treatment (Condit; ForestGEO) is to keep the pre-move and post-move series as separate growth segments rather than spanning the move. The app does the safe thing — it **excludes** moved-height increments from growth stats and keeps the rows — which is defensible. A future refinement would be to compute growth *within* each POM regime and concatenate, recovering the increments currently dropped. [low]
+- `vst_apparentindividual`: published `uid` is the preserved, unique source-row
+  identity. NEON documents `eventID × individualID × tempStemID` as the row
+  locator, but `RELEASE-2026` contains collisions on those three fields. The
+  operational locator therefore includes `plotID` to distinguish cross-plot tag
+  reuse;
+- `vst_mappingandtagging`: identity/taxonomy, joined from the one unambiguous
+  latest-created `plotID × individualID` row with its published UID preserved;
+  a tie at the latest created timestamp fails rather than being resolved by row
+  order, UID, or taxon content;
+- `vst_perplotperyear`: `plotID × eventID`, including exact event sampled areas and the fields that say
+  whether sampling occurred, was impractical, was dendrometer-only, or recorded absence.
 
-## Analysis & metrics — defensible? (with the literature)
+`individualID` alone is not a safe site-level plant key. A physical plant is scoped by
+`plotID × individualID`; events, not dates alone, order the observations.
 
-**Basal area** — `ba = π·(d/200)²` per stem in m², summed per plot, divided by sampled area in ha (`veg_helpers.R:142,153`). This is the foundational stand-density metric of forest mensuration (Avery & Burkhart, *Forest Measurements*; Husch, Beers & Kershaw, *Forest Mensuration*) and the quantity Bitterlich variable-radius point sampling estimates directly. **It is computed per plot, then averaged across plots with equal plot weight and an SE across plots** (`stand_site()`, `veg_helpers.R:157-167`). That is the correct estimator: the plot is the sampling unit, so a big plot doesn't dominate and the SE reflects the right replication. A reviewer will not quibble.
+The official-release identity preflight found 527,000 apparent rows across all
+42 sites. The documented three-field locator has 1,275 collision groups covering
+2,688 rows across 37 sites. Twenty-two groups are cross-plot reuse; adding
+`plotID` leaves 1,253 true plot-scoped groups covering 2,644 rows. Of those,
+1,085 remain tied at the latest date and 845 conflict on metric or status fields.
+No scientifically defensible ranking chooses one row. Every distinct-`uid` row
+must remain preserved and the affected physical channel must remain held. Its
+conflict count stays explicit; the canonical status is
+`held_identity_conflict` unless an earlier protocol/presence hold applies. Only
+duplicate published `uid` is a hard identity failure.
 
-**QMD** is the pooled RMS over all stems, `√(Σd²/Σstems)` (`veg_helpers.R:165`), *not* a mean of per-plot QMDs — exactly the textbook definition and the one Curtis & Marshall (2000) insist on (arithmetic mean diameter is biased low relative to the diameter of mean basal area). Correct.
+The opportunity table also contains 10 source rows forming five duplicate
+`plotID × eventID` groups across BLAN (two groups), DEJU, JERC, and JORN. Those
+rows must remain preserved, with both physical channels held as
+`held_identity_conflict`; neither row order nor a preferred area/status value
+may choose a winner.
 
-**The reverse-J / de Liocourt fit** (`size_class()` + the `server.R:303-316` overlay) is the right stand-demography diagnostic (de Liocourt 1898; Meyer 1952's q-ratio). The size classes are area-standardized to **stems/ha** before plotting (`veg_helpers.R:196`), which is essential — raw counts are sampling-effort-dependent — and the fit is log-linear over the *populated* classes, drawn across all of them, so a recruitment gap shows as bars sitting below the reference. Critically, the de Liocourt overlay is **forest-only** and omitted for shrublands (`server.R:295,303`), because basal-diameter classes of multi-bole desert shrubs don't follow a negative-exponential bole-recruitment law. That restraint is correct and rarely gotten right.
+The official source family also contains 4,365 apparent-individual rows across
+49 `plotID × eventID` keys at 11 sites with no matching published
+`vst_perplotperyear` row. This is a publication/linkage gap, not evidence that
+field sampling did or did not occur. The records remain available for record-level
+inspection, but absence, effort, sampled area, scaling, snapshot, taxonomy, and
+longitudinal summaries are withheld under `held_opportunity_source_missing`.
+The audit context retains only the measurement key and explicitly
+measurement-sourced count/date range; it borrows no opportunity metadata.
 
-**Growth** (`tree_growth()`, `veg_helpers.R:207-242`) takes first and last LIVE bouts per *permanent* individual (TEMP.PLA ids excluded, `:215`), collapses multi-bole stems to one whole-plant equivalent diameter `D_eq = √(Σd²)` BEFORE comparing (`:226`) so the increment is like-for-like, annualizes by the actual day-span (`:235`), de-pseudoreplicates to one rate per plant, and flags rather than deletes shrinkage and measurement-height moves. The `√Σd²` collapse is the standard whole-plant diameter and reduces to `d` for single-stem plants — this is correct dendrometry. Forest median came out 0.12 cm/yr (IQR 0.10–0.17), which is biologically sane for closed-canopy diameter increment.
+## Measurement channels
 
-**Mortality** (`stand_mortality()`, `veg_helpers.R:477-510`) is the **Sheil & May (1996) compound annual rate** `m = 1 − (1 − deaths/N₀)^(1/t)`, with the cohort = permanent woody individuals live at first census with a KNOWN fate at last, N₀-gated at ≥10, `t` taken as the **mean per-plant exposure** `t̄ = Σtᵢ/N₀` (each plant's own first-to-last interval, averaged across the cohort — the stricter Sheil & May form), and a **binomial CI** (`:506`). This is the forest-dynamics standard (Sheil, Burslem & Alder 1995; Sheil & May 1996): a raw deaths/N over an unequal interval is not comparable across plots, and the compounding + per-individual exposure are exactly what make it comparable. Forest median 2.24 %/yr is right in the band the global forest-dynamics literature reports (~1–3 %/yr for temperate stands). The "Lost track / removed" class is correctly held OUT of the death count (`:451-453`) — it's a data state, not biological mortality. Excellent.
+Large-tree DBH cross-sectional area and shrub/sapling basal-cover area are both meaningful within their
+protocol-compatible channels. They are not one biome-comparable quantity. The app may show both as
+separate sampled-plot context, with their physical measure and denominator visible, but it must not:
 
-**Biomass is deliberately omitted, and that is the defensible dryland call.** AGB would come from Jenkins et al. (2003) national-scale generalized equations or Chojnacky, Heath & Jenkins (2014) component biomass by wood-specific-gravity group, applied to DBH. The app does NOT do this (`server.R:285,804`; `report_pdf.R:124`), and that's correct: (a) those equations are calibrated overwhelmingly on temperate trees measured at DBH, so applying them to basal-diameter desert shrubs propagates compounding extrapolation error; (b) directly-measured basal area carries no model error. Naming the road not taken *and why* is the honest move, and the About panel does it.
+- classify sites by comparing the two raw totals;
+- call one universally “basal area” without the measurement height/channel;
+- rank forest DBH area against shrub basal cover;
+- interpret their ratio as biomass, productivity, or producer capacity.
 
-**The size–growth allometry view** (`server.R:447-484`) draws a trend line ONLY when n≥12, |Spearman r|≥0.15 and p<0.05 clear the bar, otherwise it reverts to an honest "no clear size–growth trend … shown as scatter only" (`:477`). That is precisely the discipline a reviewer wants — no fabricated line where the relationship isn't there.
+Every finite positive event-specific sampled area is valid unless the protocol status says otherwise.
+The former 50 m² minimum is removed.
 
-**One statistical refinement, now implemented.** Mortality `t` is the **mean per-plant exposure** `t̄ = Σtᵢ/N₀` (`veg_helpers.R:504`), not a single median census interval. This matters because when intervals are genuinely heterogeneous within a site (some plots on a 1-yr tower cadence, some on a 5-yr distributed cadence), one pooled median `t` could bias the annualized rate. Each plant carries its own interval `t` (`veg_helpers.R:476`), and the compound rate divides the pooled death fraction by the cohort-mean exposure, weighting every individual by the interval it was actually observed over — the stricter Sheil & May form. [done]
+## Structure estimates
 
-## What the field would add (collection / analysis / presentation / use)
+For a supported plot-event and compatible channel:
 
-**Collection / design — surface the distributed-vs-tower split.** NEON places **distributed** plots by a spatially-balanced random design (the basis for an unbiased site mean) and **tower** plots clustered near the flux tower (for sensor co-location). They are not interchangeable for a site-level estimate. The app pools them for the shipped per-ha numbers and *discloses* it (`server.R:801`, the About caveat; README honesty notes) and ships `plotType` in `plots.csv` with a codebook row telling the user to split before a design-based estimate (`veg_helpers.R:385`). That's honest. The field would go one step further and make the design-based path **one groupby away**: emit a `plotType`-stratified BA in `plots.csv`, or better, let `stand_site()` optionally weight/stratify by `plotType` so the distributed-only mean is a click, not a re-derivation. The machinery is all there. [low]
+- sampled presence with records is measured;
+- explicit sampled absence is zero;
+- impractical, dendrometer-only, invalid-area, or missing opportunity source is held/NA;
+- density counts live measured stem rows per compatible sampled area;
+- measured area is `sum(pi * (d / 200)^2) / area_ha`;
+- QMD is stem-weighted `sqrt(sum(d^2) / n_stems)`;
+- plot summaries may be described as means across supported sampled plots, not wall-to-wall site
+  estimates.
 
-**Analysis — veg structure has more standing-stock axes than basal area.** Two the field reports routinely and this product could compute from the same `trees` table: (1) **stand density index / relative density** and a **height–diameter (H–D) allometry** per species (the app already has the size×height scatter in the Size Lab — fitting and reporting the species H–D curve is a small step and is a genuine structural signature); (2) **basal-area increment (BAI)** as the growth currency instead of diameter increment — BAI is the more biologically meaningful growth rate for larger stems (a fixed diameter increment is a *shrinking* relative growth as a tree fattens), and the literature (e.g. Bowman et al. 2013 on the BAI-vs-diameter-increment debate) prefers BAI for productivity inference. Diameter increment is fine for the QC framing the app uses; BAI would be the upgrade if growth ever became a headline. [low]
+Tower and distributed designs remain visible. A distributed-only subset can be useful context, but the
+current app does not claim a fully weighted, certified whole-site estimator.
 
-**Analysis — recruitment is the missing demographic flux.** The app reports the standing-stock STATE (BA, density, QMD), growth, and mortality, but not **recruitment / ingrowth** (new stems crossing the 10 cm threshold or newly tagged between censuses). A full forest-dynamics treatment reports mortality *and* recruitment as the paired fluxes (Condit; Sheil). It's derivable — first-appearance dates are in `trees` — and would complete the demographic picture. Lower priority because the product's cascade role is the STATE floor, not the flux, but a reviewer asked "what's the net stand trajectory?" would want it. [low]
+## Change and mortality
 
-**Presentation — the cross-biome ratio needs its asterisk on every mixed figure.** A 5.1 m²/ha SRER "basal area" is basal *cover* at the stem base, not bole stocking at breast height; the ~500× forest:desert ratio is real *as a stocking gradient* but is partly a measurement-height artifact, not purely biomass. The Compare tab warns when types are mixed (`server.R:954-956`) and the network strip uses *richness*, not BA, so it sidesteps the trap. Good. The standing risk is any future cross-biome BA chart or export — repeat the caveat there too. (See QC traps below.) [med]
+Growth is reportable only for like-for-like remeasurements. DBH intervals must not span a changed point
+of measurement. Basal multi-stem records whose temporary stem labels cannot be aligned across events
+are held rather than collapsed into an apparently precise whole-plant trajectory.
 
-**Use — this is a teaching-grade, field-crew-useful tool, and the QC export is its best underused asset.** The per-site QC scan with a downloadable, per-flag CSV (`server.R:528-534`, `tree_qc_site()`) is genuinely useful to the people who collect the data — that's the playbook's QC bar, met. The field would *lead* with it more: a crew returning to HARV would want the 637 measurement-height-move records and the 131 Live-after-Dead records as a pre-visit worklist.
+Mortality first reduces every event to one plant state: any live stem means live; death requires all
+observed stems to be dead. Lost/removed/unknown fates are censored. Cohorts use `plotID × individualID`,
+event order, and cluster-aware uncertainty. Row order must not change the result.
 
-## Product-specific honesty & QC traps
+Diameter decreases are not automatically “usually real” or “wrong.” They can reflect biology, damage,
+or measurement differences; retain them, disclose them, and apply explicit QC rules.
 
-**1. STATE vs FLUX — the cardinal rule — is handled.** Basal area, density and QMD are standing-stock snapshots on a ~5-yr cadence; per-stem growth ≈0.12 cm/yr, so annual ΔBA sits inside the across-plot SE. The app never time-indexes BA against last year's weather, the About/insight copy calls it a "stand fingerprint, not a wall-to-wall inventory" (`server.R:382`), and the cascade contract treats `veg_ba_ha` as "per-site context, not an annual signal." This is the structural error other suite rungs risk, and this product does not make it. Keep it that way.
+## Claims explicitly withheld
 
-**2. The paradigm fork — two measurements wearing one name.** Handled in the spec, the axes ("DBH" vs "basal ø"), the codebook (`veg_helpers.R:374-375`, both diameter columns state "NA = not measured under this site's paradigm … structurally NA, not missing data"), and the Compare note. **The one residual trap:** the per-plot `plots.csv` column is flatly named `ba_m2_ha` with the definition "Live basal area per hectare (basal cover)" (`veg_helpers.R:390`) — fine within one site, but if a user `rbind`s two sites' `plots.csv` they get a single `ba_m2_ha` column silently mixing breast-height bole area and basal cover. *Fix:* either carry the site's `structure_type`/`size_metric` as a column in `plots.csv` (so a pooled file self-identifies the paradigm per row), or rename the definition to flag the join hazard explicitly. [med]
+- recruitment or regeneration from a size-class shape;
+- an “expected” reverse-J curve fit to the same snapshot;
+- biomass or annual productivity;
+- a whole-site woody inventory;
+- cross-channel forest-vs-shrub rankings;
+- WOOD as treeless;
+- Driver/Cascade adoption before parity tests pass.
 
-**3. Index, not census.** Every BA/ha and density is a plot-based index scaled to the hectare with tower+distributed pooled — stated in About (`server.R:801`), the export README (`server.R:747-748`), and the density banner (`server.R:382`). Honest. (See the distributed-only upgrade above.)
+## FAIR and product requirements
 
-**4. Interval-censoring.** Growth annualized by actual day-span (correct); mortality on the Sheil–May compound form with the **mean per-plant exposure** `t̄ = Σtᵢ/N₀` (each plant annualized over its own interval, then pooled — the stricter form, `veg_helpers.R:504`).
+A releasable build needs an exact release receipt, source DOI, contract ID, artifact hashes, bundle
+inventory, third-party license notices, deterministic browser checks, responsive visual QA, and a
+codebook that documents every emitted field and NA/support state. App, search, PDF, and CSV outputs must
+be generated from one canonical metric builder.
 
-**5. Snapshot mortality ≠ rate.** The live/dead pie is explicitly a point-in-time ratio (`server.R:418,493`: "the breakdown below is a point-in-time snapshot, not a rate"), and only the Sheil–May rate is called an annual mortality rate. "Lost track / removed" is split out as a DATA state (`status_summary()`, `veg_helpers.R:419`), never counted as a death. Correct.
+## Driver disposition
 
-**6. Diameter decreases are mostly real — flag, don't delete.** Shrinks and measurement-height moves are flagged and kept; moved-height increments are excluded from growth stats but the rows survive (`veg_helpers.R:239-241`, `server.R:408-409`). The growth-chart copy explains the ~quarter-of-intervals decrease as "usually real (bark, drought), kept and flagged." Correct, and it's the treatment that avoids biasing the growth distribution upward.
+**HOLD / CONTEXT ONLY / NO DRIVER BYTE CHANGE.**
 
-**7. Structural NA is not missing data.** The codebook now states it for both diameter columns *and* gives the real magnitudes (HARV ~28% NA dbh, ~79% NA basal). A downstream user will not impute across the fork. Correct.
+After a full official RELEASE-2026 rebundle passes the science fixtures and cross-surface parity tests,
+Driver may review the resulting channel-specific context. That later review is a separate decision;
+passing this app's tests does not automatically promote vegetation into the causal cascade.
 
-**8. Richness is composition, not productivity — BA is the better floor.** BA and woody richness only loosely covary (ρ≈0.52 within forests; DELA holds 47 species at 28 m²/ha while boreal BONA holds 8 at 14). The producer axis leads with directly-measured BA, and the network strip is honestly labelled as *richness*, not productivity. This is the data backing the suite truth.
+## Sources
 
-**Two small QC/edge guards still worth closing:**
-- **Single-census / no-stand sites.** WOOD/DCFS/NOGP are single-census shrublands; **WOOD returns NULL from `stand_site()`** (36 grassland plots, no qualifying live woody stems — a treeless site classed "shrubland" with an empty stand). The app degrades gracefully to "not estimable here yet" banners, which is honest, but `tree_growth()`/`stand_mortality()` reach the `max(date)`/`min(date)` reductions (`veg_helpers.R:235,450`) on cohorts that can be empty after filtering, which can emit `no non-missing arguments to max; returning -Inf` warnings before falling through to NULL. Harmless to output but it pollutes logs and could mask a real warning. *Fix:* an early `if (!nrow(coh)) return(NULL)` / `all(is.na(date))` guard, or `smax`-style finite-guarding at those `max`/`min` calls (the file already defines `smax`/`smean` for exactly this — use them). And footnote WOOD/DCFS/NOGP in the picker so a reviewer isn't surprised by blank cards. [med]
-- **Codebook completeness — now CLOSED, keep it closed.** An earlier audit flagged `plots_export()` emitting 12 columns while `veg_codebook()` documented only 5. The current `veg_codebook()` (`veg_helpers.R:385-395`) documents all of `plotType, nlcdClass, lat, lng, sampled_area_m2, ba_m2_ha, density_stems_ha, n_species, tallest_m, biggest_diam_cm, dominant_species` plus `plotID` — the gap is closed and the shipped dictionary matches the shipped export. Do not regress this; the export ships the dictionary, so any future column added to `plots_export()` must get a row here. [resolved — guard against regression]
-
-## Place in the suite / cascade
-
-**The single-builder contract is the load-bearing cross-link, and it's honored.** The cascade's `build_cascade.R` imports *this repo's* `stand_site()` to fill `site_meta$veg_ba_ha` — so what this app computes IS the cascade's veg rung. If the BA formula or the `area_ha > 0.005` plot-area filter (`veg_helpers.R:151`) ever changes here, the cascade bundle must be regenerated or the two silently disagree. *Recommendation:* a one-line cross-reference comment in both files naming the shared contract, so a future editor of either side knows the other depends on it. [low]
-
-**This is the producer standing-stock rung — a slow STATE floor, not an annual link.** Because BA changes ~0.1 cm/yr per stem, it cannot carry a sub-annual or even annual climate→plant lag; it is the *baseline producer capacity* a site offers consumers, the level the faster signals (green-up onset, richness) fluctuate around. It is the **honest replacement for richness** as the plant rung: the suite's lead result is temperature→green-up onset, richness inverts in drylands and is composition not productivity, and basal area is the directly-measured, biome-comparable standing-stock covariate — strongest exactly where it should be (the near-zero desert floor, the high-BA conifer ceiling) and replicated enough (median 36 plots/site) to report with an SE. I certify the brick: `veg_ba_ha` is a clean, biome-comparable slow STATE. My one standing warning to Cass — it cannot carry an annual lag, and the desert value is basal *cover*, not breast-height stocking.
-
-## Scorecard
-
-| Dimension | Grade | One-line why |
-|---|---|---|
-| Protocol fidelity (DP1.10098.001) | **A** | Three-table spine, individual-grain unit, the two-paradigm fork, the 10 cm sampling-area threshold — all correct and re-derived through one `size_spec()`. |
-| Basal-area / QMD estimator | **A** | Per-plot then equal-weight mean + SE across plots (the right sampling unit); QMD is the pooled RMS, not a mean-of-means. |
-| Growth (dendrometry) | **A−** | `√Σd²` multi-bole collapse, day-span annualization, de-pseudoreplication, flag-don't-delete — textbook; BAI and within-POM segments would be the upgrade. |
-| Mortality (Sheil–May) | **A−** | Compound annual rate, binomial CI, lost-track excluded, n≥10 gate; per-individual `t` would beat the single pooled median. |
-| Biomass restraint | **A** | Correctly omitted — Jenkins/Chojnacky extrapolation error doesn't belong on basal-diameter desert shrubs; basal area carries no model error. |
-| Honesty (STATE vs FLUX) | **A** | Never time-indexes BA against weather; "stand fingerprint, not inventory"; the cardinal rule of this product is met. |
-| Cross-biome labelling | **B+** | Axes, codebook NA semantics and Compare note are right; the residual risk is a pooled `plots.csv` `ba_m2_ha` column mixing paradigms — add a per-row type tag. |
-| QC machinery | **A** | Recorded-Live-after-Dead, implausible jumps, large shrinks, moved-height — all kept, "verify not wrong," per-flag downloadable CSV; field-crew-useful. |
-| Edge-case robustness | **B** | Single-census/no-stand sites degrade gracefully but leak `max()`/-Inf warnings; guard with the file's own `smax`/early-return. |
-| Cascade role / single-builder | **A** | `stand_site()` is the shared contract that fills `veg_ba_ha`; honored, just add the cross-reference comment so it can't drift. |
-
-— Cedar
+- [NEON Vegetation structure DP1.10098.001](https://data.neonscience.org/data-products/DP1.10098.001)
+- [RELEASE-2026 DOI 10.48443/pypa-qf12](https://doi.org/10.48443/pypa-qf12)
+- [NEON vegetation structure user guide, Rev G](https://data.neonscience.org/api/v0/documents/NEON_vegStructure_userGuide_vG?inline=true)

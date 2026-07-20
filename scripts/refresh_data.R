@@ -1,92 +1,111 @@
-# ===========================================================================
-# refresh_data.R — pull NEON Vegetation structure (DP1.10098.001) for EVERY
-# site NEON publishes and rebuild data/sites/*.rds + data/site_index.rds.
-#
-# Self-contained for CI (.github/workflows/refresh-data.yml on ubuntu-latest):
-# fetches the three source tables per site into ../veg-data-fetch/<SITE>_raw.rds
-# (the shape scripts/bundle_veg_data.R expects), then reuses that tested bundler
-# + the app-matched index builder. NEON's loadByProduct is referenced by a
-# COMPUTED package name so the rsconnect scanner never pins neonUtilities.
-#
-# Robustness (the workflow `rm -f data/sites/*.rds` BEFORE this runs, so a half
-# pull must NOT silently ship a shrunken dataset):
-#  * Site list comes from the NEON API (self-maintaining); falls back to the
-#    full known list if the API directory call fails.
-#  * Each site is wrapped in tryCatch — a transient single-site failure is
-#    skipped & logged, not fatal (one bad site can't abort the whole refresh).
-#  * include.provisional is tried, then retried WITHOUT it (older neonUtilities
-#    lacks the arg); no start/end dates (some sites have no data in a fixed
-#    window — e.g. WOOD).
-#  * A MASS-FAILURE GUARD stops() before bundling if too few sites succeeded, so
-#    the job fails (and the destructive PR step never runs) instead of opening a
-#    PR that deletes 30 sites.
-#
-# Local (Windows): use R-4.1.1 (R-4.5.x can crash on loadByProduct). On Linux/CI
-# any recent R is fine. Set NEON_TOKEN in the environment to speed the pull.
-#   Rscript scripts/refresh_data.R
-# ===========================================================================
-suppressWarnings(suppressMessages({ library(dplyr) }))
+#!/usr/bin/env Rscript
 
-DPID  <- "DP1.10098.001"
-RAW   <- file.path("..", "veg-data-fetch")
-dir.create(RAW, showWarnings = FALSE, recursive = TRUE)
+# Safe local orchestrator for a full Vegetation Structure candidate. This never
+# deletes or overwrites the committed data tree. Point VST_CANDIDATE_ROOT at a
+# new/empty directory outside the repository and leave VST_QUERY_START/END blank
+# for the required full-release candidate. Closed month ranges are fetch-only
+# diagnostics and are deliberately rejected before candidate construction.
 
-# Full known site list (the 42 NEON publishes as of 2026-06) — used as a fallback
-# if the API directory call fails so the refresh still covers everything.
-KNOWN <- c("ABBY","BART","BLAN","BONA","CLBJ","CPER","DCFS","DEJU","DELA","DSNY",
-           "GRSM","GUAN","HARV","HEAL","JERC","JORN","KONZ","LAJA","LENO","MLBS",
-           "MOAB","NIWO","NOGP","ONAQ","ORNL","OSBS","PUUM","RMNP","SCBI","SERC",
-           "SJER","SOAP","SRER","STEI","TALL","TEAK","TREE","UKFS","UNDE","WOOD",
-           "WREF","YELL")
-SITES <- tryCatch({
-  j <- jsonlite::fromJSON(sprintf("https://data.neonscience.org/api/v0/products/%s", DPID),
-                          simplifyVector = FALSE)
-  api <- sort(vapply(j$data$siteCodes, function(s) s$siteCode, ""))
-  if (length(api) >= 30) sort(union(api, KNOWN)) else KNOWN
-}, error = function(e) { cat("API site list failed (", conditionMessage(e), ") — using known list.\n"); KNOWN })
-cat("Refreshing", length(SITES), "sites:\n  ", paste(SITES, collapse = ", "), "\n\n")
-
-.NEON_PKG <- paste0("neon", "Utilities")          # computed name -> scanner can't pin it
-if (!requireNamespace(.NEON_PKG, quietly = TRUE))
-  stop("neonUtilities is required to refresh data (install it in this R / CI runner).")
-loadByProduct <- get("loadByProduct", asNamespace(.NEON_PKG))
-
-tok  <- Sys.getenv("NEON_TOKEN")
-want <- c("vst_mappingandtagging", "vst_apparentindividual", "vst_perplotperyear")
-
-# one site: try with include.provisional, retry without it (older neonUtilities),
-# no date bounds; returns TRUE on a saved raw file, FALSE on any failure.
-fetch_site <- function(s) {
-  base <- list(dpID = DPID, site = s, package = "basic", check.size = FALSE, progress = FALSE)
-  if (nzchar(tok)) base$token <- tok
-  dl <- tryCatch(do.call(loadByProduct, c(base, list(include.provisional = TRUE))),
-    error = function(e) tryCatch(do.call(loadByProduct, base),
-      error = function(e2) { cat("  ERROR", s, ":", conditionMessage(e2), "\n"); NULL }))
-  if (is.null(dl)) return(FALSE)
-  miss <- setdiff(want, names(dl))
-  if (length(miss)) { cat("  SKIP", s, "- missing tables:", paste(miss, collapse = ", "), "\n"); return(FALSE) }
-  saveRDS(dl[want], file.path(RAW, paste0(s, "_raw.rds")))
-  cat(sprintf("  %s: %d tagged-stem rows, %d measurement rows\n",
-              s, nrow(dl$vst_mappingandtagging), nrow(dl$vst_apparentindividual)))
-  TRUE
+repo_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+git_root <- trimws(system2("git", c("rev-parse", "--show-toplevel"), stdout = TRUE))
+if (length(git_root) != 1L ||
+    !identical(normalizePath(git_root, winslash = "/", mustWork = TRUE), repo_root)) {
+  stop("run the local candidate orchestrator from the exact repository root",
+       call. = FALSE)
 }
+dirty <- system2(
+  "git", c("status", "--porcelain=v1", "--untracked-files=all"),
+  stdout = TRUE, stderr = TRUE
+)
+if (length(dirty)) {
+  stop(
+    "local candidate source is dirty; commit/stash every change so builder_commit names the exact executed source",
+    call. = FALSE
+  )
+}
+head_commit <- trimws(system2("git", c("rev-parse", "HEAD"), stdout = TRUE))
+if (length(head_commit) != 1L ||
+    !grepl("^[0-9a-f]{40}$", head_commit, ignore.case = TRUE)) {
+  stop("could not resolve the exact local builder commit", call. = FALSE)
+}
+candidate_input <- trimws(Sys.getenv("VST_CANDIDATE_ROOT", unset = ""))
+if (!nzchar(candidate_input))
+  stop("VST_CANDIDATE_ROOT is required; refreshes must build outside the repository",
+       call. = FALSE)
+dir.create(candidate_input, recursive = TRUE, showWarnings = FALSE)
+candidate_root <- normalizePath(candidate_input, winslash = "/", mustWork = TRUE)
+if (identical(candidate_root, repo_root) || startsWith(candidate_root, paste0(repo_root, "/")))
+  stop("VST_CANDIDATE_ROOT must be outside the repository", call. = FALSE)
+if (length(list.files(candidate_root, all.files = TRUE, no.. = TRUE)))
+  stop("VST_CANDIDATE_ROOT must be empty", call. = FALSE)
 
-ok <- 0L
-for (s in SITES) { cat("=== fetching", s, "===\n"); if (isTRUE(fetch_site(s))) ok <- ok + 1L }
+raw_dir <- file.path(candidate_root, "raw")
+site_dir <- file.path(candidate_root, "data", "sites")
+sample_dir <- file.path(candidate_root, "data-sample")
+site_index <- file.path(candidate_root, "data", "site_index.rds")
+search_index <- file.path(candidate_root, "data", "search_index.rds")
 
-# Mass-failure guard: refuse to bundle (and thus refuse to open a shrinking PR)
-# unless most sites pulled. The workflow already deleted data/sites/*.rds, so a
-# stop() here fails the job and the PR step never runs — far safer than shipping
-# a dataset missing 30 sites.
-floor_n <- max(30L, as.integer(ceiling(0.75 * length(SITES))))
-cat(sprintf("\n%d / %d sites fetched (floor = %d).\n", ok, length(SITES), floor_n))
-if (ok < floor_n)
-  stop(sprintf("Only %d/%d sites fetched (< %d) — aborting before bundle so the refresh PR can't delete sites.",
-               ok, length(SITES), floor_n))
+if (!nzchar(Sys.getenv("VST_NEON_RELEASE"))) Sys.setenv(VST_NEON_RELEASE = "RELEASE-2026")
+Sys.setenv(VST_RAW_OUT_DIR = raw_dir)
+source("scripts/fetch_veg_data.R")
 
-# Reuse the tested bundler (raw -> data/sites/*.rds + demo + a first index;
-# classifies forest/shrubland, carries basal/crown/area_shrub cols), then
-# overwrite the index with the app-matched definitions.
+raw_digest <- trimws(readLines(file.path(raw_dir, "SOURCE-FAMILY-SHA256.txt"),
+                               warn = FALSE)[1L])
+fetch_runtime <- readLines(file.path(raw_dir, "FETCH-RUNTIME.txt"), warn = FALSE)
+receipt_value <- function(key) {
+  line <- fetch_runtime[startsWith(fetch_runtime, paste0(key, "="))]
+  if (length(line) != 1L) stop("fetch runtime lacks ", key, call. = FALSE)
+  sub(paste0("^", key, "="), "", line)
+}
+neon_version <- receipt_value("neonUtilities")
+source_normalization <- receipt_value("sourceNormalization")
+if (!identical(source_normalization, VST_SOURCE_NORMALIZATION)) {
+  stop("fetch runtime uses an unreviewed source normalization", call. = FALSE)
+}
+neon_release <- receipt_value("officialNeonRelease")
+release_doi <- receipt_value("releaseDoi")
+query_start <- receipt_value("queryStart")
+query_end <- receipt_value("queryEnd")
+if (!identical(query_start, "FULL_RELEASE") ||
+    !identical(query_end, "FULL_RELEASE")) {
+  stop(
+    "bounded query fetch completed as a local diagnostic, but cannot build a promotable candidate; rerun with VST_QUERY_START/END unset",
+    call. = FALSE
+  )
+}
+receipt_id <- sprintf("VST-DP1.10098.001-%s-sha256-%s", neon_release, raw_digest)
+builder_commit <- trimws(Sys.getenv("VST_BUILDER_COMMIT", unset = ""))
+if (nzchar(builder_commit) && !identical(tolower(builder_commit), tolower(head_commit))) {
+  stop("VST_BUILDER_COMMIT differs from the clean working tree HEAD",
+       call. = FALSE)
+}
+builder_commit <- head_commit
+
+Sys.setenv(
+  VST_RAW_DIR = raw_dir,
+  VST_SITE_OUT_DIR = site_dir,
+  VST_SAMPLE_OUT_DIR = sample_dir,
+  VST_SITE_INDEX_OUT = site_index,
+  VST_SEARCH_INDEX_OUT = search_index,
+  VST_SITE_DIR = site_dir,
+  VST_SITE_INDEX = site_index,
+  VST_RECEIPT_SCHEMA_VERSION = "1",
+  VST_PROVENANCE_CLASS = "official-release",
+  VST_PRODUCT = "DP1.10098.001",
+  VST_NEON_RELEASE = neon_release,
+  VST_RELEASE_DOI = release_doi,
+  VST_QUERY_START = query_start,
+  VST_QUERY_END = query_end,
+  VST_SOURCE_RECEIPT_ID = receipt_id,
+  VST_RAW_SOURCE_DIGEST = raw_digest,
+  VST_NEON_UTILITIES_VERSION = neon_version,
+  VST_SOURCE_NORMALIZATION = source_normalization,
+  VST_BUILT_AT = format(Sys.Date(), "%Y-%m-%d"),
+  VST_BUILDER_COMMIT = builder_commit
+)
 source("scripts/bundle_veg_data.R")
 source("scripts/build_site_index.R")
-cat("REFRESH DONE — commit data/ (manifest.json only if the file/package set changed).\n")
+source("scripts/build_search_index.R")
+
+cat("Candidate built without touching committed data:\n", candidate_root, "\n", sep = "")
+cat("Next: validate exact bytes, generate the source receipt and manifest in a staged app tree, then open a review PR.\n")
