@@ -1,97 +1,32 @@
 # Vegetation source receipt
 
-Status: **legacy-partial source receipt; scientific and current-source promotion HOLD**.
+Status: **official-release candidate; scientific and human review required before promotion**.
 
-This receipt applies to the exact 42-site `DP1.10098.001` bundle family first
-introduced together in repository commit
-`6b758f993acb09b9a90425391213b26e2320d0ca` on 2026-06-19. That is a repository
-receipt date. It is not the upstream fetch date, bundle build date, query cutoff,
-or official NEON release.
+This receipt describes one complete 42-site candidate for NEON Vegetation structure `DP1.10098.001`, explicitly selected from the immutable `RELEASE-2026` data release. Release identity and DOI describe upstream provenance; candidate build date and repository commit remain separate fields.
 
-## What is known
+## Candidate identity
 
-- Product: NEON Vegetation structure (`DP1.10098.001`).
-- Inventory: exactly 42 `data/sites/<SITE>.rds` bundles.
-- `sourceBundleCommit`: `6b758f993acb09b9a90425391213b26e2320d0ca`.
-- `repositoryImportedAt`: `2026-06-19`.
-- Frozen bundled family SHA-256: `b00197f2069c7f537a2e7736e33a3786853151cf55e7918eb910efcc2a7a670c`.
-- The family hash uses files ordered by basename over exact inventory lines
-  `<sha256> <basename>\n`.
-- Current bundle observations span recorded years 2014–2024. That observation
-  range is not an upstream query cutoff or freshness guarantee.
+- Receipt schema: `1`.
+- Provenance class: `official-release`.
+- Product: `DP1.10098.001`.
+- Official NEON release: `RELEASE-2026`.
+- Release DOI: `https://doi.org/10.48443/pypa-qf12`.
+- Query window: `FULL_RELEASE` through `FULL_RELEASE` (`FULL_RELEASE` means no month subset was applied).
+- Actual candidate bundle build date: `2026-07-20`.
+- Builder commit: `a8ccb56e95f643ba9343ca13d176782ebc050017`.
+- `neonUtilities` fetch version: `4.0.1`.
+- Source normalization: `portable-vectors+published-uid-byte-order-v1` (portable vectors, then published-`uid` byte order).
+- Immutable release-snapshot label: `VST-DP1.10098.001-RELEASE-2026-sha256-e8d78dd776fa4188c3f237548b7d2ab185eb5c03bc7b220991d03753ebca3e29`.
+- Raw source family SHA-256: `e8d78dd776fa4188c3f237548b7d2ab185eb5c03bc7b220991d03753ebca3e29`.
+- Bundled 42-site family SHA-256: `3e62514de12b0d7b11cbe8aa53dde76d9f05f65c0174418a3df64e1261a88ffb`.
+- Deterministic 42-site × two-channel data-quality audit SHA-256: `3791a154e2cc0feda6fbf354bdab5195bb2fec0abd7b62ebff9fdb47a9e21670`.
+- Refresh workflow evidence: `https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29715249829`.
+- Reviewed RELEASE-2026 linkage gap: `49` measurement-only plot-event contexts containing `4,365` preserved measurement rows across `11` sites.
 
-The hash identifies the exact 42 bundle bytes. `data/site_index.rds` and
-`data/search_index.rds` are derived artifacts with separate checksums and
-cross-index gates.
+Both family hashes use basename-ordered inventory lines in the exact form `<sha256> <basename>\n`. The raw and bundled per-file ledgers, aggregate hashes, fetch runtime, deterministic site × channel data-quality audit, and its checksum are preserved under `data/source/`. The raw response artifact is retained with the workflow run; the ledgers remain durable in the repository.
 
-## What was not preserved
+## Promotion contract
 
-| Field | Legacy value | Meaning |
-|---|---:|---|
-| actual bundle build date | `NA` | Not recoverable from repository history or mtimes. |
-| official NEON release | `NA` | No release tag was recorded as explicitly selected. |
-| query start/cutoff | `NA` | The original query window was not preserved as a receipt. |
-| immutable query/snapshot ID | `NA` | No upstream query identifier was preserved. |
-| original raw family digest | `NA` | Raw source responses were not retained or checksummed. |
-| fetch package/runtime | `NA` | The exact `neonUtilities` fetch version was not retained. |
+Promotion requires all 42 bundles, `data/site_index.rds`, `data/search_index.rds`, the source ledgers, science contract, user-facing claims, Driver package, suite handoff, and manifest to agree on this candidate. Bundles must preserve every published source `uid`, audit the plot-scoped event × individual × temporary-stem locator without choosing a winner, and preserve every plot-opportunity source row needed to review the denominator. Measurement-only contexts remain visible but carry no invented effort, absence, sampled area, or opportunity metadata; both analytical channels must hold them as `held_opportunity_source_missing`. Any missing site, mixed receipt, unmatched source digest, changed 49/4,365/11 linkage inventory, unreviewed identity or denominator condition, dropped support field, or stale empirical claim blocks promotion.
 
-Repository dates, filesystem mtimes, manifest checksums, and runtime hashes may
-not fill these upstream fields.
-
-## Known structural limitation
-
-The legacy bundler collapsed measurement identity to a lossy `individualID ×
-date` representation and did not preserve published source `uid`, event or
-temporary-stem fields, the plot-scoped stem-event locator, or complete
-per-plot/per-year sampling-opportunity source rows. That prevents a release-grade
-proof that every stem measurement is joined to its correct sampled-area
-denominator.
-
-The consequence is visible at WOOD: the current bundle contains qualifying live
-woody records, but their 14 unique measurement `plotID` values match none of the
-36 plot-denominator `plotID` values. A `NULL` stand result there is therefore an
-**unmatched-denominator condition**, not evidence of a treeless or shrubless
-site. Current-source and Driver promotion remain held.
-
-The staged official RELEASE-2026 fetch adds a second, source-native limitation:
-4,365 published `vst_apparentindividual` rows across 49 plot-event keys at 11
-sites have no matching published `vst_perplotperyear` row. This is not repaired
-by borrowing another row or inferring absence/area. The v2 candidate preserves
-and flags those measurements, creates a measurement-only audit context with no
-invented opportunity metadata, and holds both channels as
-`held_opportunity_source_missing`.
-
-## Contract for the next source family
-
-The next candidate targets the explicit immutable official release
-`RELEASE-2026`, DOI <https://doi.org/10.48443/pypa-qf12>, with all 42 registered
-sites. It must preserve:
-
-1. the official release tag and product DOI;
-2. actual candidate build date and builder commit as separate repository fields;
-3. exact raw per-file and aggregate SHA-256 ledgers;
-4. `neonUtilities` version and explicit `FULL_RELEASE` selection at both query
-   bounds; bounded subsets are diagnostic-only and cannot be promoted;
-5. every published apparent-individual and opportunity source `uid`, the exact
-   mapping/tagging `uid` selected for each joined plant identity, plus the
-   plot-scoped event × individual × temporary-stem locator and its conflict
-   audit; a latest-created mapping tie is unresolved and fails rather than being
-   ranked by UID, row order, or taxonomy;
-6. every per-plot/per-year opportunity source row, plus protocol, plot type,
-   sampled-opportunity/area, and conflict fields;
-7. one identical receipt across every site bundle, both indexes, and durable
-   source ledgers;
-8. strict 42-site accounting and hard failure on every missing table/site or
-   unaccounted observation/opportunity key.
-
-Fetched tables are materialized to portable vectors, validated for unique
-nonblank published `uid`, sorted in published-UID byte order, and assigned fresh
-sequential row names before pinned RDS serialization. The raw-family digest
-therefore identifies the normalized extraction bytes, not upstream HTTP arrival
-order. Source-key gaps are permitted only when they equal the exact registered
-measurement-only context ledger; any unaccounted key still fails hard.
-
-`skip_download=true` is reserved for revalidating an already-promoted v2 family;
-it deliberately rejects these legacy bundles. It preserves the promoted receipt
-and must never stamp a workflow date, invent an official release, or reuse
-partial inputs as a new source family.
+`skip_download=true` accepts only an already-promoted v2 family and revalidates its committed inputs. It must not change this receipt, stamp a new build date, invent a NEON release, or treat a repository/manifest time as upstream vintage.
