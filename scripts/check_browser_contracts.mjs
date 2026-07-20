@@ -139,8 +139,23 @@ requireText(server, "basal_unaligned", "multi-stem basal career evidence guard i
 requireText(server, "Measured · stems not aligned for change", "multi-stem evidence label is not plain-language or internally consistent");
 requireText(server, "measurement_unaligned", "changed measurement points must guard the career trajectory and evidence state");
 requireText(server, "Measured · measurement point changed", "measurement-point withholding needs a plain-language evidence label");
-if (!/baBar_click\s*<-\s*reactive\s*\(\{[\s\S]*?req\(rv\$site,\s*rv\$snap,\s*rv\$plots,\s*rv\$spec\)[\s\S]*?event_data\("plotly_click",\s*source\s*=\s*"baBar",\s*priority\s*=\s*"event"\)/.test(server)) {
-  throw new Error("baBar click handling must wait for a loaded site before registering its Plotly source");
+const baBarRenderStart = server.indexOf('output$baBar <- renderPlotly({');
+const baBarRevealStart = server.indexOf('baBar_members <- reactiveVal(NULL)', baBarRenderStart);
+const baBarExportStart = server.indexOf('output$baBarMembersCsv <- downloadHandler(', baBarRevealStart);
+const baBarRenderBlock = baBarRenderStart >= 0 && baBarRevealStart > baBarRenderStart
+  ? server.slice(baBarRenderStart, baBarRevealStart)
+  : "";
+const baBarRevealBlock = baBarRevealStart >= 0 && baBarExportStart > baBarRevealStart
+  ? server.slice(baBarRevealStart, baBarExportStart)
+  : "";
+if (!/source\s*=\s*"baBar"[\s\S]*?plotly::event_register\("plotly_click"\)/.test(baBarRenderBlock)) {
+  throw new Error("every interactive baBar plot must explicitly register its Plotly click event");
+}
+if (!/observeEvent\(\s*session\$rootScope\(\)\$input\[\["plotly_click-baBar"\]\],\s*\{[\s\S]*?plotly::event_data\("plotly_click",\s*source\s*=\s*"baBar",\s*priority\s*=\s*"event"\)/.test(baBarRevealBlock)) {
+  throw new Error("baBar event_data must wait for an emitted raw click input after Plotly registers its source");
+}
+if (/baBar_click\s*<-\s*reactive/.test(baBarRevealBlock)) {
+  throw new Error("baBar must not read event_data merely because site state became available");
 }
 if (/observeEvent\(event_data\("plotly_click",\s*source\s*=\s*"baBar"\)/.test(server)) {
   throw new Error("baBar must not request a hidden Plotly source during the landing-page flush");
