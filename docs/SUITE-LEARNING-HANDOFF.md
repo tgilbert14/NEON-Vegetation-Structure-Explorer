@@ -20,8 +20,10 @@ logs exposed first-chart `baBar` registration warnings. PR #8 implementation
 `29723718100` are green. Merge `d566b30`, main CI `29724062900`, Pages
 `29724062095`, and Connect #59 agree on the published runtime; repeated-click,
 reset, responsive, science-state, browser-log, and worker-log proof passed.
-Only app-docs publication and the separate central Driver documentation
-publication remain in the Pass 4 closeout workflow.
+Docs-only PR #9 published the app-local record as merge `3391e70`; exact PR and
+main CI, Pages, Connect #60, and public-landing receipts preserved the released
+manifest/search bytes. Only the separate central Driver documentation
+publication remains in the Pass 4 closeout workflow.
 
 ## Product and cover lessons
 

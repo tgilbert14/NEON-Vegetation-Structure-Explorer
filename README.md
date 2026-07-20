@@ -47,8 +47,12 @@ Connect #59 published that exact merge under R 4.5.2 with all 91 packages. The
 production sweep repeated the same `baBar` click twice, completed BART → reset →
 JORN, preserved JORN zero and WOOD held states, and passed every required compact
 width. The browser log was clean; fresh worker logs contained only the two benign
-package-built-under-R-4.5.3 warnings. Runtime production proof is complete;
-docs-only publication and the central Driver handoff remain. Vegetation remains
+package-built-under-R-4.5.3 warnings. Runtime production proof is complete.
+Docs-only [PR #9](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/9)
+then published the app-local evidence as merge `3391e70`; its exact PR and main
+CI, Pages, Connect #60, and public-landing receipts retained the released
+manifest and search bytes. Only the separate central Driver handoff remains.
+Vegetation remains
 **HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE**.
 `VEGETATION-SOURCE-RECEIPT.md` intentionally preserves its promotion-time
 candidate wording; production status is append-only in `BUILD-TEST-HANDOFF.md`.
