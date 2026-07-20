@@ -601,8 +601,8 @@ for (path in site_files) {
       date_n <- tapply(measurement_date_number, measurement_keys, function(value) {
         as.integer(length(unique(value[is.finite(value)])))
       })
-      expected_date_min <- unname(date_min[canonical_keys])
-      expected_date_max <- unname(date_max[canonical_keys])
+      expected_date_min <- unname(as.numeric(date_min[canonical_keys]))
+      expected_date_max <- unname(as.numeric(date_max[canonical_keys]))
       expected_date_n <- as.integer(unname(date_n[canonical_keys]))
       expected_date_n[is.na(expected_date_n)] <- 0L
     }

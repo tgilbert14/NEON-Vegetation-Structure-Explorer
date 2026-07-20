@@ -337,6 +337,13 @@ closed the following issues before the candidate was allowed to run:
   [29713408161](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29713408161)
   was cancelled during fetch as soon as that superseding correction was required.
   It emitted no candidate artifact and authorized no promotion.
+- Diagnostic exact-head run
+  [29713740519](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29713740519)
+  confirmed that every stored/reconstructed date value and `NA` position agreed;
+  only the one-dimensional `tapply()` array attribute differed. Runtime, verifier,
+  and DQA now coerce the keyed lookup to a plain row-aligned numeric vector before
+  exact comparison. This changes no calendar value, row order, or release byte;
+  it removes only an internal array shape from independent validation input.
 
 ### Failed/unsafe paths closed
 

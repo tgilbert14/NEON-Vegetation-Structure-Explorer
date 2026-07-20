@@ -659,8 +659,11 @@ vst_dqa_site_rows <- function(bundle, site) {
     date_n <- tapply(measurement_date_number, measurement_event_key, function(value) {
       as.integer(length(unique(value[is.finite(value)])))
     })
-    expected_date_min <- unname(date_min[canonical_event_key])
-    expected_date_max <- unname(date_max[canonical_event_key])
+    # tapply returns a one-dimensional array. Character lookup can retain that
+    # array's dim attribute even after unname(), so normalize to the plain
+    # row-aligned numeric vector stored by the bundle before exact comparison.
+    expected_date_min <- unname(as.numeric(date_min[canonical_event_key]))
+    expected_date_max <- unname(as.numeric(date_max[canonical_event_key]))
     expected_date_n <- as.integer(unname(date_n[canonical_event_key]))
     expected_date_n[is.na(expected_date_n)] <- 0L
   }

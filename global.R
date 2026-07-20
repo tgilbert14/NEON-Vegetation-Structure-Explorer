@@ -928,8 +928,8 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
       date_n <- tapply(measurement_date, measurement_key, function(value) {
         as.integer(length(unique(value[is.finite(value)])))
       })
-      expected_date_min <- unname(date_min[context_key])
-      expected_date_max <- unname(date_max[context_key])
+      expected_date_min <- unname(as.numeric(date_min[context_key]))
+      expected_date_max <- unname(as.numeric(date_max[context_key]))
       expected_date_n <- as.integer(unname(date_n[context_key]))
       expected_date_n[is.na(expected_date_n)] <- 0L
     }
