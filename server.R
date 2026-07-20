@@ -129,12 +129,22 @@ server <- function(input, output, session) {
   }
 
   # One searchable place picker replaces the former state -> site cascade.
-  observeEvent(TRUE, {
+  # Server-side Selectize keeps its searchable choices in a session data object,
+  # so every picker update must re-register the same validated site family. In
+  # particular, returning from an explored site must not leave only the cleared
+  # placeholder in the browser with an empty remote search source.
+  site_picker_choices <- function() {
     rows <- site_table[order(site_table$name, site_table$site), , drop = FALSE]
     choices <- stats::setNames(rows$site,
       sprintf("%s · %s, %s", rows$site, rows$name, rows$state))
-    updateSelectizeInput(session, "site", choices = c("Choose a place…" = "", choices),
-                         selected = "", server = TRUE)
+    c("Choose a place…" = "", choices)
+  }
+  refresh_site_picker <- function(selected = "") {
+    updateSelectizeInput(session, "site", choices = site_picker_choices(),
+                         selected = selected, server = TRUE)
+  }
+  observeEvent(TRUE, {
+    refresh_site_picker()
     if (!isTRUE(VEG_FAMILY_READY)) {
       shinyjs::disable("loadBtn")
       shinyjs::disable("searchNetworkBtn")
@@ -241,7 +251,7 @@ server <- function(input, output, session) {
     b <- load_site_bundle(site)
     if (is.null(b)) { session$sendCustomMessage("loadDone", list()); showNotification("That validated site bundle could not be read.", type = "error"); return() }
     row <- site_table[site_table$site == site, ]
-    updateSelectizeInput(session, "site", selected = site, server = TRUE)
+    refresh_site_picker(selected = site)
     ingest(b, sprintf("%s · %s", site, if (nrow(row)) row$name else site),
            expected_site = site, requested_channel = requested_channel)
   }
@@ -285,6 +295,7 @@ server <- function(input, output, session) {
     rv$trees <- NULL; rv$snap <- NULL; rv$one <- NULL; rv$plots <- NULL; rv$meta <- NULL; rv$lb <- NULL
     rv$site <- NULL; rv$label <- NULL; rv$tree <- NULL; rv$bundle <- NULL
     rv$available_channels <- character(); rv$lab_keys <- character()
+    refresh_site_picker()
     shinyjs::hide("mainTabsWrap"); shinyjs::hide("treePickerWrap"); shinyjs::show("splash")
     session$sendCustomMessage("kickMaps", list())
   }

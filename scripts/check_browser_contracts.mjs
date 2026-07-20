@@ -31,6 +31,34 @@ const vegStyles = readFileSync("www/veg.css", "utf8");
 const requireText = (source, needle, message) => {
   if (!source.includes(needle)) throw new Error(message);
 };
+
+// The place picker is server-backed: clearing the visible selection is not
+// enough after a site visit because Selectize also needs its remote choice data
+// object re-registered. Keep one implementation and require both session start
+// and the return-to-places path to call it.
+const sitePickerUpdates = server.match(/updateSelectizeInput\(\s*session\s*,\s*["']site["']/g) || [];
+if (sitePickerUpdates.length !== 1) {
+  throw new Error("the server-backed site picker must be updated only through refresh_site_picker");
+}
+for (const token of [
+  "site_picker_choices <- function()",
+  "refresh_site_picker <- function(selected = \"\")",
+  "choices = site_picker_choices()",
+  "refresh_site_picker(selected = site)",
+]) {
+  requireText(server, token, `server-backed site picker refresh contract is missing ${token}`);
+}
+if (!/observeEvent\(\s*TRUE\s*,\s*\{\s*refresh_site_picker\(\)/s.test(server)) {
+  throw new Error("session initialization must register the searchable site choices");
+}
+const resetStart = server.indexOf("reset_to_places <- function()");
+const resetEnd = server.indexOf("observeEvent(input$changeSite", resetStart);
+const resetBlock = resetStart >= 0 && resetEnd > resetStart
+  ? server.slice(resetStart, resetEnd)
+  : "";
+if (!resetBlock.includes("refresh_site_picker()")) {
+  throw new Error("returning to Places must clear and re-register the searchable site choices");
+}
 for (const forbidden of [
   /fonts\.googleapis\.com/i, /fonts\.gstatic\.com/i, /cdnjs\.cloudflare\.com/i,
   /unpkg\.com/i, /cdn\.jsdelivr\.net/i,
