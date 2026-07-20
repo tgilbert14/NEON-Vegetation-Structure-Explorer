@@ -88,6 +88,12 @@ requireText(server, "basal_unaligned", "multi-stem basal career evidence guard i
 requireText(server, "Measured · stems not aligned for change", "multi-stem evidence label is not plain-language or internally consistent");
 requireText(server, "measurement_unaligned", "changed measurement points must guard the career trajectory and evidence state");
 requireText(server, "Measured · measurement point changed", "measurement-point withholding needs a plain-language evidence label");
+if (!/baBar_click\s*<-\s*reactive\s*\(\{[\s\S]*?req\(rv\$site,\s*rv\$snap,\s*rv\$plots,\s*rv\$spec\)[\s\S]*?event_data\("plotly_click",\s*source\s*=\s*"baBar",\s*priority\s*=\s*"event"\)/.test(server)) {
+  throw new Error("baBar click handling must wait for a loaded site before registering its Plotly source");
+}
+if (/observeEvent\(event_data\("plotly_click",\s*source\s*=\s*"baBar"\)/.test(server)) {
+  throw new Error("baBar must not request a hidden Plotly source during the landing-page flush");
+}
 
 // 320px layout and export-source card must shrink without changing its 340px cap.
 if (!/\.trade-card\s*\{[^}]*width:\s*min\(340px,\s*100%\)[^}]*max-width:\s*340px/s.test(styles)) {
