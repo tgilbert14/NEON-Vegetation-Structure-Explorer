@@ -344,6 +344,15 @@ closed the following issues before the candidate was allowed to run:
   and DQA now coerce the keyed lookup to a plain row-aligned numeric vector before
   exact comparison. This changes no calendar value, row order, or release byte;
   it removes only an internal array shape from independent validation input.
+- Exact-head run
+  [29713915212](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29713915212)
+  proved that positive measurement count/date summary parity now passes on pinned
+  R 4.5.2. Its following negative fixture deliberately changed the `E7` maximum
+  date from `2024-08-15` to `2024-08-16`; DQA rejected that corruption with the
+  new component-specific message, but the fixture still required its superseded
+  generic wording. The fixture now matches the stable DQA message prefix. This is
+  a test-expectation correction only: no science rule, source row, or release byte
+  changed.
 
 ### Failed/unsafe paths closed
 

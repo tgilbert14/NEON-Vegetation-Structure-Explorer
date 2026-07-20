@@ -443,7 +443,7 @@ date_probe$plots$measurement_date_max[date_probe$plots$eventID == "E7"] <-
   as.Date("2024-08-16")
 assert_error(
   dqa_environment$vst_dqa_site_rows(date_probe, "TEST"),
-  "count/date summaries differ",
+  "context measurement summaries differ from preserved rows",
   "DQA accepted a corrupted measurement date bound"
 )
 uid_probe <- dqa_probe
