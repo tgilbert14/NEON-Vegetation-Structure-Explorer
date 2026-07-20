@@ -114,11 +114,41 @@ not create branches, open PRs, publish to `main`, or alter a source receipt.
 - Reattach Plotly listeners after every render; anchor pinned annotations in
   data coordinates; keep exportable charts in SVG when raster capture requires
   it.
+- In Plotly 4.12, loaded site/output state is not proof that a rendered widget
+  has completed `event_register()`. Keep explicit registration on the widget,
+  observe raw `plotly_click-<source>` on the Shiny input, and only then call
+  `event_data(..., priority = "event")`. This preserves repeated clicks without
+  reading ahead of registration during the first chart flush.
+- Inspect browser and Shiny worker logs independently after fresh load and
+  repeated clicks. A clean console and visually healthy chart do not prove that
+  the server emitted no lifecycle warning.
+- Treat a server-backed Selectize picker as selection plus remote choice state.
+  Clearing `selected` does not prove that another search can run. Centralize one
+  validated choice builder/updater, call it at initialization, selected-site
+  load, and reset, and contract the complete first-site → reset → second-site
+  path.
 - Vend essential browser dependencies and keep server startup free of remote
   font or data downloads.
 - A content hash proves bytes, not upstream vintage. Unknown provenance stays
   explicitly unknown until a complete source receipt exists.
 
 The official-release family passed every empirical candidate gate in exact-head
-run `29715249829`; merge and public parity gates remain open. Failed and
-superseded candidate attempts are diagnostic evidence, never release authority.
+run `29715249829` and was promoted through PR #4. PR #5 supplied the guarded
+server-side Plotly path; PR #6 completed the focus boundary, active-channel
+exports, local Size Lab selection, and keyboard pin controls. Merge `433bbd25`
+has green main CI and Pages receipts and is Connect deployment #57 under R 4.5.2
+with 91 packages. Its public sweep proved the JORN zero, WOOD held, and BART
+active-channel export edges, then exposed a server-backed picker reset defect.
+PR #7 implementation `3835451` fixes that path; `8389c9c` promotes only its
+exact generated manifest checksum. Exact-head run `29722349642` passed every
+`release_contracts` CI gate; merge `0709bd0` and Pages run `29722613509` are
+green. Main CI `29722614074` passed and Connect #58 reports exact `0709bd0`; its reset
+and compact-width checks passed. Fresh worker logs still exposed first-chart
+`baBar` registration warnings, proving the earlier site-state guard incomplete.
+PR #8 implementation `4ce0cb7` is the new clean-log boundary. First run
+`29723373295` failed closed only at derived equality; promotion `06904fe` carries
+the exact validator-derived manifest checksum, and exact-head run `29723718100`
+passed. PR #8 merged as `d566b30`; main CI `29724062900`, Pages `29724062095`,
+and Connect #59 published that exact runtime. The final identical repeated-click,
+reset, responsive, science-state, browser-log, and worker-log receipts passed.
+Failed and superseded attempts are diagnostic evidence, never release authority.

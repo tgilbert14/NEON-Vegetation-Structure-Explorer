@@ -17,9 +17,41 @@ The Living Poster and app experience are rebuilt around the
 [`29715249829`](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29715249829)
 passed the official 42-site RELEASE-2026 source, key, opportunity-state,
 parity, runtime, manifest, app-source, and export gates; promotion commit
-`800bd5e` contains only its 54 checksum-ledger payload paths. Merge and public
-deployment proof remain pending. Vegetation remains **HOLD / CONTEXT ONLY** for
-Driver/Cascade, and this release changes no Driver data byte.
+`800bd5e` contains only its 54 checksum-ledger payload paths. The core release
+merged in
+[PR #4](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/4),
+an initial site-state guard for Plotly reads in
+[PR #5](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/5),
+and the production accessibility/export closeout in
+[PR #6](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/6).
+Main CI and Pages are green at merge `433bbd2`; Posit Connect deployment #57
+reports that exact commit under R 4.5.2 with 91 packages. Final QA proved the
+JORN supported-zero, WOOD held-not-zero, and BART active-channel export paths,
+then exposed one return-to-Places regression: clearing the server-backed picker
+also removed its remote search choices.
+[PR #7](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/7)
+re-registered the same validated 42-site choice family after reset. Its exact
+validator-derived manifest checksum is promoted at `8389c9c`, and exact-head
+run `29722349642` passed every `release_contracts` CI gate. PR #7 merged as
+`0709bd0`, and main CI and Pages are green; Connect #58 reports that exact merge
+under R 4.5.2 with 91 packages. The reset path and all five compact widths
+passed, but fresh Connect server logs exposed first-chart `baBar` registration
+warnings that the clean browser log did not show.
+[PR #8](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/8)
+waited for an emitted raw Plotly click before reading event data. First run
+`29723373295` failed closed only at committed derived-byte equality; promotion
+`06904fe` carries its exact validator-derived `server.R` manifest checksum, and
+exact-head run `29723718100` passed every `release_contracts` CI gate. PR #8
+merged as `d566b30`; main CI `29724062900` and Pages `29724062095` passed, and
+Connect #59 published that exact merge under R 4.5.2 with all 91 packages. The
+production sweep repeated the same `baBar` click twice, completed BART → reset →
+JORN, preserved JORN zero and WOOD held states, and passed every required compact
+width. The browser log was clean; fresh worker logs contained only the two benign
+package-built-under-R-4.5.3 warnings. Runtime production proof is complete;
+docs-only publication and the central Driver handoff remain. Vegetation remains
+**HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE**.
+`VEGETATION-SOURCE-RECEIPT.md` intentionally preserves its promotion-time
+candidate wording; production status is append-only in `BUILD-TEST-HANDOFF.md`.
 
 See:
 
@@ -33,7 +65,7 @@ See:
 | Surface | Question it answers |
 |---|---|
 | **Place** | Who and what was measured at one NEON place? |
-| **Sampled Structure** | What size, height, measured area, and stem-density patterns occur in supported sampled plots? |
+| **Sampled Structure** | What size, height, channel-qualified cross-sectional area, and stem-density patterns occur in supported sampled plots? |
 | **Change** | Which plot + plant records have comparable remeasurements, and how did their diameter or status change? |
 | **Plant** | Where does one tagged plant sit in size × height space, and what does its preserved record show? |
 | **Search / Compare** | Where was a species recorded, and how do compatible sampled contexts differ? |
@@ -62,8 +94,9 @@ CSV/codebook/QC exports, and a sampled-plot PDF brief.
   opportunity-source-missing contexts are held/NA.
 - Sampled areas remain event-specific; every finite positive compatible area—including a 40 m² nested
   area—is retained.
-- Large-tree DBH area and shrub/sapling basal-cover area are separate physical channels. They are not
-  one cross-biome ranking.
+- Large-tree DBH cross-sectional area and shrub/sapling stem-base
+  cross-sectional area are separate physical channels. They are not one
+  cross-biome ranking.
 - Small-tree DBH rows remain in the preserved download but are withheld from summaries until their
   own nested-area DBH channel is registered and tested.
 - Density counts stems. QMD is `sqrt(sum(d²) / n_stems)`.

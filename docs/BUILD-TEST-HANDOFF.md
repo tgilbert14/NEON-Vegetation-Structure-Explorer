@@ -414,6 +414,373 @@ CI, merge, verify Pages and Connect at the merged revision, then append the
 production receipt and update the Driver central learning records. Stop before
 Ground Beetle Pass 5.
 
+## Pass 4 production closeout receipt — 2026-07-19 MST / 2026-07-20 UTC
+
+**Outcome: OFFICIAL-RELEASE BYTES PROMOTED / PRS #4–#8 PUBLISHED / #59 RESET,
+RESPONSIVE, REPEATED-CLICK, AND SPLIT-LOG PASS / RUNTIME PRODUCTION VERIFIED /
+DOCS-ONLY AND CENTRAL DRIVER PUBLICATION PENDING / DRIVER HOLD / CONTEXT ONLY /
+NO DRIVER DATA BYTE CHANGE.** This entry
+supersedes the working receipt's publication status and next action. It does not
+rewrite the historical diagnostic and failure record above.
+
+### Official source and candidate
+
+- Exact candidate builder head:
+  `a8ccb56e95f643ba9343ca13d176782ebc050017`.
+- Exact owner-labelled candidate run:
+  [29715249829](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29715249829),
+  successful on pinned Ubuntu 22.04 / R 4.5.2 / dated Jammy packages / one-thread
+  Haswell OpenBLAS.
+- Validated candidate artifact: `8450700945`, 28,378,366 bytes. Retained raw
+  artifact: `8450530222`, 29,782,052 bytes.
+- Source: official `RELEASE-2026`, provisional data excluded, DOI
+  `10.48443/pypa-qf12`, all 42 registered sites.
+- Raw family SHA-256:
+  `e8d78dd776fa4188c3f237548b7d2ab185eb5c03bc7b220991d03753ebca3e29`.
+- Bundle family SHA-256:
+  `3e62514de12b0d7b11cbe8aa53dde76d9f05f65c0174418a3df64e1261a88ffb`.
+- Candidate inspector SHA-256:
+  `819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`.
+  The tracked, CI-enforced inspector at
+  `scripts/validation/inspect_vegetation_candidate.py` proved the 55-file
+  artifact, 54 allowlisted payload paths, 42-site inventory, and exact
+  49-event / 4,365-row / 11-site opportunity-source gap.
+- Promotion commit:
+  `800bd5ea64d5aa4f2eab194c1b16dcbee5a0638e`. Its direct parent is the
+  candidate head; its changed paths equal the checksum-ledger payload exactly.
+- PR #6 checkpoint derived-byte checksums after its manifest-only promotion:
+  `data/site_index.rds`
+  `bfead31cb5ed516c8604f11b781979b4c4e2ced20d5b242708fa4ca8f9ffc7f9`,
+  `data/search_index.rds`
+  `c4d145046d9486d7c7cf2c85339200ba1eaad3cf7e0de22bb2e378c7c944fc4b`,
+  and `manifest.json`
+  `c9356c29aaa1f6bf869442ceb44eca81c5128c86c9352a1256fbae8c374fac6b`.
+
+The supported verification path remains:
+
+```bash
+python3 -B scripts/validation/inspect_vegetation_candidate.py "$VEG_AUDIT_ROOT"
+shasum -a 256 data/site_index.rds data/search_index.rds manifest.json \
+  scripts/validation/inspect_vegetation_candidate.py
+```
+
+`VEG_AUDIT_ROOT` must be a clean extraction of the exact candidate artifact;
+the complete download command and external-log rule are in
+[data-bundling-pattern.md](data-bundling-pattern.md).
+
+### PR #4 — official family and core app release
+
+- PR: <https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/4>.
+- Promotion line: `800bd5e`; final reviewed head
+  `5c7456b16abae2569d037bb3b731a9e5065b0906`; exact-head CI
+  [29716974286](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29716974286).
+- Merge: `987c102b84de98f18c11dd98de6c8113ab7f4c8c`.
+- Post-merge CI
+  [29717225014](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29717225014)
+  and Pages
+  [29717224521](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29717224521)
+  passed; Connect deployment #55 published the core release.
+- Core public export QA inspected the PDF, whole-site ZIP, and species CSV.
+
+### PR #5 — initial site-state Plotly guard (#56 inspected clean)
+
+- PR: <https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/5>.
+- Run
+  [29717387935](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29717387935)
+  failed the expected stale-manifest equality gate and authorized no merge.
+- Exact fix head: `5baa6a023a9763d03e15d2341985b8d492e36755`.
+  Exact-head CI
+  [29718292956](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29718292956)
+  passed and emitted artifact `8451426404` (92,308 bytes).
+- Merge: `91a7814c9e1275c5a890aed4a9c186485f614e60`.
+  Post-merge CI
+  [29718542229](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29718542229)
+  passed with artifact `8451506471` (92,308 bytes); Pages run
+  [29718541621](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29718541621)
+  passed.
+- Connect deployment #56 reported exact merge `91a7814`, R 4.5.2, and all 91
+  packages. Fresh landing and repeated chart clicks produced no Plotly
+  `event_data()` warning; only benign package-built-under-R-4.5.3 warnings
+  remained. This is a bounded #56 receipt, not proof that the site-state guard
+  covered every later first-chart render; #58 ultimately showed that it did not.
+
+### PR #6 — production accessibility, exports, and keyboard controls
+
+- PR: <https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/6>.
+- Implementation head: `7c1ced5c68e2ab32bb698f2f1a913f22a46541f9`.
+  It adds a real loading-dialog focus boundary and restore path, reduced-motion
+  tour behavior, one active-channel plot-summary source shared by standalone
+  CSV and ZIP, a Size Lab-local eligible-plant selector, and keyboard
+  create/move/resize/close behavior for named pinned cards.
+- First exact-head run
+  [29719846128](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29719846128)
+  passed every science, runtime, source, export, search, and browser gate, then
+  failed only committed-manifest equality as expected after runtime source
+  changes. Artifact `8452015013` (92,307 bytes) was diagnostic only. Its search
+  index was byte-identical to the committed index at
+  `c4d145046d9486d7c7cf2c85339200ba1eaad3cf7e0de22bb2e378c7c944fc4b`.
+- Only the validator's five changed runtime checksums were promoted. Resulting
+  manifest SHA-256:
+  `c9356c29aaa1f6bf869442ceb44eca81c5128c86c9352a1256fbae8c374fac6b`;
+  promotion head: `e5a12add8b1227453a904ff14741b92a5a435759`.
+- Exact-head rerun
+  [29720142868](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29720142868)
+  passed every step. Artifact `8452100740`,
+  `vegetation-structure-derived-e5a12add8b1227453a904ff14741b92a5a435759-29720142868`,
+  is 92,307 bytes; archive SHA-256 is
+  `6eb1b916e029c7c61d8e25b83a2b09c9cbfff3aa2962bcf5e50e2b0dfb4083cc`.
+- Merge: `433bbd25acbe48224a75368c9edd6504e55271bd`.
+  Post-merge CI
+  [29720341082](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29720341082)
+  passed. Artifact `8452189687`,
+  `vegetation-structure-derived-433bbd25acbe48224a75368c9edd6504e55271bd-29720341082`,
+  is 92,307 bytes with SHA-256
+  `c4c84cf70f069fab6d086738e35b6c95c117244a0b9833fcfb5e78b717aa7d49`.
+- Pages run
+  [29720340743](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29720340743)
+  passed. Artifact `8452121645` (`github-pages`) is 3,889,241 bytes with
+  SHA-256
+  `32bec54bb78b1e190d7369fe77e444c0041d638650c7ae61c663db6647be5675`;
+  deployment ID is `5517445662`.
+- Connect deployment #57 successfully published exact `433bbd25` under R 4.5.2
+  with all 91 packages. Logs inspected before the final interaction sweep show
+  only benign `plotly`/`shinyjs` built-under-R-4.5.3 warnings.
+
+### PR #7 — searchable place reset follow-up (published; reset proof passed)
+
+- PR:
+  <https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/7>;
+  branch `agent/vegetation-site-picker-reset`; implementation head
+  `3835451f6945b25eca4ef31b4d0882b6406c07ae`.
+- The #57 public sweep found a real reset-path defect after a successful first
+  site visit. Returning to Places cleared the visible selection, but the
+  server-backed Selectize data object was not re-registered. The picker still
+  showed its placeholder while remote search had no site choices, so a second
+  place could not be searched and opened.
+- The fix defines one `site_picker_choices()` source over the validated site
+  table and one `refresh_site_picker()` updater. Session initialization, site
+  load, and `reset_to_places()` all call that updater, so selection state and
+  remote choices cannot diverge.
+- `scripts/check_browser_contracts.mjs` now requires exactly one direct
+  `updateSelectizeInput()` implementation, the centralized choice source, and
+  both initialization and reset registrations. The implementation head changes
+  only `server.R` and that static contract; it changes no source family, bundle,
+  index, estimator, support state, or Driver byte.
+- Initial exact-head run
+  [29722029052](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29722029052)
+  passed every preceding source, science, parity, runtime, offline-source,
+  search, and browser contract, then failed only committed derived-byte equality
+  as expected. Artifact `8452805523`,
+  `vegetation-structure-derived-3835451f6945b25eca4ef31b4d0882b6406c07ae-29722029052`,
+  is 92,307 bytes with artifact digest
+  `sha256:da06e1829f6d6c0a7c597f1240b2a7391ee183419388c4431278f432be4e8365`.
+- The generated search index remained byte-identical at
+  `c4d145046d9486d7c7cf2c85339200ba1eaad3cf7e0de22bb2e378c7c944fc4b`.
+  The only generated manifest change was `server.R` MD5
+  `fa51b4efead150f06706232045d443b2`; generated manifest SHA-256 is
+  `4fca84d313623f045e0d425b6c9f0464629f12d82ff6a115deb79341fc44ed21`.
+- Promotion commit/current head
+  `8389c9c2d1a723b03f0e1ab88f64732fe454a134` changes only that exact manifest
+  checksum. Exact-head run
+  [29722349642](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29722349642)
+  passed every `release_contracts` gate. Artifact `8452911612`,
+  `vegetation-structure-derived-8389c9c2d1a723b03f0e1ab88f64732fe454a134-29722349642`,
+  is 92,307 bytes with artifact digest
+  `sha256:dde4ae1bac76051758abdd2f70a8d620c562949a907d6e2ed1b631992457af8d`.
+- PR #7 merged at `2026-07-20T06:46:19Z` as
+  `0709bd021c7c9f142b1f280aa83b2cf3afd49f30`.
+- Pages run
+  [29722613509](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29722613509)
+  passed. Artifact `8452933484` (`github-pages`) is 3,889,240 bytes with digest
+  `sha256:8de384a248795a09547d248e6353f83f2303f4c04291d5531f38ffe7a2ba92f7`;
+  successful deployment ID `5517850060` serves the unchanged public URL.
+- Main CI run
+  [29722614074](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29722614074)
+  passed. Artifact `8453019545`,
+  `vegetation-structure-derived-0709bd021c7c9f142b1f280aa83b2cf3afd49f30-29722614074`,
+  is 92,307 bytes with digest
+  `sha256:337816a4e4171b9e629119186979c6bd962d30b5daa33aff8fb601af122300a0`.
+- Connect deployment #58 reports exact merge `0709bd0`, R 4.5.2, and all 91
+  packages.
+
+### Science-edge and active-channel export QA established on #57
+
+- JORN `tree_dbh` latest plot-summary export contains exactly 50 contexts: 25
+  supported `sampled_absence` zeros and 25 `held_sampling_impractical`
+  contexts. The UI reports 25 supported sampled plots, zero live plants, stems,
+  and species, zero cross-sectional area and stem density, and unavailable QMD,
+  height, and biggest-plant metrics. Plant selectors/actions are disabled; the
+  supported zero does not offer an invalid plant record.
+- WOOD remains on the place splash with an explicit held-not-zero warning. Both
+  physical channels carry exactly 50 contexts: 14
+  `held_opportunity_source_missing` plus 36 `held_opportunity_unknown`, and zero
+  supported contexts. The shrub/sapling channel preserves 452 measurement rows,
+  411 live, without converting any row to a denominator or a zero.
+- BART carried the selected physical channel correctly. Its shrub/sapling view
+  showed 995 live plants, 12 identified species, 2.7 m tallest, 4.1 cm biggest
+  basal stem, 35 supported plots, 1,084 stems/ha, 0.2 m²/ha shrub/sapling
+  stem-base cross-section, and QMD 1.6 cm. Its tree view showed 922 live trees,
+  16 identified species, 29.1 m tallest, 79.2 cm biggest DBH, 24 supported
+  plots, 725 stems/ha, 47.3 m²/ha tree-bole DBH cross-section, and QMD 28.5 cm.
+- BART's active `shrub_sapling_basal` standalone plot-summary download,
+  downloaded as
+  `NEON-VegStructure_BART_shrub_sapling_basal_plot-summary_20260720 (1).csv`,
+  is 20,791 bytes with SHA-256
+  `fddca062b6e9a69ed72dd7f00b27725adc45d773755878fb39f3ec8614259a7e`.
+  ZIP download `NEON-VegStructure_BART_data_20260720 (1).zip` is 1,320,874
+  bytes; its `plot_summary_latest.csv` member has the same SHA-256 and is
+  byte-identical to the standalone CSV.
+- The BART ZIP contains exactly eight files: `trees_long.csv`,
+  `plot_summary_latest.csv`, `plot_event_contexts_all.csv`,
+  `plot_opportunity_source.csv`, `data_dictionary.csv`, `qc_report.csv`,
+  `qc_dictionary.csv`, and `README.txt`.
+- Manual export inspection also opened a valid one-page letter PDF, the full
+  QC/flag CSV, a plant CSV, and the Plant, QC, Size Lab, and Growth PNG exports.
+  These established checks do not replace a final deployment smoke after PR #8.
+
+### #58 reset, responsive, and split-log receipt
+
+- The regression path passed on exact #58: BART → Change site → JORN appeared
+  as a searchable option → JORN loaded successfully. At loaded BART, Change and
+  Plant navigation also passed at both 390 px and 320 px.
+- Fresh 390/375/361/360/320 px sessions each showed zero horizontal overflow,
+  a visible H1, CTA, Quick tour control, and searchable picker, with no visible
+  error or disconnect. Loaded BART at 390 px and 320 px also retained zero
+  horizontal overflow.
+- The exact #58 browser log stream contained 71 entries and zero warning, error,
+  suspect, or disconnect entries. This proves browser-side cleanliness only.
+- The Connect worker's server logs separately recorded fresh-load `baBar`
+  registration warnings at 23:48:50, 23:53:51, and 23:54:27 MST. Therefore #58
+  passes the reset and responsive gates but fails the production clean-server-
+  log gate. A browser console with zero warnings is not evidence that the Shiny
+  worker emitted none.
+
+### PR #8 — Plotly 4.12 registration lifecycle follow-up
+
+Status: **PUBLISHED / PRODUCTION VERIFIED / CLEAN SPLIT-LOG PASS**.
+
+- PR:
+  <https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/pull/8>;
+  branch `agent/vegetation-plotly-registration-final`; implementation head
+  `4ce0cb7b3a7125780a5c7ca60c28a3eae71a88f5`.
+- `event_register("plotly_click")` remains on every rendered `baBar` widget.
+  The server now observes raw Shiny input `plotly_click-baBar` and calls
+  `plotly::event_data(..., priority = "event")` only inside that emitted-click
+  observer. A raw click proves the widget has rendered and registered its event;
+  loaded site state alone does not.
+- The browser contract requires event registration in the render block, the raw
+  click observer around `event_data()`, and removal of the eager intermediate
+  reactive. Repeated identical clicks retain event priority.
+- First implementation-head CI
+  [29723373295](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29723373295)
+  passed every preceding source, science, parity, runtime, offline-source,
+  search, and browser contract, then failed closed only at committed
+  derived-byte equality. Artifact `8453312072`,
+  `vegetation-structure-derived-4ce0cb7b3a7125780a5c7ca60c28a3eae71a88f5-29723373295`,
+  is 92,307 bytes with digest
+  `sha256:986bd3f29a16cd945dedb97f2dc2e26ab750e215a4283c164b066417778d0f72`.
+- The generated search index remained byte-identical at
+  `c4d145046d9486d7c7cf2c85339200ba1eaad3cf7e0de22bb2e378c7c944fc4b`.
+  The only generated manifest change was `server.R` MD5
+  `855a7c350c2f79bc9546db2ce20fbdaf`; generated manifest SHA-256 is
+  `b497f2e9f4228d772745b220da3f2ba6e9da00b8af4fec61af4272103d2e330c`.
+- Promotion commit/current reviewed head
+  `06904fe227119c2b87f80c9dc8334f19f7f79b05` changes only that exact manifest
+  checksum. Exact-head run
+  [29723718100](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29723718100)
+  passed every `release_contracts` CI gate. Artifact `8453460662`,
+  `vegetation-structure-derived-06904fe227119c2b87f80c9dc8334f19f7f79b05-29723718100`,
+  is 92,307 bytes with digest
+  `sha256:a37b64aa7bff81a4f963142ee9e19bb2737a5758697d29c222d92e4356229871`.
+- PR #8 merged as
+  `d566b30ec8eb52ae984325da402cadfec3f18bc9`.
+- Main CI
+  [29724062900](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29724062900)
+  passed. Artifact `8453599842`,
+  `vegetation-structure-derived-d566b30ec8eb52ae984325da402cadfec3f18bc9-29724062900`,
+  is 92,307 bytes with digest
+  `sha256:cf0fb363314e40004036652bd8968f8849196e51f9f626492c49e6bc08104f5f`.
+  Its downloaded `manifest.json` and `data/search_index.rds` are byte-identical
+  to the promoted files at SHA-256
+  `b497f2e9f4228d772745b220da3f2ba6e9da00b8af4fec61af4272103d2e330c`
+  and `c4d145046d9486d7c7cf2c85339200ba1eaad3cf7e0de22bb2e378c7c944fc4b`,
+  respectively.
+- Pages run
+  [29724062095](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29724062095)
+  passed. Artifact `8453482888` (`github-pages`) is 3,889,230 bytes with digest
+  `sha256:24dda716e7d739d288cbacac2e958ffb587b86cc999ddb0b4e0072f0ac23cba1`;
+  deployment `5518123037` succeeded.
+- Connect deployment #59 published exact merge `d566b30`, R 4.5.2, and all 91
+  packages in four seconds.
+
+### Expected versus actual, failures, and rollback
+
+- Expected: a source refresh would reveal unsupported observation/opportunity
+  relationships rather than synthesize zeros. Actual: 49 measurement-only
+  events / 4,365 rows / 11 sites are preserved and held, with no invented
+  opportunity field or denominator.
+- Expected: source-code changes would make the generated manifest differ on the
+  first PR #5–#8 implementation run. Actual: each run failed closed; only exact
+  validator-derived checksums were promoted, and each promoted exact-head run
+  passed.
+- Expected: public chart clicks would not create server-side registration
+  warnings. Actual: #56's inspected landing/repeated-click window was clean, but
+  #58 fresh-load worker logs exposed the remaining Plotly 4.12 lifecycle race.
+  Guarding `event_data()` only on loaded site state was insufficient because the
+  server could read during the first chart flush before `event_register()` had
+  prepared the widget. PR #8 waits for the emitted raw click input instead; #59
+  repeated the same first click twice without a worker warning.
+- Expected: returning to Places would restore an empty selection backed by the
+  complete validated search choices. Actual on #57: only the visible selection
+  reset. PR #7 head `3835451` fixed both halves through one updater and a static
+  regression contract; #58 proved the complete second-site path.
+- No failed artifact became release authority. No PR #5–#8 source-family,
+  bundle-family, index, or Driver data byte changed; PR #8 exact-head validation
+  preserved those exact families.
+- Runtime rollback target for PR #8 is merge `0709bd0` / Connect #58; earlier
+  rollback targets remain `433bbd2` / #57 and `91a7814` / #56. The official
+  RELEASE-2026 data family is identical across #55–#59 and the promoted PR #8
+  head.
+
+### Final #59 live matrix and remaining closeout
+
+- BART shrub/sapling retained 995 live plants, 12 identified species, 2.7 m
+  tallest, 4.1 cm biggest basal stem, 35 supported plots, 1,084 stems/ha,
+  0.2 m²/ha shrub/sapling stem-base cross-section, and QMD 1.6 cm.
+- The first `baBar` point remained *Fagus grandifolia* at 529. Clicking that
+  same point twice opened the detail modal twice, proving repeated identical
+  events remain observable.
+- BART → reset restored the validated picker; typing JORN produced exactly one
+  JORN choice, and JORN loaded. Its tree channel retained the exact supported-
+  zero state: zero live plants, zero species, 25 supported plots, zero stems/ha,
+  0.0 m²/ha tree-bole DBH cross-section, unavailable QMD, and disabled
+  plant/highlight actions.
+- WOOD remained on the place splash with tabs hidden and the exact held-not-zero
+  notice; unsupported observations did not become an ecological zero.
+- At exact viewport widths 390/375/361/360/320 px, the cover had zero horizontal
+  overflow; H1, CTA, tour control, and picker remained horizontally in bounds;
+  the splash stayed visible, tabs stayed hidden, and no visible failure appeared.
+  Loaded BART at 320 and 390 px also had zero overflow, visible app main, hidden
+  splash, and no failure. Change and Plant selected successfully at 320 px.
+- The #59 browser-log slice from `07:18:54Z` through `07:23:16Z` contained 33
+  entries, all level `log`, with zero warning, error, `baBar`, `event_data`,
+  `undefined`, or disconnect entry.
+- Refreshed #59 manager logs after all interactions remained limited to startup
+  plus the two benign package-built-under-R-4.5.3 warnings for `plotly` and
+  `shinyjs`. They contained zero `baBar`, `event_data`, source-not-registered,
+  `undefined`, or Shiny error; clean interactions emitted no new server line.
+- The earlier manual plant/QC/PDF/PNG receipts remain release authority because
+  PR #8 changed only the Plotly event observer/static contract and the #59 main
+  artifact preserved the exact promoted manifest/search bytes.
+
+**PENDING DOCS-ONLY PUBLICATION RECEIPT:** merge one docs-only closeout PR and
+verify its unchanged-runtime main CI, Pages, Connect, and public landing
+identity. Then publish the central Driver learning record as its own
+documentation-only identity.
+
+Stop before the next companion app. The scientific disposition remains **HOLD /
+CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE** throughout.
+
 ## Permanent release gates
 
 The detailed checklist is [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). In brief:
