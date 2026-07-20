@@ -133,6 +133,9 @@ jobs:
           node --check www/pincards.js
           node --check scripts/check_cover.mjs
           node --check scripts/check_browser_contracts.mjs
+          python3 -B scripts/validation/inspect_vegetation_candidate.py --help >/dev/null
+          vegetation_inspector_hash=$(sha256sum scripts/validation/inspect_vegetation_candidate.py | awk '{print $1}')
+          test "$vegetation_inspector_hash" = "819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5"
           node scripts/check_cover.mjs
           node scripts/check_browser_contracts.mjs
           Rscript --vanilla scripts/test_build_script_portability.R

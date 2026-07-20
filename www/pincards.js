@@ -78,6 +78,30 @@
     pin.style.top = Math.max(4, Math.min(top, maxTop)) + "px";
   }
 
+  function applyPinScale(pin, requested) {
+    var current = pin.__scale || 1;
+    var rect = pin.getBoundingClientRect();
+    var baseW = rect.width / current;
+    var baseH = rect.height / current;
+    var boxRect = pin.__box.getBoundingClientRect();
+    var fitScale = Math.max(0.5, Math.min(
+      2.4,
+      (boxRect.width - 8) / baseW,
+      (boxRect.height - 8) / baseH
+    ));
+    var scale = Math.min(fitScale, Math.max(0.5, requested));
+    pin.__scale = scale;
+    pin.style.transform = scale === 1 ? "" : "scale(" + scale + ")";
+    var grip = pin.querySelector(".smt-pin-resize");
+    if (grip) {
+      grip.setAttribute("aria-valuemax", String(Math.round(fitScale * 100)));
+      grip.setAttribute("aria-valuenow", String(Math.round(scale * 100)));
+      grip.setAttribute("aria-valuetext", Math.round(scale * 100) + " percent");
+    }
+    clampPin(pin, pin.offsetLeft, pin.offsetTop);
+    updateLine(pin);
+  }
+
   /* clear pins. With a boxId, scope to that one chart's box (so a multi-chart page
      can clear one without wiping the others); with no arg, clear every box. */
   window.smtClearPins = function (boxId) {
@@ -105,16 +129,32 @@
     var a = anchorPx(gd, box, dx, dy) || { ax: bR.width / 2, ay: bR.height / 2 };
     var pin = document.createElement("div");
     pin.className = "smt-pin";
+    pin.tabIndex = 0;
+    pin.setAttribute("role", "group");
     pin.__box = box; pin.__key = key; pin.__dx = dx; pin.__dy = dy;
-    pin.innerHTML = "<button class='smt-pin-close' title='Close'>&times;</button>" + html;
+    pin.__returnFocus = document.activeElement;
+    pin.innerHTML = "<button class='smt-pin-close' title='Close' aria-label='Close pinned card'>&times;</button>" + html;
+    var plantId = pin.querySelector("b");
+    var plantSpecies = pin.querySelector("em");
+    var plantIdentity = [plantId && plantId.textContent, plantSpecies && plantSpecies.textContent]
+      .filter(Boolean).join(", ") || String(key || "selected plant");
+    pin.setAttribute("aria-label", "Pinned plant card for " + plantIdentity + ". Arrow keys move the card.");
     pin.querySelectorAll("em.smt-pin-hint").forEach(function (em) {
       var br = em.previousElementSibling;
       if (br && br.tagName === "BR") br.remove();
       em.remove();
     });
-    var grip = document.createElement("div");
+    var grip = document.createElement("button");
+    grip.type = "button";
     grip.className = "smt-pin-resize";
-    grip.title = "Drag to resize · double-tap to reset";
+    grip.title = "Drag or use arrow keys to resize · double-tap to reset";
+    grip.setAttribute("role", "slider");
+    grip.setAttribute("aria-label", "Resize pinned card");
+    grip.setAttribute("aria-orientation", "horizontal");
+    grip.setAttribute("aria-valuemin", "50");
+    grip.setAttribute("aria-valuemax", "240");
+    grip.setAttribute("aria-valuenow", "100");
+    grip.setAttribute("aria-valuetext", "100 percent");
     pin.appendChild(grip);
 
     /* position the card near the dot, clamped on BOTH axes so the close button
@@ -139,7 +179,28 @@
     updateLine(pin);
 
     pin.querySelector(".smt-pin-close").addEventListener("click", function () {
+      var returnFocus = pin.__returnFocus;
       ln.remove(); dot.remove(); pin.remove();
+      if (!returnFocus || returnFocus === document.body || !returnFocus.isConnected) {
+        returnFocus = document.getElementById("pinViewedBtn");
+      }
+      if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === "function") {
+        try { returnFocus.focus({ preventScroll: true }); } catch (e) { returnFocus.focus(); }
+      }
+    });
+
+    pin.addEventListener("keydown", function (ev) {
+      if (ev.target !== pin || !/^Arrow(Left|Right|Up|Down)$/.test(ev.key)) return;
+      ev.preventDefault();
+      var step = ev.shiftKey ? 20 : 8;
+      var left = pin.offsetLeft;
+      var top = pin.offsetTop;
+      if (ev.key === "ArrowLeft") left -= step;
+      if (ev.key === "ArrowRight") left += step;
+      if (ev.key === "ArrowUp") top -= step;
+      if (ev.key === "ArrowDown") top += step;
+      clampPin(pin, left, top);
+      updateLine(pin);
     });
 
     /* drag-to-move (clamped so a fat-thumb drag can't fling the card off-box).
@@ -180,18 +241,8 @@
       var startX = ev.clientX, startScale = pin.__scale || 1;
       var startRect = pin.getBoundingClientRect();
       var baseW = startRect.width / startScale;
-      var baseH = startRect.height / startScale;
       function mv(em) {
-        var boxRect = pin.__box.getBoundingClientRect();
-        var fitScale = Math.max(0.5, Math.min(
-          2.4,
-          (boxRect.width - 8) / baseW,
-          (boxRect.height - 8) / baseH
-        ));
-        var s = Math.min(fitScale, Math.max(0.5, startScale + (em.clientX - startX) / baseW));
-        pin.__scale = s; pin.style.transform = "scale(" + s + ")";
-        clampPin(pin, pin.offsetLeft, pin.offsetTop);
-        updateLine(pin);
+        applyPinScale(pin, startScale + (em.clientX - startX) / baseW);
       }
       function up() {
         window.removeEventListener("pointermove", mv);
@@ -203,10 +254,21 @@
       window.addEventListener("pointerup", up);
       window.addEventListener("pointercancel", up);
     });
+    grip.addEventListener("keydown", function (ev) {
+      var direction = 0;
+      if (ev.key === "ArrowRight" || ev.key === "ArrowUp" || ev.key === "+" || ev.key === "=") direction = 1;
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowDown" || ev.key === "-") direction = -1;
+      if (ev.key === "Home") {
+        ev.preventDefault();
+        applyPinScale(pin, 1);
+        return;
+      }
+      if (!direction) return;
+      ev.preventDefault();
+      applyPinScale(pin, (pin.__scale || 1) + direction * (ev.shiftKey ? 0.25 : 0.1));
+    });
     grip.addEventListener("dblclick", function () {
-      pin.__scale = 1; pin.style.transform = "";
-      clampPin(pin, pin.offsetLeft, pin.offsetTop);
-      updateLine(pin);
+      applyPinScale(pin, 1);
     });
     return pin;
   }
@@ -219,11 +281,31 @@
     var key = (html.match(/data-tag='([^']+)'/) || [])[1] || html.slice(0, 48);
     var dup = Array.prototype.find.call(box.querySelectorAll(".smt-pin"),
       function (p) { return p.__key === key; });
-    if (dup) { dup.classList.remove("smt-pulse"); void dup.offsetWidth; dup.classList.add("smt-pulse"); return; }
+    if (dup) { dup.classList.remove("smt-pulse"); void dup.offsetWidth; dup.classList.add("smt-pulse"); return dup; }
     /* anchor from the DATA point (not the finger): exact, and touch-safe — on
        touch devices plotly's synthesized event has no usable clientX/Y */
-    makePin(gd, box, html, pt.x, pt.y, key);
+    return makePin(gd, box, html, pt.x, pt.y, key);
   }
+
+  // Keyboard route for the gold “viewing” point in Size Lab. The local plant
+  // picker is the accessible selector; this button creates the same card as a
+  // pointer click and moves focus to it for keyboard repositioning/resizing.
+  window.smtPinViewed = function (plotId) {
+    var gd = document.getElementById(plotId);
+    var box = boxOf(gd);
+    var trace = gd && gd.data && gd.data.find(function (item) {
+      return item && item.name === "★ viewing" && item.customdata && item.customdata.length;
+    });
+    if (!gd || !box || !trace) {
+      toastDone("Choose a plant first, then pin the viewed plant", true);
+      return;
+    }
+    var first = function (value) { return Array.isArray(value) ? value[0] : value; };
+    var pin = handleClick(gd, box, { points: [{
+      customdata: first(trace.customdata), x: first(trace.x), y: first(trace.y)
+    }] });
+    if (pin) pin.focus();
+  };
 
   /* identity-based signature: the sorted set of pinnable point tags. Stable when
      the chart is merely recoloured or a point is selected (same plot set), so

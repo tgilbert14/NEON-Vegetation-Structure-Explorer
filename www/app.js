@@ -60,10 +60,61 @@ document.addEventListener("DOMContentLoaded", function () {
 // animated bar (no fake %) on an OPAQUE backdrop, raised client-side on the click.
 var smtSafetyTimer = null;
 var smtLastFocus = null;
+var smtInertState = [];
+
+function smtSetLoadBoundary(active) {
+  var nodes = document.querySelectorAll(".app-skip-link, .top-bar, #appMain, .modal, .modal-backdrop");
+  if (active) {
+    // A load can announce itself from both the initiating control and Shiny.
+    // Preserve the original boundary snapshot so a duplicate start cannot make
+    // the app stay inert when the single matching completion arrives.
+    if (smtInertState.length) return;
+    smtInertState = [];
+    nodes.forEach(function (node) {
+      smtInertState.push({ node: node, hadInert: node.hasAttribute("inert") });
+      node.setAttribute("inert", "");
+    });
+    return;
+  }
+  smtInertState.forEach(function (state) {
+    if (state.node && !state.hadInert) state.node.removeAttribute("inert");
+  });
+  smtInertState = [];
+}
+
+// A Bootstrap/Shiny modal lives outside #appMain. Deactivate its focus trap
+// synchronously before a modal-footer action opens the loading dialog; Shiny's
+// removeModal() then performs the authoritative server-side cleanup.
+function smtDismissModalForLoad() {
+  var modal = document.querySelector(".modal.show");
+  if (!modal) return;
+  try {
+    if (window.bootstrap && window.bootstrap.Modal) {
+      var instance = window.bootstrap.Modal.getInstance(modal) ||
+        window.bootstrap.Modal.getOrCreateInstance(modal);
+      if (instance) instance.hide();
+    } else if (window.jQuery) {
+      window.jQuery(modal).modal("hide");
+    }
+  } catch (e) {}
+  if (modal.contains(document.activeElement)) document.activeElement.blur();
+  modal.classList.remove("show");
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+  document.querySelectorAll(".modal-backdrop").forEach(function (node) { node.remove(); });
+  document.body.classList.remove("modal-open");
+}
+
+function smtCanReceiveFocus(node) {
+  return !!(node && node !== document.body && node !== document.documentElement &&
+    node.isConnected && !node.closest("[inert]") &&
+    node.getClientRects().length && !node.disabled);
+}
+
 function smtLoadStart(label) {
   var ov = document.getElementById("loadOverlay");
   if (!ov) return;
-  smtLastFocus = document.activeElement;
+  if (ov.getAttribute("aria-hidden") !== "false") smtLastFocus = document.activeElement;
   var siteText = label || "";
   if (!siteText) {
     var sel = document.getElementById("site");
@@ -76,6 +127,7 @@ function smtLoadStart(label) {
   ov.style.display = "flex";
   ov.setAttribute("aria-hidden", "false");
   ov.setAttribute("aria-busy", "true");
+  smtSetLoadBoundary(true);
   try { ov.focus({ preventScroll: true }); } catch (e) { ov.focus(); }
   if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }  // tactile "got it"
   clearTimeout(smtSafetyTimer);
@@ -87,17 +139,38 @@ function smtLoadStart(label) {
 function smtLoadDone() {
   clearTimeout(smtSafetyTimer);
   var ov = document.getElementById("loadOverlay");
+  var wasOpen = !!(ov && ov.getAttribute("aria-hidden") === "false");
+  // Both Shiny and each freshly rendered counter can report completion. Only
+  // the first signal owns focus restoration; later signals must be no-ops.
+  if (!wasOpen && !smtInertState.length) return;
   if (ov) {
     ov.style.display = "none";
     ov.setAttribute("aria-hidden", "true");
     ov.setAttribute("aria-busy", "false");
   }
-  var target = document.querySelector("#mainTabsWrap .nav-link.active") || smtLastFocus;
-  if (target && typeof target.focus === "function") {
+  smtSetLoadBoundary(false);
+  var activeTab = document.querySelector("#mainTabsWrap .nav-link.active");
+  var target = smtCanReceiveFocus(smtLastFocus) ? smtLastFocus : activeTab;
+  if (!smtCanReceiveFocus(target)) target = document.getElementById("appMain");
+  if (smtCanReceiveFocus(target) && typeof target.focus === "function") {
     try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
   }
   smtLastFocus = null;
 }
+
+// The overlay has no interactive choices: while its aria-modal dialog is open,
+// Tab remains on the progress announcement and background regions are inert.
+document.addEventListener("keydown", function (e) {
+  var ov = document.getElementById("loadOverlay");
+  if (!ov || ov.getAttribute("aria-hidden") !== "false" || e.key !== "Tab") return;
+  e.preventDefault();
+  ov.focus();
+}, true);
+document.addEventListener("focusin", function (e) {
+  var ov = document.getElementById("loadOverlay");
+  if (!ov || ov.getAttribute("aria-hidden") !== "false" || ov.contains(e.target)) return;
+  ov.focus();
+}, true);
 
 // ---- guided tour (driver.js) — ON DEMAND only (no auto-fire) --------------
 function vegTour() {
@@ -123,7 +196,10 @@ function vegTour() {
     return el && el.getClientRects().length > 0;
   });
   if (!steps.length) return;
-  var d = D({ showProgress: true, allowClose: true, steps: steps, popoverClass: "driverjs-theme",
+  var reduceMotion = !!(window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  var d = D({ showProgress: true, allowClose: true, animate: !reduceMotion,
+    smoothScroll: false, steps: steps, popoverClass: "driverjs-theme",
     nextBtnText: "Next", prevBtnText: "Back", doneBtnText: "Got it" });
   d.drive();
 }

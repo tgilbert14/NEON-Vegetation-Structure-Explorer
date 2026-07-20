@@ -59,6 +59,8 @@
 [data-bs-theme="dark"] .sp-go:hover,
 [data-bs-theme="dark"] .tc-save-btn,
 [data-bs-theme="dark"] .tc-save-btn:hover,
+[data-bs-theme="dark"] .smt-pin-key-btn,
+[data-bs-theme="dark"] .smt-pin-key-btn:hover,
 [data-bs-theme="dark"] .smt-snap-btn,
 [data-bs-theme="dark"] .smt-snap-btn:hover,
 [data-bs-theme="dark"] .driver-popover.driverjs-theme button,
@@ -1142,6 +1144,7 @@ table.dataTable tbody tr:active { background: #dfe8f4 !important; }
   .ds-emoji, .podium-card, .dossier-card .glow-badge { animation: none !important; }
   .tag-badge.is-legendary::after, .podium-card.is-legendary::after { animation: none; opacity: 0; }
   .smt-pin.smt-pulse { animation: none !important; }
+  .driver-fade .driver-overlay, .driver-fade .driver-popover { animation: none !important; }
   /* loading overlay: keep the bar + spinner VISIBLE but static (no float/sweep) */
   .load-spin, .load-bar::after { animation: none !important; }
 }
@@ -1169,6 +1172,10 @@ svg.smt-pin-lines {
   cursor: grab; transform-origin: top left; touch-action: none;
 }
 .smt-pin:active { cursor: grabbing; }
+.smt-pin:focus-visible {
+  outline: 3px solid #fff; outline-offset: 2px;
+  box-shadow: 0 0 0 6px #102747, 0 12px 32px rgba(12, 35, 75, 0.40);
+}
 .smt-pin b { color: #fff; }
 .smt-pin em { color: #cfd9e8; font-style: italic; }
 .smt-pin-emoji { font-size: 20px; line-height: 1; }
@@ -1189,9 +1196,10 @@ svg.smt-pin-lines {
   position: absolute; right: 0; bottom: 0; width: 44px; height: 44px;
   cursor: nwse-resize; touch-action: none; opacity: 0.5;
   background: linear-gradient(135deg, transparent 72%, var(--gold) 72%);
-  border-radius: 0 0 8px 0;
+  border: 0; padding: 0; border-radius: 0 0 8px 0;
 }
 .smt-pin-resize:hover { opacity: 1; }
+.smt-pin-resize:focus-visible { opacity: 1; outline: 3px solid #fff; outline-offset: -3px; }
 @keyframes smtPulse {
   0%, 100% { box-shadow: 0 12px 32px rgba(12, 35, 75, 0.40); }
   50% { box-shadow: 0 0 0 4px var(--gold), 0 12px 32px rgba(12, 35, 75, 0.55); }
@@ -1222,10 +1230,15 @@ svg.smt-pin-lines {
 .sizelab-toolbar {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;
 }
-.smt-snap-btn, .smt-clear-btn {
+.smt-pin-picker { flex: 1 1 280px; min-width: 0; max-width: 420px; }
+.smt-pin-picker .form-group, .smt-pin-picker .shiny-input-container { margin: 0; width: 100%; }
+.smt-pin-picker label { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.smt-pin-key-btn, .smt-snap-btn, .smt-clear-btn {
   display: inline-flex; align-items: center; gap: 6px;
   min-height: 44px; border-radius: 8px; padding: 8px 13px; font-weight: 600; font-size: 13px; cursor: pointer;
 }
+.smt-pin-key-btn { background: var(--gold); color: #16243a; border: 1px solid #b98a00; }
+.smt-pin-key-btn:hover { background: #ffe04d; }
 .smt-snap-btn { background: var(--pine); color: #fff; border: none; }
 .smt-snap-btn:hover { background: var(--pine2); }
 .smt-clear-btn { background: transparent; color: var(--pine); border: 1px solid var(--line); }
@@ -1294,6 +1307,8 @@ svg.smt-pin-lines {
   .search-controls > *,
   .search-controls .form-group,
   .search-controls .shiny-input-container { width: 100%; min-width: 0; }
+  .smt-pin-picker { flex: 1 1 100%; width: 100%; max-width: none; }
+  .smt-pin-picker .shiny-input-container { width: 100%; min-width: 0; }
 }
 
 /* ====================================================================== *

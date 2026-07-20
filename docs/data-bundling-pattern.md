@@ -92,6 +92,27 @@ the ledger payload set. Re-run ordinary CI on that exact promoted head, inspect
 the source/science/empirical receipts, and merge only after every gate is green.
 Never push generated data directly to `main`.
 
+The independent inspector used for the first promoted official-release family is
+tracked at `scripts/validation/inspect_vegetation_candidate.py` with SHA-256
+`819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`. Keep its
+log outside the extracted candidate root so the fail-closed 55-file inventory is
+not changed:
+
+```bash
+VEG_AUDIT_ROOT=$(mktemp -d)
+VEG_AUDIT_LOG=$(mktemp)
+gh run download 29715249829 \
+  --name vegetation-release-candidate-a8ccb56e95f643ba9343ca13d176782ebc050017-29715249829 \
+  --dir "$VEG_AUDIT_ROOT"
+python3 -B scripts/validation/inspect_vegetation_candidate.py \
+  "$VEG_AUDIT_ROOT" | tee "$VEG_AUDIT_LOG"
+```
+
+The archived file intentionally preserves the original promotion-time docstring,
+including its former `work/` invocation. The tracked command above supersedes
+that path without changing the audited source bytes; ordinary CI also fails if
+the tracked file no longer matches the recorded SHA-256.
+
 ## Safe replacement
 
 Candidate construction may clear files only inside its isolated runner staging
