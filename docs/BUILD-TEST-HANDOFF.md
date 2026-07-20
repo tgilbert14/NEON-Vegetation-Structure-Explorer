@@ -309,6 +309,23 @@ closed the following issues before the candidate was allowed to run:
   WebP dimensions/copies. These remain static prerequisites, not an R/candidate
   or public-deployment receipt.
 
+### Exact pinned-R correction receipt — 2026-07-19
+
+- Exact-head ordinary run
+  [29712763894](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29712763894)
+  proved checkout SHA `6f0783020edb100f6b81b1726d0745f6f6b6fbf2`, restored the
+  pinned runtime, passed deterministic numeric and all static contracts, then
+  stopped in the synthetic helper gate before any byte promotion.
+- The failure printed equal calendar dates while `identical()` also compared an
+  implementation-only vector attribute. The fixture now requires `Date`
+  inheritance and compares the exact underlying day values, retaining the
+  scientific type/value contract without coupling it to lookup-vector names.
+- Labeled candidate run
+  [29712779229](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29712779229)
+  completed the official 42-site fetch for the superseded head. It was cancelled
+  before the redundant build after the exact-head fixture failure was diagnosed;
+  it is diagnostic evidence only and cannot authorize promotion.
+
 ### Failed/unsafe paths closed
 
 - The previous direct-to-main refresh path is removed.

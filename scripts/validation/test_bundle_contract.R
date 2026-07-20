@@ -19,6 +19,17 @@ assert_equal <- function(actual, expected, message) {
   }
 }
 
+assert_date_equal <- function(actual, expected, message) {
+  if (!inherits(actual, "Date") || !inherits(expected, "Date") ||
+      !identical(unname(as.numeric(actual)), unname(as.numeric(expected)))) {
+    stop(sprintf(
+      "%s; actual=%s <%s> expected=%s <%s>",
+      message, paste(actual, collapse = ","), paste(class(actual), collapse = "/"),
+      paste(expected, collapse = ","), paste(class(expected), collapse = "/")
+    ), call. = FALSE)
+  }
+}
+
 assert_close <- function(actual, expected, message, tolerance = 1e-12) {
   if (length(actual) != length(expected) ||
       any(!is.finite(actual) != !is.finite(expected)) ||
@@ -313,9 +324,11 @@ assert_true(is.na(missing_context$date) & is.na(missing_context$year) &
             "measurement-only context invented date, year, or sampled area")
 assert_equal(missing_context$measurement_record_count_all, 1L,
              "measurement-only context lost its preserved row count")
-assert_equal(missing_context$measurement_date_min, as.Date("2024-07-01"),
+# Named vectors can retain their internal plot-event lookup key. The public
+# contract is the exact Date value/class, not that implementation-only name.
+assert_date_equal(missing_context$measurement_date_min, as.Date("2024-07-01"),
              "measurement-sourced minimum date was not kept separately")
-assert_equal(missing_context$measurement_date_max, as.Date("2024-07-01"),
+assert_date_equal(missing_context$measurement_date_max, as.Date("2024-07-01"),
              "measurement-sourced maximum date was not kept separately")
 assert_equal(missing_context$measurement_date_distinct_n, 1L,
              "measurement-only context date count changed")
@@ -375,9 +388,9 @@ rich_e10 <- rich_missing_bundle$plots[
 ]
 assert_equal(rich_e7$measurement_record_count_all, 2L,
              "multi-row measurement-only count changed")
-assert_equal(rich_e7$measurement_date_min, as.Date("2024-07-01"),
+assert_date_equal(rich_e7$measurement_date_min, as.Date("2024-07-01"),
              "multi-date measurement-only minimum changed")
-assert_equal(rich_e7$measurement_date_max, as.Date("2024-08-15"),
+assert_date_equal(rich_e7$measurement_date_max, as.Date("2024-08-15"),
              "multi-date measurement-only maximum changed")
 assert_equal(rich_e7$measurement_date_distinct_n, 2L,
              "multi-date measurement-only distinct count changed")
