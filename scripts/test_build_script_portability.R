@@ -97,7 +97,8 @@ for (token in c(
   "VST_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
   "ref: ${{ env.VST_SOURCE_SHA }}",
   "actual_sha=$(git rev-parse HEAD)",
-  '"$actual_sha" != "$VST_SOURCE_SHA"'
+  '"$actual_sha" != "$VST_SOURCE_SHA"',
+  "vegetation-structure-derived-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}"
 )) {
   if (!grepl(token, ci_workflow, fixed = TRUE)) {
     stop(sprintf("ordinary CI lacks exact reviewed-head contract: %s", token),
