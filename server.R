@@ -549,17 +549,13 @@ server <- function(input, output, session) {
   # member key; we filter this site's live plants (one row per plant) for the
   # on-screen table and the full per-measurement careers for the CSV.
   baBar_members <- reactiveVal(NULL)   # list(sci=, rows=on-screen df, full=career df)
-  # Do not ask plotly for this hidden, site-scoped event during the landing-page
-  # flush. The chart cannot register its source until a place has loaded; eager
-  # event_data() calls therefore emit a misleading runtime warning on every
-  # home-page connection. Once the site context exists, the rendered chart and
-  # this reactive register in the same flush and repeated clicks remain events.
-  baBar_click <- reactive({
-    req(rv$site, rv$snap, rv$plots, rv$spec)
-    plotly::event_data("plotly_click", source = "baBar", priority = "event")
-  })
-  observeEvent(baBar_click(), {
-    ev <- baBar_click(); req(ev)
+  # renderPlotly() records the event_register() above only while preparing the
+  # widget. Observe the raw client event so event_data() cannot run first merely
+  # because site state changed; an emitted click proves that baBar was rendered
+  # and registered. Plotly sends this input with event priority, so identical
+  # repeated clicks still re-run the handler.
+  observeEvent(session$rootScope()$input[["plotly_click-baBar"]], {
+    ev <- plotly::event_data("plotly_click", source = "baBar", priority = "event"); req(ev)
     sci <- ev$customdata; req(!is.null(sci), nzchar(sci))
     sp <- SP(); one <- rv$one; req(one)
     one$.taxon_label <- .taxon_name(one)
