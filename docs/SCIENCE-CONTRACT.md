@@ -2,14 +2,35 @@
 
 Contract: `NEON-VST-DP1.10098.001-v2`  
 Source target: NEON `DP1.10098.001`, official `RELEASE-2026`, provisional data excluded  
-App status: **VERIFIED by exact-head 42-site candidate run `29715249829`; public deployment pending**<br>
-Driver status: **HOLD / CONTEXT ONLY / NO DRIVER BYTE CHANGE**
+App status: **PRODUCTION VERIFIED at PR #8 merge `d566b30` / Connect #59; science, reset, responsive, repeated-click, and split-log proof passed**<br>
+Driver status: **HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE**
 
 This is the exact Pass 4 implementation contract. Candidate artifact
 `vegetation-release-candidate-a8ccb56e95f643ba9343ca13d176782ebc050017-29715249829`
 passed every independent source, science, derived-parity, runtime, manifest,
 and app-source gate before its 54 allowlisted payload paths were promoted in
 commit `800bd5e`. It does not authorize a Driver/Cascade data-byte change.
+The promoted family merged through PR #4 (`987c102`); PR #5 (`91a7814`)
+introduced a site-state guard that produced a clean inspected #56 window
+without changing the family, and PR #6 (`433bbd2`) completed accessibility,
+active-channel export, and keyboard pin controls. Exact merge CI and Pages are
+green, and Connect #57 reports
+`433bbd25acbe48224a75368c9edd6504e55271bd` under R 4.5.2 with 91 packages.
+The final public sweep then found that returning to Places cleared the
+server-backed search choices. PR #7 implementation `3835451` centralizes choice
+registration and reapplies it on session start, site load, and reset; promotion
+head `8389c9c` carries only the exact validator-derived manifest checksum. The
+defect and fix change no source, bundle, index, estimator, support state, or
+Driver byte. Exact-head run `29722349642` passed every `release_contracts` CI
+gate; PR #7 merged as `0709bd0`, main CI and Pages are green, and Connect #58
+reports that exact merge under R 4.5.2 with 91 packages. #58 proved reset and responsive
+behavior but emitted server-side `baBar` registration warnings on first chart
+load, proving the earlier guard incomplete. PR #8 implementation `4ce0cb7` waits
+for raw `plotly_click-baBar` before reading `event_data()`. Promotion `06904fe`
+and exact-head run `29723718100` are green. PR #8 merged as `d566b30`; main CI
+`29724062900`, Pages `29724062095`, and Connect #59 published that exact runtime.
+The final repeated-click, reset, science-state, responsive, browser-log, and
+fresh-worker-log receipts passed.
 
 ## Identity and support
 
@@ -199,6 +220,6 @@ Release requires:
 
 ## Driver disposition
 
-**HOLD / CONTEXT / NO DRIVER BYTE CHANGE.** The verified release supplies method
+**HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE.** The verified release supplies method
 and design evidence, but no Vegetation value becomes a current Driver field
 without a separately reviewed Driver parity/rebuild receipt.

@@ -1,6 +1,6 @@
 # Vegetation structure — current data takeaways and disposition
 
-_Pass 4 audit · 2026-07-19 · NEON DP1.10098.001 · supersedes the June 2026 certification_
+_Pass 4 production closeout · 2026-07-19 MST / 2026-07-20 UTC · NEON DP1.10098.001 · supersedes the June 2026 certification_
 
 ## Decision
 
@@ -14,25 +14,67 @@ site-wide vegetation rung or annual productivity metric. Driver must not ingest
 a new vegetation byte without a separate eligibility, support-parity, and
 Driver rebuild receipt.
 
+The official family passed exact candidate run `29715249829`, was promoted in
+PR #4, and is merged in the public app. PR #5 introduced the first site-state
+guard for Plotly reads and produced a clean inspected #56 window; PR #6 added
+the production accessibility/export controls without changing the source or
+bundle family. Merge `433bbd25` is green in main CI and Pages and is published
+as Connect deployment #57. The extended sweep proved the key
+zero/held/export edges but found that returning to Places emptied the
+server-backed picker's remote choices. PR #7 implementation `3835451` fixes
+that runtime reset path, and `8389c9c` promotes only its validator-derived
+manifest checksum. Exact-head run `29722349642` passed every
+`release_contracts` CI gate;
+merge `0709bd0`, main CI `29722614074`, and Pages are green, and Connect #58
+reports exact `0709bd0`. #58 proved the repaired second-site path and compact
+layouts, but fresh Connect worker logs exposed first-chart `baBar` registration
+warnings, proving the earlier site-state guard incomplete. PR #8 implementation
+`4ce0cb7` addresses that Plotly lifecycle race. Promotion `06904fe` carries only
+the exact validator-derived manifest change, and exact-head run `29723718100`
+passed every `release_contracts` CI gate. Merge `d566b30`, main CI
+`29724062900`, Pages `29724062095`, and Connect #59 now agree on the published
+runtime. The #59 sweep repeated the same first `baBar` click twice, preserved
+the BART/JORN/WOOD science states and responsive layouts, and left both browser
+and fresh worker logs clean apart from the two benign package-version warnings.
+This runtime closeout is not a reason to reopen the verified science bytes or
+change Driver.
+
 The earlier claim that Driver imported this app's `stand_site()` was also incorrect. Driver currently
 uses an independently implemented, stricter vegetation path and already holds WOOD. That separation is
 why this audit does not trigger a Driver data change.
 
-## What is verified in the RELEASE-2026 candidate
+## What the promoted RELEASE-2026 family verifies
 
-- 42 site bundles, 6,200 event contexts per physical channel, 389,196 preserved
-  measurement rows, and 316,914 live measurement rows.
+- 42 site bundles and 6,200 event contexts per physical channel. Across the 84
+  site × channel audit rows, the disjoint channel-qualified inventories total
+  389,196 measurement rows, including 316,914 live rows; the separate raw
+  source-identity inventory contains all 527,000 apparent-individual rows.
 - 49 measurement-only plot-events preserve 4,365 rows across 11 sites without
   inventing opportunity metadata, sampled area, effort, absence, or a denominator.
 - Repeated diameter, height, status, taxonomy, plot, and area fields sufficient for record discovery
   and carefully labelled individual context.
 - A strong visual/product opportunity: tagged plants are revisited, so the public story can truthfully
   lead with **“Tagged. Measured. Still changing.”**
+- JORN's latest `tree_dbh` plot export distinguishes 25 supported
+  `sampled_absence` zero contexts from 25 `held_sampling_impractical` contexts.
+  The UI reports 25 supported plots and zero structure metrics while disabling
+  plant controls.
+- WOOD exposes zero supported contexts in either channel—not zero woody
+  structure. Each channel has 14 source-missing and 36 opportunity-unknown
+  contexts; the shrub/sapling channel preserves 452 rows, 411 live, while the
+  splash remains held.
+- At BART, the standalone active-shrub plot-summary CSV and the ZIP's
+  `plot_summary_latest.csv` member are byte-identical at SHA-256
+  `fddca062b6e9a69ed72dd7f00b27725adc45d773755878fb39f3ec8614259a7e`.
 
 Those row counts describe audited release records and support states; they are
 not wall-to-wall site estimates.
 
-## Release-blocking findings
+## Legacy findings resolved by the v2 contract
+
+These findings block the retired legacy family and remain regression gates for
+every future rebuild. The promoted v2 family preserves the required identities,
+support states, channels, areas, and parity contracts instead of bypassing them.
 
 1. **Source-row and locator identity were lost.** Published `uid` is the source-row identity. NEON's
    documented apparent-individual locator is `eventID × individualID × tempStemID`, but the legacy
@@ -65,9 +107,10 @@ not wall-to-wall site estimates.
    the interface called them stems. QMD summed all stem-row squared diameters but divided by distinct
    individuals. The v2 contract counts stem rows and uses `sqrt(sum(d²) / n_stems)`.
 
-8. **The old cross-biome classifier compared unlike totals.** Tree DBH cross-section and shrub basal
-   cover have different measurement heights and denominators. Their raw totals cannot decide whether a
-   site is “forest” or “shrubland,” and they must never be ranked on one scale.
+8. **The old cross-biome classifier compared unlike totals.** Tree DBH cross-section and shrub/sapling
+   stem-base cross-section have different measurement heights and denominators.
+   Their raw totals cannot decide whether a site is “forest” or “shrubland,”
+   and they must never be ranked on one scale.
 
 9. **Temporal inference needs event state.** Multi-stem shrubs can receive new `tempStemID` values across
    visits, and changed points of measurement break like-for-like diameter increments. Mortality must
@@ -82,9 +125,10 @@ not wall-to-wall site estimates.
     summary at 23 of 41 supported sites, by as much as −51.6 m²/ha at NOGP. Search, report, export,
     and on-screen values must consume the same canonical builder without independent rounding.
 
-## RELEASE-2026 identity preflight
+## RELEASE-2026 identity audit
 
-These are source-identity findings, not a green candidate or release receipt:
+These source-identity findings are covered by the green candidate, inspector,
+promotion, and merge receipts:
 
 - 42 sites contain 527,000 apparent rows.
 - The documented `eventID × individualID × tempStemID` locator has 1,275 collision groups covering
@@ -132,7 +176,10 @@ excluded. It preserves:
 
 All consumer surfaces must declare the same contract ID, release, source DOI, and artifact hashes.
 
-## Required fixtures before certification
+## Certified fixtures
+
+Exact candidate run `29715249829` and the promoted-head/main runs exercised
+these release-blocking fixtures:
 
 - same raw ID in two plots stays two plants;
 - multi-stem and same-date distinct events remain; duplicate source `uid` fails, while distinct-`uid`
@@ -156,7 +203,9 @@ All consumer surfaces must declare the same contract ID, release, source DOI, an
 
 - Product: [NEON Vegetation structure DP1.10098.001](https://data.neonscience.org/data-products/DP1.10098.001)
 - Release: [RELEASE-2026 DOI 10.48443/pypa-qf12](https://doi.org/10.48443/pypa-qf12)
-- Protocol semantics: [NEON vegetation structure user guide](https://data.neonscience.org/documents/10179/2838366/NEON_vegStructure_userGuide_vE/9b88927a-d5c0-658f-1fa9-d54f1e04c81e?download=true&version=1.0)
+- Protocol semantics: [NEON vegetation structure user guide, Rev G](https://data.neonscience.org/api/v0/documents/NEON_vegStructure_userGuide_vG?inline=true)
 
-This review authorizes an app and data-contract rebuild. It does **not** certify a productivity,
-biomass, recruitment, whole-site inventory, or Cascade causal metric.
+This review certifies the companion app's channel-qualified sampled-plot
+standing-structure contract on the promoted RELEASE-2026 family. It does **not**
+certify productivity, biomass, recruitment, whole-site inventory, a Cascade
+causal metric, or any Driver data-byte change.
