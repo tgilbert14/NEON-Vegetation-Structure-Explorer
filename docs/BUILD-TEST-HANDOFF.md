@@ -325,6 +325,18 @@ closed the following issues before the candidate was allowed to run:
   completed the official 42-site fetch for the superseded head. It was cancelled
   before the redundant build after the exact-head fixture failure was diagnosed;
   it is diagnostic evidence only and cannot authorize promotion.
+- Follow-up exact-head run
+  [29713397503](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29713397503)
+  proved the corrected scalar Date fixture, then exposed the same
+  implementation-only names on row-aligned numeric summary vectors inside the
+  independent DQA reconstruction. Runtime, verifier, and DQA now normalize away
+  vector names only after validating exact integer/Date types and before comparing
+  row-ordered values; DQA/verifier failures also identify the exact differing
+  component (`record_count`, `date_min`, `date_max`, or `date_distinct_n`).
+- Its paired candidate
+  [29713408161](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29713408161)
+  was cancelled during fetch as soon as that superseding correction was required.
+  It emitted no candidate artifact and authorized no promotion.
 
 ### Failed/unsafe paths closed
 

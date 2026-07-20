@@ -78,11 +78,16 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
   value <- suppressWarnings(as.numeric(as.character(x)))
   ok <- !any(!is.finite(value)) && !any(value < 0) &&
     !any(value != floor(value)) && !any(value > .Machine$integer.max)
-  list(ok = ok, value = if (ok) as.integer(value) else rep(NA_integer_, length(x)))
+  list(
+    ok = ok,
+    value = if (ok) unname(as.integer(value)) else rep(NA_integer_, length(x))
+  )
 }
 .veg_date_number <- function(x) {
-  if (inherits(x, "Date")) return(as.numeric(x))
-  suppressWarnings(as.numeric(as.Date(substr(as.character(x), 1L, 10L))))
+  if (inherits(x, "Date")) return(unname(as.numeric(x)))
+  unname(suppressWarnings(
+    as.numeric(as.Date(substr(as.character(x), 1L, 10L)))
+  ))
 }
 .veg_key <- function(data, columns) {
   parts <- lapply(columns, function(column) {

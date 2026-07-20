@@ -45,11 +45,13 @@ exact_nonnegative_integer <- function(value, label) {
     note(sprintf("%s must contain exact nonnegative integers", label))
     return(rep(NA_integer_, length(value)))
   }
-  as.integer(numeric_value)
+  unname(as.integer(numeric_value))
 }
 date_number <- function(value) {
-  if (inherits(value, "Date")) return(as.numeric(value))
-  suppressWarnings(as.numeric(as.Date(substr(as.character(value), 1L, 10L))))
+  if (inherits(value, "Date")) return(unname(as.numeric(value)))
+  unname(suppressWarnings(
+    as.numeric(as.Date(substr(as.character(value), 1L, 10L)))
+  ))
 }
 expected_species <- function(rank, scientific_name) {
   rank <- tolower(trimws(as.character(rank)))
@@ -604,11 +606,24 @@ for (path in site_files) {
       expected_date_n <- as.integer(unname(date_n[canonical_keys]))
       expected_date_n[is.na(expected_date_n)] <- 0L
     }
-    if (!identical(stored_measurement_count, expected_measurement_count) ||
-        !identical(date_number(plots$measurement_date_min), expected_date_min) ||
-        !identical(date_number(plots$measurement_date_max), expected_date_max) ||
-        !identical(stored_measurement_date_n, expected_date_n))
-      note(sprintf("%s context measurement count/date summaries differ from preserved rows", site))
+    measurement_summary_mismatch <- c(
+      record_count = !identical(stored_measurement_count, expected_measurement_count),
+      date_min = !identical(
+        date_number(plots$measurement_date_min), expected_date_min
+      ),
+      date_max = !identical(
+        date_number(plots$measurement_date_max), expected_date_max
+      ),
+      date_distinct_n = !identical(stored_measurement_date_n, expected_date_n)
+    )
+    if (any(measurement_summary_mismatch)) {
+      note(sprintf(
+        "%s context measurement summaries differ from preserved rows: %s",
+        site,
+        paste(names(measurement_summary_mismatch)[measurement_summary_mismatch],
+              collapse = ",")
+      ))
+    }
 
     expected_missing_n <- as.integer(sum(source_missing))
     expected_missing_records <- as.integer(sum(measurement_keys %in% canonical_keys[source_missing]))

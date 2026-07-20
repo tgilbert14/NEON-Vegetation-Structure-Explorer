@@ -70,12 +70,14 @@ vst_dqa_nonnegative_integer <- function(value, label) {
       any(numeric_value > .Machine$integer.max)) {
     stop(label, " must contain exact nonnegative integers", call. = FALSE)
   }
-  as.integer(numeric_value)
+  unname(as.integer(numeric_value))
 }
 
 vst_dqa_date_number <- function(value) {
-  if (inherits(value, "Date")) return(as.numeric(value))
-  suppressWarnings(as.numeric(as.Date(substr(as.character(value), 1L, 10L))))
+  if (inherits(value, "Date")) return(unname(as.numeric(value)))
+  unname(suppressWarnings(
+    as.numeric(as.Date(substr(as.character(value), 1L, 10L)))
+  ))
 }
 
 vst_dqa_presence_state <- function(value) {
@@ -662,14 +664,23 @@ vst_dqa_site_rows <- function(bundle, site) {
     expected_date_n <- as.integer(unname(date_n[canonical_event_key]))
     expected_date_n[is.na(expected_date_n)] <- 0L
   }
-  if (!identical(stored_measurement_count, matched_measurement_count) ||
-      !identical(vst_dqa_date_number(plots$measurement_date_min),
-                 expected_date_min) ||
-      !identical(vst_dqa_date_number(plots$measurement_date_max),
-                 expected_date_max) ||
-      !identical(stored_measurement_date_n, expected_date_n)) {
-    stop(site, " context measurement count/date summaries differ from preserved rows",
-         call. = FALSE)
+  measurement_summary_mismatch <- c(
+    record_count = !identical(stored_measurement_count, matched_measurement_count),
+    date_min = !identical(
+      vst_dqa_date_number(plots$measurement_date_min), expected_date_min
+    ),
+    date_max = !identical(
+      vst_dqa_date_number(plots$measurement_date_max), expected_date_max
+    ),
+    date_distinct_n = !identical(stored_measurement_date_n, expected_date_n)
+  )
+  if (any(measurement_summary_mismatch)) {
+    stop(
+      site, " context measurement summaries differ from preserved rows: ",
+      paste(names(measurement_summary_mismatch)[measurement_summary_mismatch],
+            collapse = ","),
+      call. = FALSE
+    )
   }
   n_missing_measurement_records <- as.integer(
     sum(measurement_event_key %in% missing_context_key)
