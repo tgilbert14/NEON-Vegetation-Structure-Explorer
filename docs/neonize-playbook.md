@@ -119,6 +119,6 @@ not create branches, open PRs, publish to `main`, or alter a source receipt.
 - A content hash proves bytes, not upstream vintage. Unknown provenance stays
   explicitly unknown until a complete source receipt exists.
 
-The current working family remains on scientific HOLD until an official-release
-candidate completes every empirical and public gate. This document does not
-claim that the failed/incomplete candidate attempts constitute a release.
+The official-release family passed every empirical candidate gate in exact-head
+run `29715249829`; merge and public parity gates remain open. Failed and
+superseded candidate attempts are diagnostic evidence, never release authority.

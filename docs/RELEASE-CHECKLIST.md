@@ -1,6 +1,7 @@
 # Vegetation Structure release checklist
 
-Release status: **HOLD**. Check a box only with an attached exact receipt.
+Release status: **candidate verified and promoted; exact-head CI, merge, and
+public deployment proof pending**. Check a box only with an attached exact receipt.
 
 ## Source and science
 

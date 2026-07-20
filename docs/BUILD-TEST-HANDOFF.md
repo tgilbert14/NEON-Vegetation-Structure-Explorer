@@ -372,30 +372,47 @@ closed the following issues before the candidate was allowed to run:
 - The old delete-before-fetch and partial-success behavior is removed from the
   release design; candidate building occurs under runner staging.
 - The first-Saturday wall-clock gate is removed.
-- No manifest was regenerated locally and no source/data byte was promoted by
-  this governance pass.
+- No manifest or source/data byte was regenerated or repaired locally. The exact
+  validator artifact was promoted only after its head/run identity, 55-file
+  inventory, 54-path ledger, and every payload checksum passed independently.
 - Existing parallel app/UI changes were preserved and remain owned by the Pass 4
   implementation work.
 
 ### Residual risks and next exact action
 
-- The event-keyed v2 fixtures ran on head `e9b8913`, but the new normalized-fetch
-  and measurement-only-context changes are not yet pushed or validated in the
-  pinned R runner. `SCIENCE-CONTRACT.md` intentionally remains HOLD.
-- The official-release source was fetched, but no complete candidate family has
-  passed; API/schema and source-linkage gaps required the reviewed adaptation
-  above. The NEON token remains secret and must never enter logs or artifacts.
-- The committed search index and manifest will intentionally fail exact-byte
-  gates until validator-produced candidates are reviewed and promoted.
-- Public app/cover deployment still points to pre-Pass-4 bytes until merge and
+- Exact-head candidate run
+  [29715249829](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29715249829)
+  passed both jobs and uploaded validated artifact `8450700945` (28,378,366
+  bytes) for builder head `a8ccb56e95f643ba9343ca13d176782ebc050017`.
+  Two isolated builds matched byte-for-byte after all 42-site source, science,
+  DQA, parity, helper, export, runtime-mutation, manifest, and complete-app-source
+  gates passed.
+- Independent inspector SHA-256
+  `819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`
+  passed the exact 55-file artifact / 54-file payload / 42-site inventory. It
+  confirmed 68 runtime files, 91 packages, R 4.5.2, raw family
+  `e8d78dd776fa4188c3f237548b7d2ab185eb5c03bc7b220991d03753ebca3e29`,
+  bundle family
+  `3e62514de12b0d7b11cbe8aa53dde76d9f05f65c0174418a3df64e1261a88ffb`,
+  and the exact 49 plot-events / 4,365 rows / 11 sites source gap.
+- The external inspector initially retained the retired workstation manifest
+  locale `en_US` and omitted its validated source-gap object from the printable
+  summary. Posit manifests accept a client-locale string; the immutable Linux
+  validator reproducibly emits `C`. The inspector now requires `C`, prints the
+  source-gap receipt, and fails closed. Repository manifest generation and
+  verification also pin that locale explicitly.
+- Promotion commit `800bd5ea64d5aa4f2eab194c1b16dcbee5a0638e` has direct
+  parent equal to the labeled candidate head. Its changed paths are exactly the
+  54 checksum-ledger payload paths, including seven new `data/source/` ledgers;
+  all committed blobs independently match the candidate checksums.
+- The NEON token remained secret and entered no release artifact. Public
+  app/cover deployment still points to pre-Pass-4 bytes until merge and
   republish.
 
-Next: commit/push the normalized-fetch and measurement-only-context contract,
-run ordinary validation, apply `build-vegetation-candidate` to that exact PR head,
-inspect/promote the complete validator artifact, re-run green head/merge checks, then
-perform Connect/Pages semantic, export, desktop, and compact-width QA. Only after
-that may this entry be replaced with a production receipt and the Driver central
-learning records updated.
+Next: push the promotion and locale-contract commits, require green exact-head
+CI, merge, verify Pages and Connect at the merged revision, then append the
+production receipt and update the Driver central learning records. Stop before
+Ground Beetle Pass 5.
 
 ## Permanent release gates
 

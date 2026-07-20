@@ -2,10 +2,14 @@
 
 Contract: `NEON-VST-DP1.10098.001-v2`  
 Source target: NEON `DP1.10098.001`, official `RELEASE-2026`, provisional data excluded  
-Status: **HOLD until the official 42-site candidate and all parity gates pass**
+App status: **VERIFIED by exact-head 42-site candidate run `29715249829`; public deployment pending**<br>
+Driver status: **HOLD / CONTEXT ONLY / NO DRIVER BYTE CHANGE**
 
-This is the exact Pass 4 implementation contract. It does not certify the legacy
-bundle family and does not authorize a Driver/Cascade data-byte change.
+This is the exact Pass 4 implementation contract. Candidate artifact
+`vegetation-release-candidate-a8ccb56e95f643ba9343ca13d176782ebc050017-29715249829`
+passed every independent source, science, derived-parity, runtime, manifest,
+and app-source gate before its 54 allowlisted payload paths were promoted in
+commit `800bd5e`. It does not authorize a Driver/Cascade data-byte change.
 
 ## Identity and support
 
@@ -195,6 +199,6 @@ Release requires:
 
 ## Driver disposition
 
-**HOLD / CONTEXT / NO DRIVER BYTE CHANGE.** The candidate may supply method and
-design evidence after validation, but no Vegetation value becomes a current
-Driver field without a separately reviewed Driver parity/rebuild receipt.
+**HOLD / CONTEXT / NO DRIVER BYTE CHANGE.** The verified release supplies method
+and design evidence, but no Vegetation value becomes a current Driver field
+without a separately reviewed Driver parity/rebuild receipt.

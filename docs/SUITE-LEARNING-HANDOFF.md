@@ -1,9 +1,10 @@
 # Suite learning handoff
 
-App: Vegetation Structure · Pass 4 working handoff · 2026-07-19
+App: Vegetation Structure · Pass 4 release handoff · 2026-07-19
 
-Status: **in progress; scientific HOLD**. This package records reusable learning
-without claiming production promotion.
+Status: **candidate and science gates verified; public deployment pending;
+Driver HOLD / CONTEXT ONLY / NO DRIVER BYTE CHANGE**. This package records
+reusable learning without claiming production before live proof exists.
 
 ## Product and cover lessons
 
@@ -73,11 +74,11 @@ without claiming production promotion.
 
 | Class | Finding | Disposition |
 |---|---|---|
-| app-local | Living Poster and question-led entry | `ADOPT` after visual/public QA |
-| suite-platform | isolated official-release candidate PR workflow | `ADOPT` after first green run |
-| scientific-contract | event/stem identity and opportunity ledger | `HOLD` until rebuilt and fixture-verified |
+| app-local | Living Poster and question-led entry | `ADOPT`; public parity proof pending |
+| suite-platform | isolated official-release candidate PR workflow | `ADOPT`; exact-head run `29715249829` passed |
+| scientific-contract | event/stem identity and opportunity ledger | `PASS` for the companion app; preserve in every consumer |
 | scientific-contract | 49 measurement-only events / 4,365 rows at 11 sites | `HOLD` from scaling and derived summaries; preserve and expose |
-| Driver-impacting | legacy vegetation denominator mismatch | `HOLD / NO DRIVER BYTE CHANGE` |
+| Driver-impacting | Vegetation channel/support evidence | `HOLD / CONTEXT ONLY / NO DRIVER BYTE CHANGE` |
 | complementary | Vegetation as slow standing-structure lens | `COMPLEMENT` Plant Diversity and Phenology |
 
 ## Pattern for the next app

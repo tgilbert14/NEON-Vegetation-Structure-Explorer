@@ -4,28 +4,33 @@ _Pass 4 audit · 2026-07-19 · NEON DP1.10098.001 · supersedes the June 2026 ce
 
 ## Decision
 
-**HOLD for Cascade metrics. CONTEXT ONLY for the existing committed bundle.**
+**HOLD for Cascade metrics. CONTEXT ONLY for the verified RELEASE-2026 companion evidence.**
 
-The current app bundle is useful for exploring tagged vegetation records, but it cannot support a
-certified site-wide vegetation rung. The bundling step removed keys and sampling-opportunity fields
-needed to distinguish a measured zero from missing, impractical, dendrometer-only, or unmatched
-sampling. Driver must not ingest a new vegetation byte until the RELEASE-2026 rebundle passes the
-shared `NEON-VST-DP1.10098.001-v2` contract and parity fixtures.
+The RELEASE-2026 companion bundle preserves the keys and sampling-opportunity
+states needed to distinguish a measured zero from missing, impractical,
+dendrometer-only, identity-conflicted, or unmatched sampling. It supports a
+channel-qualified sampled-plot standing-structure lens, not a certified
+site-wide vegetation rung or annual productivity metric. Driver must not ingest
+a new vegetation byte without a separate eligibility, support-parity, and
+Driver rebuild receipt.
 
 The earlier claim that Driver imported this app's `stand_site()` was also incorrect. Driver currently
 uses an independently implemented, stricter vegetation path and already holds WOOD. That separation is
 why this audit does not trigger a Driver data change.
 
-## What is present in the legacy bundle
+## What is verified in the RELEASE-2026 candidate
 
-- 42 site bundles, 525,834 apparent-individual rows, 148,446 distinct raw `individualID` values,
-  covering 2014–2024.
+- 42 site bundles, 6,200 event contexts per physical channel, 389,196 preserved
+  measurement rows, and 316,914 live measurement rows.
+- 49 measurement-only plot-events preserve 4,365 rows across 11 sites without
+  inventing opportunity metadata, sampled area, effort, absence, or a denominator.
 - Repeated diameter, height, status, taxonomy, plot, and area fields sufficient for record discovery
   and carefully labelled individual context.
 - A strong visual/product opportunity: tagged plants are revisited, so the public story can truthfully
   lead with **“Tagged. Measured. Still changing.”**
 
-Those row counts describe the legacy artifact; they are not certified estimates.
+Those row counts describe audited release records and support states; they are
+not wall-to-wall site estimates.
 
 ## Release-blocking findings
 

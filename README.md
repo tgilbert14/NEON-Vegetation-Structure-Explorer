@@ -12,10 +12,14 @@ measure what changed.
 
 ## Pass 4 status
 
-The Living Poster and app experience are being rebuilt around the `NEON-VST-DP1.10098.001-v2` contract. The
-legacy committed bundles remain **HOLD / CONTEXT ONLY** until an official RELEASE-2026 refresh passes
-the source, key, opportunity-state, parity, browser, and export gates. This repository does not certify
-a new Driver/Cascade metric.
+The Living Poster and app experience are rebuilt around the
+`NEON-VST-DP1.10098.001-v2` contract. Exact-head candidate run
+[`29715249829`](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29715249829)
+passed the official 42-site RELEASE-2026 source, key, opportunity-state,
+parity, runtime, manifest, app-source, and export gates; promotion commit
+`800bd5e` contains only its 54 checksum-ledger payload paths. Merge and public
+deployment proof remain pending. Vegetation remains **HOLD / CONTEXT ONLY** for
+Driver/Cascade, and this release changes no Driver data byte.
 
 See:
 

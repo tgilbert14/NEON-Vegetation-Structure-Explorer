@@ -28,6 +28,7 @@ RSPM_SNAPSHOT <-
   "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
 CRAN_REPOSITORY <- "https://cran.r-project.org"
 R_PLATFORM_PIN <- "4.5.2"
+MANIFEST_LOCALE <- "C"
 
 # leaflet pulls this native closure into Connect even though the app uses only
 # markers and tiles. CI installs these exact CRAN tarballs before writeManifest
@@ -85,6 +86,9 @@ cat(sprintf("Ordinary package repository frozen to %s.\n", RSPM_SNAPSHOT))
 # network URL in top-level Repository (a symbolic `CRAN` value produced the prior
 # wk archive outage), while RemoteType/RemotePkgRef retain the exact install input.
 canonical <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)
+# The immutable Linux validator is the manifest client. Pin its portable C
+# locale explicitly so a workstation locale cannot change deployment bytes.
+canonical$locale <- MANIFEST_LOCALE
 for (package in names(GEO_PINS)) {
   if (!is.null(canonical$packages[[package]]$description)) {
     canonical$packages[[package]]$description$Built <- NULL
@@ -96,7 +100,8 @@ jsonlite::write_json(
   canonical, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null"
 )
 cat(paste0(
-  "Canonicalized only the geo Built clocks and their absolute CRAN deployment lane; ",
+  "Pinned the validator client locale and canonicalized only the geo Built clocks ",
+  "and their absolute CRAN deployment lane; ",
   "installed Version/RemoteSha metadata was not rewritten.\n"
 ))
 
@@ -122,6 +127,12 @@ bad <- character(0)
 if (!identical(m$platform, R_PLATFORM_PIN)) {
   bad <- c(bad, sprintf(
     "platform=%s (want actual %s)", m$platform %||% "<missing>", R_PLATFORM_PIN
+  ))
+}
+if (!identical(m$locale, MANIFEST_LOCALE)) {
+  bad <- c(bad, sprintf(
+    "locale=%s (want pinned validator client locale %s)",
+    m$locale %||% "<missing>", MANIFEST_LOCALE
   ))
 }
 for (package in pkgs) {

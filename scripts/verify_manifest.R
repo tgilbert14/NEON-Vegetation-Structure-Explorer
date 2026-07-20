@@ -7,6 +7,7 @@ suppressPackageStartupMessages(library(jsonlite))
 `%||%` <- function(left, right) if (is.null(left) || !length(left)) right else left
 
 EXPECTED_R_PLATFORM <- "4.5.2"
+EXPECTED_LOCALE <- "C"
 EXPECTED_REPOSITORY <-
   "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
 EXPECTED_CRAN_REPOSITORY <- "https://cran.r-project.org"
@@ -32,6 +33,9 @@ note <- function(message) problems <<- c(problems, message)
 if (!identical(manifest$platform, EXPECTED_R_PLATFORM))
   note(sprintf("manifest platform is %s, expected %s",
                manifest$platform %||% "missing", EXPECTED_R_PLATFORM))
+if (!identical(manifest$locale, EXPECTED_LOCALE))
+  note(sprintf("manifest locale is %s, expected %s",
+               manifest$locale %||% "missing", EXPECTED_LOCALE))
 if (!identical(manifest$metadata$appmode, "shiny")) note("manifest appmode is not shiny")
 
 expected_files <- unique(c(
