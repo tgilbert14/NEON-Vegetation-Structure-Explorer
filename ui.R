@@ -72,7 +72,7 @@ ui <- bslib::page_fillable(
         h1("Tagged. Measured. ", em("Still changing.")),
         p(class = "lpa-promise", "Follow real trees and shrubs through years of change."),
         tags$a(class = "lpa-skip", href = "#placeGateway", "Pick a place ", bs_icon("arrow-down"))),
-      figure(class = "lpa-art",
+      tags$figure(class = "lpa-art",
         tags$picture(
           tags$source(
             type = "image/webp",

@@ -353,6 +353,18 @@ closed the following issues before the candidate was allowed to run:
   generic wording. The fixture now matches the stable DQA message prefix. This is
   a test-expectation correction only: no science rule, source row, or release byte
   changed.
+- Exact-head ordinary run
+  [29714123262](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29714123262)
+  passed the complete event-keyed fixture suite and then stopped, as intended,
+  when the legacy committed HARV bundle could not satisfy the new live-DBH
+  contract. Candidate run
+  [29714226156](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/29714226156)
+  then fetched all 42 official sites and passed source-family, denominator, DQA,
+  derived parity, event-key, helper, export-dictionary, runtime-mutation, and
+  manifest gates on two isolated builds. It stopped while sourcing the complete
+  app because the new Living Poster used an unqualified `figure()` tag helper.
+  The UI now calls `tags$figure()`. No validated artifact was uploaded and no
+  candidate byte from that superseded head was promoted.
 
 ### Failed/unsafe paths closed
 

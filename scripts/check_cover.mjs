@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(resolve(root, "docs/index.html"), "utf8");
+const shinyUi = readFileSync(resolve(root, "ui.R"), "utf8");
 let failed = false;
 const fail = (message) => { failed = true; console.error(`FAIL: ${message}`); };
 const count = (pattern) => (html.match(pattern) || []).length;
@@ -68,6 +69,12 @@ for (const slug of companionUrls) {
 }
 for (const stalePattern of [/question-grid/i, /measure-card/i, /suite-rail/i]) {
   if (stalePattern.test(html)) fail(`stale long-form cover block remains: ${stalePattern}`);
+}
+if (!/tags\$figure\s*\(/.test(shinyUi)) {
+  fail("Shiny Living Poster must qualify the HTML figure tag as tags$figure()");
+}
+if (/(?:^|[^$\w])figure\s*\(/m.test(shinyUi)) {
+  fail("Shiny Living Poster contains an unqualified figure() helper");
 }
 
 for (const forbidden of [
