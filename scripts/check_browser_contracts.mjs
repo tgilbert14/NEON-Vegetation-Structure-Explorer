@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const files = ["www/app.js", "www/pincards.js"];
-const pattern = /Shiny\.addCustomMessageHandler\(\s*["']([^"']+)["']\s*,\s*function\s*\(([^)]*)\)/g;
+// Match both handler shapes so an arrow-function callback can't slip the arity
+// check: `function (payload)`, `(payload) =>`, or a bare `payload =>`. Group 1 is
+// the handler name; the payload list is group 2/3/4 depending on the form.
+const pattern = /Shiny\.addCustomMessageHandler\(\s*["']([^"']+)["']\s*,\s*(?:function\s*\(([^)]*)\)|\(([^)]*)\)\s*=>|([A-Za-z_$][\w$]*)\s*=>)/g;
 const handlers = [];
 const invalid = [];
 for (const file of files) {
   const source = readFileSync(file, "utf8");
   for (const match of source.matchAll(pattern)) {
-    const parameters = match[2].split(",").map((value) => value.trim()).filter(Boolean);
+    const rawParams = match[4] !== undefined ? match[4] : (match[2] ?? match[3] ?? "");
+    const parameters = rawParams.split(",").map((value) => value.trim()).filter(Boolean);
     handlers.push(match[1]);
     if (parameters.length !== 1) invalid.push(`${file}: ${match[1]} (${parameters.length} parameters)`);
   }
@@ -110,6 +114,16 @@ for (const asset of [
   "assets/vegetation-living-poster.png",
 ]) {
   if (!ui.includes(asset)) throw new Error(`in-app Living Poster is missing responsive art asset ${asset}`);
+  // The Pages (docs/) and in-app (www/) copies must ship byte-identical art so
+  // both entrances keep the same crop, disclosure, and promise — IMAGE-PROVENANCE
+  // pins them to one hash, so assert the bytes here rather than trust two copies.
+  const wwwPath = `www/${asset}`;
+  const docsPath = `docs/${asset}`;
+  if (!existsSync(wwwPath)) throw new Error(`in-app Living Poster art file is missing on disk: ${wwwPath}`);
+  if (!existsSync(docsPath)) throw new Error(`Pages Living Poster twin is missing on disk: ${docsPath}`);
+  if (!readFileSync(wwwPath).equals(readFileSync(docsPath))) {
+    throw new Error(`${wwwPath} and ${docsPath} are not byte-identical`);
+  }
 }
 
 // Evidence and non-scientist pathways are release contracts, not optional copy.

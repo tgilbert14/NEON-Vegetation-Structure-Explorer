@@ -49,6 +49,10 @@
       outline: 3px solid var(--gold);
       outline-offset: 5px;
     }
+    /* Gold outline is near-invisible on the cream footer — swap to forest ink there. */
+    footer a:focus-visible, .honesty summary:focus-visible {
+      outline-color: var(--forest);
+    }
     .skip {
       position: fixed;
       left: 16px;
