@@ -131,13 +131,17 @@ PINNED_GEO_VERSIONS: Mapping[str, str] = {
 }
 PINNED_GEO_URLS: Mapping[str, str] = {
     "terra": "https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz",
-    "sf": "https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz",
-    "s2": "https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz",
-    "units": "https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz",
-    "wk": "https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz",
-    "classInt": "https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz",
-    "raster": "https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz",
-    "sp": "https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz",
+    "sf": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz",
+    "s2": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz",
+    "units": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz",
+    "wk": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz",
+    "classInt": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz",
+    "raster": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz",
+    "sp": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz",
+}
+PINNED_SNAPSHOT_SOURCE_VERSIONS: Mapping[str, str] = {"plotly": "4.12.0"}
+PINNED_SNAPSHOT_SOURCE_URLS: Mapping[str, str] = {
+    "plotly": "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/plotly_4.12.0.tar.gz",
 }
 
 HELD_COUNT_FIELDS: Tuple[str, ...] = (
@@ -1164,6 +1168,12 @@ def validate_manifest(
         version = description.get("Version")
         require(isinstance(version, str) and bool(version),
                 f"manifest package {package} has a blank Version")
+        remote_repositories = description.get("RemoteRepos")
+        require(remote_repositories is None or isinstance(remote_repositories, str),
+                f"manifest package {package} has malformed RemoteRepos provenance")
+        require(not remote_repositories or "https://cran.rstudio.com" not in remote_repositories,
+                f"manifest package {package} retains moving RemoteRepos provenance: "
+                f"{remote_repositories!r}")
         source = entry.get("Source")
         require(source == "CRAN",
                 f"manifest package {package} Source is not CRAN: {source!r}")
@@ -1194,6 +1204,23 @@ def validate_manifest(
         require(not description.get("Built"),
                 f"manifest package {package} retains a non-semantic Built clock")
 
+    for package, expected_version in PINNED_SNAPSHOT_SOURCE_VERSIONS.items():
+        require(package in packages,
+                f"manifest lacks pinned snapshot-source package {package}")
+        description = packages[package].get("description")
+        require(isinstance(description, dict),
+                f"manifest package {package} lacks description metadata")
+        require(description.get("Version") == expected_version,
+                f"manifest package {package} version is {description.get('Version')!r}, "
+                f"expected {expected_version}")
+        require(description.get("RemoteType") == "url",
+                f"manifest package {package} RemoteType is not url")
+        expected_ref = f"url::{PINNED_SNAPSHOT_SOURCE_URLS[package]}"
+        require(description.get("RemotePkgRef") == expected_ref,
+                f"manifest package {package} RemotePkgRef differs from {expected_ref}")
+        require(not description.get("Built"),
+                f"manifest package {package} retains a non-semantic Built clock")
+
     return {
         "r_version": manifest["platform"],
         "appmode": metadata["appmode"],
@@ -1202,6 +1229,7 @@ def validate_manifest(
         "ordinary_repository": PINNED_REPOSITORY,
         "geo_repository": CRAN_REPOSITORY,
         "geo_versions": dict(PINNED_GEO_VERSIONS),
+        "snapshot_source_versions": dict(PINNED_SNAPSHOT_SOURCE_VERSIONS),
         "forbidden_packages_present": [],
     }
 

@@ -22,11 +22,14 @@ complete bundle family is built and promoted as one reviewed release unit.
   release bytes. The search index contains both the canonical 42-site default
   view and an exact 84-row site × physical-channel grid. They are generated in
   the pinned Linux validator and never hand-edited.
-- The manifest records the eight native geographic dependencies from their exact
-  CRAN tarball URLs. Canonicalization removes only those packages' non-semantic
-  source-build clocks and supplies Connect's absolute CRAN repository lane; it
-  never invents package versions or `RemoteSha`. Every ordinary dependency must
-  remain `Source=CRAN` on the exact dated Jammy snapshot.
+- The manifest records the eight native geographic dependencies and Plotly 4.12.0
+  from their exact retained source tarball URLs. Canonicalization removes only
+  those nine packages' non-semantic source-build clocks and supplies the reviewed
+  Connect deployment lane: absolute CRAN for the geographic closure and the exact
+  dated Jammy snapshot for Plotly. It never invents package versions or
+  `RemoteSha`, and it rejects moving `cran.rstudio.com` provenance before any
+  rewrite. Every other dependency must remain `Source=CRAN` on the exact dated
+  Jammy snapshot.
 - Raw downloads and tokens never ship with the app. `NEON_TOKEN` exists only in
   the read-only fetch job.
 
@@ -92,11 +95,15 @@ the ledger payload set. Re-run ordinary CI on that exact promoted head, inspect
 the source/science/empirical receipts, and merge only after every gate is green.
 Never push generated data directly to `main`.
 
-The independent inspector used for the first promoted official-release family is
-tracked at `scripts/validation/inspect_vegetation_candidate.py` with SHA-256
-`819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`. Keep its
-log outside the extracted candidate root so the fail-closed 55-file inventory is
-not changed:
+The independent inspector used for the first promoted official-release family
+had SHA-256
+`819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`.
+The current tracked inspector at
+`scripts/validation/inspect_vegetation_candidate.py` also enforces the retained
+2026-07-15 source provenance, including exact Plotly 4.12.0, and has SHA-256
+`064aec63ecf06ab7a8f9b03d0faedbc23d997ffae10202b935e3ac8851fabee8`;
+CI pins those exact current bytes. Keep its log outside the extracted candidate
+root so the fail-closed 55-file inventory is not changed:
 
 ```bash
 VEG_AUDIT_ROOT=$(mktemp -d)

@@ -813,6 +813,99 @@ central Driver learning record as its own documentation-only identity.
 Stop before the next companion app. The scientific disposition remains **HOLD /
 CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE** throughout.
 
+### Scheduled refresh source-retention repair — 2026-08-03 08:45 EDT / [Codex]
+
+**Outcome: IMPLEMENTED LOCALLY / STATIC PASS / PINNED MANIFEST REGENERATION
+PENDING / READ-ONLY CANDIDATE SHAPE PRESERVED / NO DRIVER DATA BYTE CHANGE.**
+
+- **Starting state:** fetched current `origin/main` and created isolated worktree
+  branch `codex/vegetation-refresh-retention-fix` at exact default head
+  `b84c8b15cd4eccdf6d72724865e9742e207f2d86`. The watched branch remains `main`;
+  Pages, Connect content `019ee110-8fd3-abae-aee3-02ea8e4274c8`, and the official
+  RELEASE-2026 source/data receipts remain unchanged. The source checkout was clean,
+  and the existing local Plotly follow-up branch was not changed.
+- **Failure diagnosis/objective:** the validator depended on moving CRAN-main source
+  paths that do not retain historical package tarballs. Preserve every exact package
+  version while moving the seven non-terra install inputs to a dated source store and
+  keeping scheduled/manual refresh strictly diagnostic and artifact-only.
+- **Dependency repair:** `sf 1.1-1`, `s2 1.1.11`, `units 1.0-1`, `wk 0.9.5`,
+  `classInt 0.4-11`, `raster 3.6-32`, and `sp 2.2-1` now resolve from the immutable
+  `https://packagemanager.posit.co/cran/2026-07-15/src/contrib/` source snapshot in
+  CI, refresh, manual derived-byte regeneration, the manifest writer, independent
+  manifest verifier, and external candidate inspector. `terra 1.8-50` remains on its
+  exact CRAN archive URL. All three dependency caches moved from v2 to v3.
+- **Inspector identity:** the retained-source expectation changes the tracked
+  inspector to SHA-256
+  `119b124f364e6da00db3169845eecffad6b292b1f1b5957306349a4bd091fec0`.
+  CI pins that exact current file; the earlier
+  `819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`
+  remains the historical receipt for the first promoted official-release family.
+- **Release boundary:** `.github/workflows/refresh-data.yml` gained no write permission,
+  publisher job, branch creation, PR creation, push, or source-receipt mutation. Its
+  scheduled/manual path still uploads read-only candidate artifacts only, and
+  `skip_download` semantics are unchanged.
+- **Static/source results (PASS):** `git diff --check`; Ruby/Psych parsing of CI,
+  refresh, and regeneration YAML; parse of all 24 R files under local R 4.5.3;
+  Python parse of the candidate inspector; cover/browser contracts; stale URL/cache/
+  publisher scans; and exact checks that `manifest.json` was not modified all passed.
+  `scripts/test_build_script_portability.R` passed. HTTPS HEAD probes returned 200 for
+  the retained terra archive and all seven dated Posit source tarballs.
+- **Runtime results (expected BLOCKED):** `scripts/verify_manifest.R` rejected exactly
+  the seven old `RemotePkgRef` values in the intentionally unchanged committed
+  manifest and printed each required dated replacement. That fail-closed result is
+  expected until the pinned validator produces promotion bytes. This local R library
+  lacks `dplyr` and `rsconnect`, so the complete pinned R 4.5.2 science, bundle,
+  parity, deterministic search/manifest, and offline-source ladder remains unclaimed.
+- **Changed/classification:** modified `.github/workflows/ci.yml`,
+  `.github/workflows/refresh-data.yml`, `.github/workflows/regenerate-manifest.yml`,
+  `scripts/write_manifest.R`, `scripts/verify_manifest.R`,
+  `scripts/validation/inspect_vegetation_candidate.py`, and this handoff. Classification
+  is `suite-platform` plus `app-local` release maintenance. No source family, site
+  bundle, index, manifest, app/runtime/science byte, Pages/Connect state, or Driver
+  artifact changed.
+- **Failures/cleanup/ownership:** sandboxed URL probes initially failed DNS and were
+  rerun read-only with network access; all eight returned 200. At audit time no
+  temporary repository artifact, candidate, commit, push, PR, dispatch, or deployment
+  had been created. Publication still requires the exact receipts below.
+- **Driver implication:** **NONE / HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE**.
+  The denominator-integrity contract and official RELEASE-2026 bytes are untouched.
+- **Residual risk and next action:** pinned Ubuntu 22.04/R 4.5.2 must compile the
+  closure and generate the exact new manifest provenance. Review and publish this
+  focused branch, run CI, promote only the validator-derived manifest/search artifact,
+  require green exact-head checks, and merge without dispatching a write-enabled data
+  refresh or adding publisher behavior.
+
+### Plotly snapshot-provenance follow-up — 2026-08-03 / Codex
+
+**Outcome: UNSAFE CANDIDATE HELD / EXACT PLOTLY PIN PREPARED / PRODUCTION
+UNCHANGED / NO DRIVER DATA BYTE CHANGE.**
+
+- Manual promotion run `30818826326` completed its generator and publisher and
+  created direct-child candidate `fa09cfcae532db9d661b952523ce790b8ef4058f`
+  from repair head `ae41d8bd3f2eb1ea2935eb27ee5f810445cd947c`.
+  The search index was byte-identical; the candidate commit changed only
+  `manifest.json`.
+- Human provenance review held that candidate. Its geospatial closure and R
+  4.5.2 platform were correct, but Plotly drifted from 4.12.0 to 4.12.1. The
+  latter was published after the declared 2026-07-15 snapshot, and its generated
+  record carried a 2026-08-03 `Built` clock. A green generator cannot make those
+  bytes snapshot-derived. Automated PR run `30824038627` was `action_required`
+  with zero jobs and supplies no validation evidence.
+- CI, scheduled refresh, and manual regeneration now install Plotly 4.12.0 from
+  its exact retained 2026-07-15 source URL. The manifest writer, independent R
+  verifier, and external Python inspector require that version, URL
+  `RemotePkgRef`, reviewed deployment lane, and absence of a source-build clock.
+  Dependency caches move to v4 and CI pins the updated inspector hash
+  `064aec63ecf06ab7a8f9b03d0faedbc23d997ffae10202b935e3ac8851fabee8`.
+- This repair changes workflow, validation, writer, and documentation bytes only.
+  It does not change site bundles, search/runtime/science bytes, Pages, Connect,
+  or Driver artifacts. Candidate `fa09cfca` is diagnostic evidence and must not
+  be merged.
+
+Next action: publish this focused commit onto the repair PR, rerun the restricted
+manifest promotion from its exact head, independently inspect the replacement
+direct-child candidate, and require literal-head CI before merge.
+
 ## Permanent release gates
 
 The detailed checklist is [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). In brief:

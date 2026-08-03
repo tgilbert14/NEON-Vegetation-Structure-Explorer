@@ -31,22 +31,26 @@ R_PLATFORM_PIN <- "4.5.2"
 MANIFEST_LOCALE <- "C"
 
 # leaflet pulls this native closure into Connect even though the app uses only
-# markers and tiles. CI installs these exact CRAN tarballs before writeManifest
-# runs; this script verifies the installed truth and never fabricates Version or
-# RemoteSha metadata after the fact.
+# markers and tiles. CI installs these exact retained source tarballs before
+# writeManifest runs; this script verifies the installed truth and never
+# fabricates Version or RemoteSha metadata after the fact.
 GEO_PINS <- c(
   terra = "1.8-50", sf = "1.1-1", s2 = "1.1.11", units = "1.0-1",
   wk = "0.9.5", classInt = "0.4-11", raster = "3.6-32", sp = "2.2-1"
 )
 GEO_URLS <- c(
   terra = "https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz",
-  sf = "https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz",
-  s2 = "https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz",
-  units = "https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz",
-  wk = "https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz",
-  classInt = "https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz",
-  raster = "https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz",
-  sp = "https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz"
+  sf = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz",
+  s2 = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz",
+  units = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz",
+  wk = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz",
+  classInt = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz",
+  raster = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz",
+  sp = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz"
+)
+SNAPSHOT_SOURCE_PINS <- c(plotly = "4.12.0")
+SNAPSHOT_SOURCE_URLS <- c(
+  plotly = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/plotly_4.12.0.tar.gz"
 )
 
 appFiles <- c(
@@ -65,12 +69,27 @@ rsconnect::writeManifest(appDir = ".", appFiles = appFiles)
 
 # ---- freeze ordinary packages to the exact dated Jammy snapshot -----------
 # Direct URL installs retain their exact tarball in RemotePkgRef. Do not rewrite
-# CRAN URLs globally: doing so would destroy that immutable provenance. Only the
-# ordinary repository aliases emitted by writeManifest are frozen here.
+# a moving repository after install: that would falsely label newer installed
+# bytes as snapshot-derived. Reject the moving lane before freezing only the
+# ordinary repository aliases emitted by writeManifest.
 mtxt <- readLines("manifest.json", warn = FALSE)
+moving_repositories <- c("https://cran.rstudio.com")
+moving_hits <- moving_repositories[vapply(
+  moving_repositories,
+  function(repository) any(grepl(repository, mtxt, fixed = TRUE)),
+  logical(1)
+)]
+if (length(moving_hits)) {
+  stop(sprintf(
+    paste0(
+      "MOVING-REPOSITORY GATE FAILED: generated manifest contains %s. ",
+      "Install the package from an exact retained source URL; do not rewrite its provenance."
+    ),
+    paste(moving_hits, collapse = ", ")
+  ), call. = FALSE)
+}
 for (repository in c(
   "https://cloud.r-project.org",
-  "https://cran.rstudio.com",
   "https://packagemanager.posit.co/cran/latest",
   "https://packagemanager.posit.co/cran/__linux__/jammy/latest"
 )) {
@@ -79,7 +98,7 @@ for (repository in c(
 writeLines(mtxt, "manifest.json")
 cat(sprintf("Ordinary package repository frozen to %s.\n", RSPM_SNAPSHOT))
 
-# ---- canonicalize only non-semantic geo build clocks and deploy lane -------
+# ---- canonicalize only exact-source build clocks and deploy lanes ----------
 # Source-built DESCRIPTION records contain a wall-clock Built field, so the same
 # exact package compiles to different manifest bytes on different validator runs.
 # Remove that field only for the named URL closure. Connect also needs a complete
@@ -96,12 +115,19 @@ for (package in names(GEO_PINS)) {
     canonical$packages[[package]]$Repository <- CRAN_REPOSITORY
   }
 }
+for (package in names(SNAPSHOT_SOURCE_PINS)) {
+  if (!is.null(canonical$packages[[package]]$description)) {
+    canonical$packages[[package]]$description$Built <- NULL
+    canonical$packages[[package]]$Source <- "CRAN"
+    canonical$packages[[package]]$Repository <- RSPM_SNAPSHOT
+  }
+}
 jsonlite::write_json(
   canonical, "manifest.json", auto_unbox = TRUE, pretty = TRUE, null = "null"
 )
 cat(paste0(
-  "Pinned the validator client locale and canonicalized only the geo Built clocks ",
-  "and their absolute CRAN deployment lane; ",
+  "Pinned the validator client locale and canonicalized only exact-source Built clocks ",
+  "and their reviewed deployment lanes; ",
   "installed Version/RemoteSha metadata was not rewritten.\n"
 ))
 
@@ -164,6 +190,25 @@ for (package in pkgs) {
         expected_ref
       ))
     }
+  } else if (package %in% names(SNAPSHOT_SOURCE_PINS)) {
+    remote_type <- as.character(info$description$RemoteType %||% "")
+    remote_ref <- as.character(info$description$RemotePkgRef %||% "")
+    built <- as.character(info$description$Built %||% "")
+    expected_ref <- paste0("url::", unname(SNAPSHOT_SOURCE_URLS[[package]]))
+    if (!identical(version, unname(SNAPSHOT_SOURCE_PINS[[package]])) ||
+        !identical(source, "CRAN") ||
+        !identical(repository, RSPM_SNAPSHOT) ||
+        !identical(remote_type, "url") ||
+        !identical(remote_ref, expected_ref) || nzchar(built)) {
+      bad <- c(bad, sprintf(
+        paste0(
+          "%s origin/version Source=%s Repository=%s Version=%s ",
+          "RemoteType=%s RemotePkgRef=%s Built=%s (want exact %s and no source-build clock)"
+        ),
+        package, source, repository, version, remote_type, remote_ref, built,
+        expected_ref
+      ))
+    }
   } else if (!identical(source, "CRAN") ||
              !identical(repository, RSPM_SNAPSHOT)) {
     bad <- c(bad, sprintf(
@@ -178,6 +223,13 @@ if (length(missing_geo)) {
     "missing pinned geographic packages: %s", paste(missing_geo, collapse = ",")
   ))
 }
+missing_snapshot_source <- setdiff(names(SNAPSHOT_SOURCE_PINS), pkgs)
+if (length(missing_snapshot_source)) {
+  bad <- c(bad, sprintf(
+    "missing pinned snapshot-source packages: %s",
+    paste(missing_snapshot_source, collapse = ",")
+  ))
+}
 if (length(bad)) {
   stop(sprintf(
     paste0(
@@ -188,6 +240,6 @@ if (length(bad)) {
   ), call. = FALSE)
 }
 cat(paste0(
-  "OK: lean manifest; exact installed geo URL closure; ordinary packages on the ",
-  "dated Jammy snapshot.\n"
+  "OK: lean manifest; exact installed geo and Plotly source closure; ordinary ",
+  "packages on the dated Jammy snapshot.\n"
 ))

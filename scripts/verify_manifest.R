@@ -17,13 +17,17 @@ EXPECTED_GEO_PINS <- c(
 )
 EXPECTED_GEO_URLS <- c(
   terra = "https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz",
-  sf = "https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz",
-  s2 = "https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz",
-  units = "https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz",
-  wk = "https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz",
-  classInt = "https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz",
-  raster = "https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz",
-  sp = "https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz"
+  sf = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz",
+  s2 = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz",
+  units = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz",
+  wk = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz",
+  classInt = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz",
+  raster = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz",
+  sp = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz"
+)
+EXPECTED_SNAPSHOT_SOURCE_PINS <- c(plotly = "4.12.0")
+EXPECTED_SNAPSHOT_SOURCE_URLS <- c(
+  plotly = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/plotly_4.12.0.tar.gz"
 )
 
 manifest <- jsonlite::read_json("manifest.json", simplifyVector = FALSE)
@@ -80,6 +84,13 @@ for (package in package_names) {
   declared <- as.character(info$description$Package %||% "")
   source <- as.character(info$Source %||% "")
   repository <- as.character(info$Repository %||% "")
+  remote_repositories <- as.character(info$description$RemoteRepos %||% "")
+  if (any(grepl("https://cran.rstudio.com", remote_repositories, fixed = TRUE))) {
+    note(sprintf(
+      "%s retains a moving RemoteRepos provenance: %s",
+      package, paste(remote_repositories, collapse = ",")
+    ))
+  }
   if (length(version) != 1L || is.na(version) || !nzchar(version) ||
       !identical(declared, package)) {
     note(sprintf("%s has invalid package identity/version metadata", package))
@@ -105,6 +116,29 @@ for (package in package_names) {
         package, source, repository, remote_type, remote_ref, built, expected_ref
       ))
     }
+  } else if (package %in% names(EXPECTED_SNAPSHOT_SOURCE_PINS)) {
+    remote_type <- as.character(info$description$RemoteType %||% "")
+    remote_ref <- as.character(info$description$RemotePkgRef %||% "")
+    built <- as.character(info$description$Built %||% "")
+    expected_ref <- paste0(
+      "url::", unname(EXPECTED_SNAPSHOT_SOURCE_URLS[[package]])
+    )
+    if (!identical(version, unname(EXPECTED_SNAPSHOT_SOURCE_PINS[[package]]))) {
+      note(sprintf("%s version is %s, expected %s", package, version,
+                   unname(EXPECTED_SNAPSHOT_SOURCE_PINS[[package]])))
+    }
+    if (!identical(source, "CRAN") ||
+        !identical(repository, EXPECTED_REPOSITORY) ||
+        !identical(remote_type, "url") ||
+        !identical(remote_ref, expected_ref) || nzchar(built)) {
+      note(sprintf(
+        paste0(
+          "%s snapshot-source provenance Source=%s Repository=%s RemoteType=%s ",
+          "RemotePkgRef=%s Built=%s; expected exact %s and no source-build clock"
+        ),
+        package, source, repository, remote_type, remote_ref, built, expected_ref
+      ))
+    }
   } else if (!identical(source, "CRAN") ||
              !identical(repository, EXPECTED_REPOSITORY)) {
     note(sprintf(
@@ -117,6 +151,12 @@ missing_geo <- setdiff(names(EXPECTED_GEO_PINS), package_names)
 if (length(missing_geo))
   note(sprintf("manifest lacks pinned geographic packages: %s",
                paste(missing_geo, collapse = ",")))
+missing_snapshot_source <- setdiff(
+  names(EXPECTED_SNAPSHOT_SOURCE_PINS), package_names
+)
+if (length(missing_snapshot_source))
+  note(sprintf("manifest lacks pinned snapshot-source packages: %s",
+               paste(missing_snapshot_source, collapse = ",")))
 
 if (length(problems)) {
   cat("Manifest verification failed:\n", paste0("- ", problems, collapse = "\n"), "\n")
