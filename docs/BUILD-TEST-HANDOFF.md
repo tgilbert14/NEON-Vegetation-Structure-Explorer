@@ -834,6 +834,12 @@ PENDING / READ-ONLY CANDIDATE SHAPE PRESERVED / NO DRIVER DATA BYTE CHANGE.**
   CI, refresh, manual derived-byte regeneration, the manifest writer, independent
   manifest verifier, and external candidate inspector. `terra 1.8-50` remains on its
   exact CRAN archive URL. All three dependency caches moved from v2 to v3.
+- **Inspector identity:** the retained-source expectation changes the tracked
+  inspector to SHA-256
+  `119b124f364e6da00db3169845eecffad6b292b1f1b5957306349a4bd091fec0`.
+  CI pins that exact current file; the earlier
+  `819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`
+  remains the historical receipt for the first promoted official-release family.
 - **Release boundary:** `.github/workflows/refresh-data.yml` gained no write permission,
   publisher job, branch creation, PR creation, push, or source-receipt mutation. Its
   scheduled/manual path still uploads read-only candidate artifacts only, and

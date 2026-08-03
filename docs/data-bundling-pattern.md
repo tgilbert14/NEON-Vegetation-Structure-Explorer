@@ -92,11 +92,15 @@ the ledger payload set. Re-run ordinary CI on that exact promoted head, inspect
 the source/science/empirical receipts, and merge only after every gate is green.
 Never push generated data directly to `main`.
 
-The independent inspector used for the first promoted official-release family is
-tracked at `scripts/validation/inspect_vegetation_candidate.py` with SHA-256
-`819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`. Keep its
-log outside the extracted candidate root so the fail-closed 55-file inventory is
-not changed:
+The independent inspector used for the first promoted official-release family
+had SHA-256
+`819eca6d2f9a9b0663b8ad075796b0c558c5af07f740d3f5aa780826257416c5`.
+The current tracked inspector at
+`scripts/validation/inspect_vegetation_candidate.py` also enforces the retained
+2026-07-15 source provenance and has SHA-256
+`119b124f364e6da00db3169845eecffad6b292b1f1b5957306349a4bd091fec0`;
+CI pins those exact current bytes. Keep its log outside the extracted candidate
+root so the fail-closed 55-file inventory is not changed:
 
 ```bash
 VEG_AUDIT_ROOT=$(mktemp -d)

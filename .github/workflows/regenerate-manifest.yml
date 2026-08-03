@@ -6,11 +6,11 @@ name: Regenerate derived bytes (manual)
 # With no local R, that forces the "push → CI-red-by-design → hand-shuttle the validated
 # artifact → re-run" loop that made the ChatGPT/Codex cover rework "fail merges over and
 # over". Instead the maintainer dispatches this job on a review/PR branch and the pinned
-# validator regenerates BOTH derived files and commits them. It is MANUAL only, uses
-# RESTRICTED write, regenerates each file twice and requires byte-identical output,
-# verifies the result, and refuses to touch main: a reviewed merge to main stays the sole
-# production decision, so the "write only through the final restricted publisher" boundary
-# is preserved.
+# validator regenerates BOTH derived files. A separate restricted publisher accepts
+# only that immutable checksum-backed artifact and only while the dispatched branch
+# still resolves to the exact source SHA. It regenerates each file twice, requires
+# byte-identical output, verifies the result, and refuses to touch main: a reviewed
+# merge to main stays the sole production decision.
 #
 # Data refreshes still go through refresh-data.yml; this job only re-derives the two
 # committed derived files after a runtime code or data change shifts their bytes.
@@ -35,26 +35,33 @@ env:
   VST_LIVE: "0"
 
 jobs:
-  regenerate:
+  generate:
     runs-on: ubuntu-22.04
     timeout-minutes: 100
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      derived_sha256: ${{ steps.package.outputs.derived_sha256 }}
     steps:
-      - name: Refuse to write production directly
+      - name: Require a non-production branch dispatch
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "::error::Refusing to run on main. Dispatch this on a review/PR branch; a reviewed merge to main is the only production decision." >&2
+          if [[ "$GITHUB_REF" != refs/heads/* || "$GITHUB_REF" == refs/heads/main ]]; then
+            echo "::error::Dispatch this workflow on a review branch, never main or a tag." >&2
             exit 1
           fi
 
-      - name: Checkout the dispatched branch
+      - name: Checkout the immutable dispatch revision without credentials
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-          persist-credentials: true
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove the exact dispatch revision is checked out
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Set up pinned R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
@@ -90,13 +97,12 @@ jobs:
       - name: Regenerate the search index twice and require identical bytes
         run: |
           set -euo pipefail
-          # The search index feeds the manifest's checksums, so re-derive it first.
           Rscript --vanilla scripts/build_search_index.R
           s1=$(sha256sum data/search_index.rds | awk '{print $1}')
           Rscript --vanilla scripts/build_search_index.R
           s2=$(sha256sum data/search_index.rds | awk '{print $1}')
           if [ "$s1" != "$s2" ]; then
-            echo "::error::build_search_index.R is not byte-deterministic; fix determinism before committing an unstable derived index." >&2
+            echo "::error::build_search_index.R is not byte-deterministic; fix determinism before publication." >&2
             exit 1
           fi
 
@@ -108,7 +114,7 @@ jobs:
           Rscript --vanilla scripts/write_manifest.R
           h2=$(sha256sum manifest.json | awk '{print $1}')
           if [ "$h1" != "$h2" ]; then
-            echo "::error::write_manifest.R is not byte-deterministic; fix canonicalization (strip Built, pin locale) before committing an unstable manifest." >&2
+            echo "::error::write_manifest.R is not byte-deterministic; fix canonicalization before publication." >&2
             exit 1
           fi
 
@@ -118,18 +124,120 @@ jobs:
           Rscript --vanilla scripts/verify_manifest.R
           Rscript --vanilla scripts/verify_bundle.R
 
-      - name: Commit the regenerated derived bytes to the dispatched branch
+      - name: Package the exact validated derived bytes
+        id: package
         run: |
           set -euo pipefail
+          promotion="$RUNNER_TEMP/vegetation-derived-promotion"
+          mkdir -p "$promotion/data"
+          cp -- data/search_index.rds "$promotion/data/search_index.rds"
+          cp -- manifest.json "$promotion/manifest.json"
+          (
+            cd "$promotion"
+            sha256sum data/search_index.rds manifest.json > DERIVED-SHA256SUMS.txt
+          )
+          echo "derived_sha256=$(sha256sum "$promotion/DERIVED-SHA256SUMS.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the immutable validated derived bytes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vegetation-derived-promotion-${{ github.sha }}
+          path: ${{ runner.temp }}/vegetation-derived-promotion
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: generate
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Require the same non-production branch dispatch
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/* || "$GITHUB_REF" == refs/heads/main ]]; then
+            echo "::error::Refusing to publish outside a review branch." >&2
+            exit 1
+          fi
+
+      - name: Checkout the immutable dispatch revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download the exact validated derived bytes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vegetation-derived-promotion-${{ github.sha }}
+          path: ${{ runner.temp }}/vegetation-derived-promotion
+
+      - name: Verify artifact inventory and receipt
+        env:
+          EXPECTED_DERIVED_SHA256: ${{ needs.generate.outputs.derived_sha256 }}
+        run: |
+          set -euo pipefail
+          promotion="$RUNNER_TEMP/vegetation-derived-promotion"
+          expected_paths=(
+            DERIVED-SHA256SUMS.txt
+            data
+            data/search_index.rds
+            manifest.json
+          )
+          mapfile -t actual_paths < <(
+            cd "$promotion"
+            find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort
+          )
+          mapfile -t expected_paths < <(printf '%s\n' "${expected_paths[@]}" | LC_ALL=C sort)
+          test "${#actual_paths[@]}" -eq "${#expected_paths[@]}"
+          for i in "${!expected_paths[@]}"; do
+            test "${actual_paths[$i]}" = "${expected_paths[$i]}"
+          done
+          [[ -f "$promotion/data/search_index.rds" && ! -L "$promotion/data/search_index.rds" ]]
+          [[ -f "$promotion/manifest.json" && ! -L "$promotion/manifest.json" ]]
+          [[ -f "$promotion/DERIVED-SHA256SUMS.txt" && ! -L "$promotion/DERIVED-SHA256SUMS.txt" ]]
+          (
+            cd "$promotion"
+            sha256sum -c DERIVED-SHA256SUMS.txt
+          )
+          test "$(sha256sum "$promotion/DERIVED-SHA256SUMS.txt" | awk '{print $1}')" = "$EXPECTED_DERIVED_SHA256"
+
+      - name: Publish only as a direct child of the unchanged review head
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF#refs/heads/}"
+          git fetch --no-tags origin \
+            "refs/heads/main:refs/remotes/origin/main" \
+            "refs/heads/$branch:refs/remotes/origin/$branch"
+          remote_head=$(git rev-parse "refs/remotes/origin/$branch")
+          if [[ "$remote_head" != "$GITHUB_SHA" || "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "::error::Review branch moved after dispatch; regenerate from its new exact head." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor origin/main "$GITHUB_SHA"; then
+            echo "::error::Review branch no longer contains current main; update it and regenerate." >&2
+            exit 1
+          fi
+          cp -- "$RUNNER_TEMP/vegetation-derived-promotion/data/search_index.rds" data/search_index.rds
+          cp -- "$RUNNER_TEMP/vegetation-derived-promotion/manifest.json" manifest.json
           if git diff --quiet -- data/search_index.rds manifest.json; then
-            echo "search_index.rds and manifest.json already match the validator — nothing to commit."
+            echo "Derived bytes already match the exact validator output."
             exit 0
           fi
-          branch="${GITHUB_REF#refs/heads/}"
-          remote_head=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
           git config user.name "neon-data-bot"
           git config user.email "neon-data-bot@users.noreply.github.com"
           git add -- data/search_index.rds manifest.json
           git commit -m "build: regenerate search_index.rds + manifest.json from the pinned validator [bot]" \
-                     -m "Dispatched on $branch from ${GITHUB_SHA}; both derived files regenerated twice (identical bytes) and verify_manifest.R + verify_bundle.R passed. No runtime, data, or science source bytes changed."
-          git push --force-with-lease="refs/heads/$branch:$remote_head" origin "HEAD:refs/heads/$branch"
+                     -m "Direct child of ${GITHUB_SHA}; both files were regenerated twice and all derived-byte gates passed. No runtime, data, or science source bytes changed."
+          published_commit=$(git rev-parse HEAD)
+          test "$(git rev-parse HEAD^)" = "$GITHUB_SHA"
+          git push origin "HEAD:refs/heads/$branch"
+          pushed_commit=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
+          test "$pushed_commit" = "$published_commit"
+          {
+            echo "### Validated Vegetation derived bytes published"
+            printf -- '- Branch: `%s`\n' "$branch"
+            printf -- '- Producer head: `%s`\n' "$GITHUB_SHA"
+            printf -- '- Exact published head: `%s`\n' "$published_commit"
+          } >> "$GITHUB_STEP_SUMMARY"
