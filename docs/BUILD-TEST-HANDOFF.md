@@ -875,6 +875,37 @@ PENDING / READ-ONLY CANDIDATE SHAPE PRESERVED / NO DRIVER DATA BYTE CHANGE.**
   require green exact-head checks, and merge without dispatching a write-enabled data
   refresh or adding publisher behavior.
 
+### Plotly snapshot-provenance follow-up — 2026-08-03 / Codex
+
+**Outcome: UNSAFE CANDIDATE HELD / EXACT PLOTLY PIN PREPARED / PRODUCTION
+UNCHANGED / NO DRIVER DATA BYTE CHANGE.**
+
+- Manual promotion run `30818826326` completed its generator and publisher and
+  created direct-child candidate `fa09cfcae532db9d661b952523ce790b8ef4058f`
+  from repair head `ae41d8bd3f2eb1ea2935eb27ee5f810445cd947c`.
+  The search index was byte-identical; the candidate commit changed only
+  `manifest.json`.
+- Human provenance review held that candidate. Its geospatial closure and R
+  4.5.2 platform were correct, but Plotly drifted from 4.12.0 to 4.12.1. The
+  latter was published after the declared 2026-07-15 snapshot, and its generated
+  record carried a 2026-08-03 `Built` clock. A green generator cannot make those
+  bytes snapshot-derived. Automated PR run `30824038627` was `action_required`
+  with zero jobs and supplies no validation evidence.
+- CI, scheduled refresh, and manual regeneration now install Plotly 4.12.0 from
+  its exact retained 2026-07-15 source URL. The manifest writer, independent R
+  verifier, and external Python inspector require that version, URL
+  `RemotePkgRef`, reviewed deployment lane, and absence of a source-build clock.
+  Dependency caches move to v4 and CI pins the updated inspector hash
+  `064aec63ecf06ab7a8f9b03d0faedbc23d997ffae10202b935e3ac8851fabee8`.
+- This repair changes workflow, validation, writer, and documentation bytes only.
+  It does not change site bundles, search/runtime/science bytes, Pages, Connect,
+  or Driver artifacts. Candidate `fa09cfca` is diagnostic evidence and must not
+  be merged.
+
+Next action: publish this focused commit onto the repair PR, rerun the restricted
+manifest promotion from its exact head, independently inspect the replacement
+direct-child candidate, and require literal-head CI before merge.
+
 ## Permanent release gates
 
 The detailed checklist is [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). In brief:
