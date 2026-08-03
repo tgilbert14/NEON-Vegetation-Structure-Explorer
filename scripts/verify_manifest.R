@@ -17,13 +17,13 @@ EXPECTED_GEO_PINS <- c(
 )
 EXPECTED_GEO_URLS <- c(
   terra = "https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz",
-  sf = "https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz",
-  s2 = "https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz",
-  units = "https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz",
-  wk = "https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz",
-  classInt = "https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz",
-  raster = "https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz",
-  sp = "https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz"
+  sf = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz",
+  s2 = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz",
+  units = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz",
+  wk = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz",
+  classInt = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz",
+  raster = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz",
+  sp = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz"
 )
 
 manifest <- jsonlite::read_json("manifest.json", simplifyVector = FALSE)

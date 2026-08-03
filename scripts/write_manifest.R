@@ -31,22 +31,22 @@ R_PLATFORM_PIN <- "4.5.2"
 MANIFEST_LOCALE <- "C"
 
 # leaflet pulls this native closure into Connect even though the app uses only
-# markers and tiles. CI installs these exact CRAN tarballs before writeManifest
-# runs; this script verifies the installed truth and never fabricates Version or
-# RemoteSha metadata after the fact.
+# markers and tiles. CI installs these exact retained source tarballs before
+# writeManifest runs; this script verifies the installed truth and never
+# fabricates Version or RemoteSha metadata after the fact.
 GEO_PINS <- c(
   terra = "1.8-50", sf = "1.1-1", s2 = "1.1.11", units = "1.0-1",
   wk = "0.9.5", classInt = "0.4-11", raster = "3.6-32", sp = "2.2-1"
 )
 GEO_URLS <- c(
   terra = "https://cran.r-project.org/src/contrib/Archive/terra/terra_1.8-50.tar.gz",
-  sf = "https://cran.r-project.org/src/contrib/sf_1.1-1.tar.gz",
-  s2 = "https://cran.r-project.org/src/contrib/s2_1.1.11.tar.gz",
-  units = "https://cran.r-project.org/src/contrib/units_1.0-1.tar.gz",
-  wk = "https://cran.r-project.org/src/contrib/wk_0.9.5.tar.gz",
-  classInt = "https://cran.r-project.org/src/contrib/classInt_0.4-11.tar.gz",
-  raster = "https://cran.r-project.org/src/contrib/raster_3.6-32.tar.gz",
-  sp = "https://cran.r-project.org/src/contrib/sp_2.2-1.tar.gz"
+  sf = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sf_1.1-1.tar.gz",
+  s2 = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/s2_1.1.11.tar.gz",
+  units = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/units_1.0-1.tar.gz",
+  wk = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/wk_0.9.5.tar.gz",
+  classInt = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/classInt_0.4-11.tar.gz",
+  raster = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/raster_3.6-32.tar.gz",
+  sp = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/sp_2.2-1.tar.gz"
 )
 
 appFiles <- c(
