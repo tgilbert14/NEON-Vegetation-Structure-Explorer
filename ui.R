@@ -84,8 +84,7 @@ ui <- bslib::page_fillable(
           ),
           tags$img(src = asset_url("assets/vegetation-living-poster.png"),
             fetchpriority = "high", decoding = "async",
-            alt = "Editorial illustration of a tagged tree with a diameter tape and a shrub measured at its base.")),
-        tags$figcaption("Editorial illustration—not a field photograph or data record."))),
+            alt = "Editorial illustration of a tagged tree with a diameter tape and a shrub measured at its base.")))),
 
     div(id = "placeGateway", class = "place-gateway",
       div(class = "pg-head",

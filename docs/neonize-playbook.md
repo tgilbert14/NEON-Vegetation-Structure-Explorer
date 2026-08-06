@@ -92,8 +92,9 @@ not create branches, open PRs, publish to `main`, or alter a source receipt.
    physical channel, and claim boundary before building charts.
 3. Design the Living Poster as a short invitation: one field action, a compact
    hook, one promise, and one CTA. Put method detail below the first screen.
-4. Keep generated art visibly editorial, disclose its provenance beside the
-   image, and keep all factual text in accessible HTML.
+4. Keep generated art visibly editorial through its treatment, carry its status
+   in meaningful alt text and durable provenance without an ornamental badge,
+   and keep all factual text in accessible HTML.
 5. Exercise every interactive surface, empty state, held state, export, and
    breakpoint in a running app. HTTP 200 alone is not semantic health.
 6. Run an independent diff review for R correctness, science, JS, charts,

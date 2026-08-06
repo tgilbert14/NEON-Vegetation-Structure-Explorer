@@ -108,6 +108,10 @@ if (/lpa-trust|real tagged plants|public measurements/i.test(ui)) {
 if (!/class\s*=\s*["']lpa-skip["'][^\n]*Pick a place/.test(ui)) {
   throw new Error("in-app Living Poster must retain its single Pick a place CTA");
 }
+if (/Editorial illustration—not a field photograph or data record\./i.test(ui) ||
+    /\.lpa-art\s+figcaption\b/.test(vegStyles)) {
+  throw new Error("in-app Living Poster retains the redundant illustration badge or its dead CSS");
+}
 for (const asset of [
   "assets/vegetation-living-poster-840.webp",
   "assets/vegetation-living-poster.webp",
@@ -115,7 +119,7 @@ for (const asset of [
 ]) {
   if (!ui.includes(asset)) throw new Error(`in-app Living Poster is missing responsive art asset ${asset}`);
   // The Pages (docs/) and in-app (www/) copies must ship byte-identical art so
-  // both entrances keep the same crop, disclosure, and promise — IMAGE-PROVENANCE
+  // both entrances keep the same crop, art authority, and promise — IMAGE-PROVENANCE
   // pins them to one hash, so assert the bytes here rather than trust two copies.
   const wwwPath = `www/${asset}`;
   const docsPath = `docs/${asset}`;

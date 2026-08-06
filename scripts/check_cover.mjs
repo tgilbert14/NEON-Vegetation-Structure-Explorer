@@ -41,8 +41,15 @@ requireText(/Tagged\.[\s\S]{0,120}Measured\.[\s\S]{0,120}Still changing\./i,
   "Living Poster hook is missing");
 requireText(/Follow real trees and shrubs through years of change\./i,
   "Living Poster promise is missing");
-requireText(/Editorial illustration[^<]*(not|isn.t) a field photograph/i,
-  "generated art must be disclosed as editorial, not documentary");
+if (/Editorial illustration—not a field photograph or data record\./i.test(html) ||
+    /<figcaption\b[^>]*class=["'][^"']*art-note/i.test(html) ||
+    /\.art-note\b/.test(html)) {
+  fail("Pages poster must omit redundant illustration-badge markup and CSS");
+}
+if (/Editorial illustration—not a field photograph or data record\./i.test(shinyUi) ||
+    /tags\$figcaption\s*\(/.test(shinyUi)) {
+  fail("in-app poster must omit the redundant visible illustration badge");
+}
 requireText(/42 places/i, "cover must state its 42-place scope");
 requireText(/DP1\.10098\.001/i, "cover must identify the source data product");
 requireText(/Driver Cascade/i, "cover must identify the suite ambassador");

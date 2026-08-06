@@ -31,7 +31,8 @@ publication remains in the Pass 4 closeout workflow.
    a three-beat hook, one plain promise, and one invitation. Detailed method and
    caveats stay below the first screen.
 2. Generated art must look openly editorial, not like documentary evidence. Put
-   the disclosure beside the image and keep facts in live HTML.
+   that status in meaningful alt text and durable provenance without spending
+   poster space on a redundant badge; keep scientific facts and limits in live HTML.
 3. Desktop hero art and the 1200×630 social card are different compositions and
    need separate receipts.
 4. Non-scientist navigation should begin with questions: what stands here, how
