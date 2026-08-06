@@ -77,8 +77,9 @@ receipts, and test state before changing release bytes.
    readiness, export inspection, and desktop plus 390/375/361/360/320 public QA.
    HTTP 200 alone is not health.
 9. Cover and social art are separate tested surfaces. Keep art local, responsive,
-   accessible, provenance-aware, openly illustrative, and compose the social
-   card at exactly 1200×630.
+   accessible, provenance-aware, and openly illustrative through its treatment,
+   meaningful alt text, and durable receipt—not an ornamental cover badge. Compose
+   the social card at exactly 1200×630.
 
 ## Durable closeout and suite learning
 

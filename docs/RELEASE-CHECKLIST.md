@@ -73,7 +73,8 @@ box only with an attached exact receipt.
 ## Cover and interaction
 
 - [x] Living Poster hook/promise/CTA remain brief and legible.
-- [x] Generated illustration disclosure, alt text, source, and checksum verified.
+- [x] Generated illustration alt text, durable provenance, absence of an ornamental
+      art badge, source, and checksum verified.
 - [x] Separate 1200×630 social composition is nonblank and metadata-complete.
 - [x] Exact #58 at 390/375/361/360/320 has zero horizontal overflow, visible
       H1/CTA/Quick tour/picker, and no visible error or disconnect; loaded BART

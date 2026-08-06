@@ -20,8 +20,8 @@
 The generated source was copied without alteration to the canonical PNG cover
 and app asset locations. Responsive WebP delivery variants were mechanically
 encoded from that same PNG; the 840-pixel variant was resized with Lanczos
-resampling. Text, measurements, and disclosures remain live HTML rather than
-generated marks.
+resampling. Text, measurements, and scientific claim limits remain live HTML
+rather than generated marks.
 
 ## Files and checksums
 
@@ -45,8 +45,8 @@ was verified after rendering.
 
 - Hero alt: “Editorial screenprint of a tagged tree with a diameter tape at
   breast height and a smaller shrub measured at its base.”
-- The adjacent disclosure states that the illustration is not a field photograph
-  or data record.
+- Meaningful alt text and this durable receipt carry the image's editorial-art
+  status; the cover intentionally has no separate illustration badge.
 - Social alt describes the tagged tree/diameter-tape illustration and Living
   Poster hook.
 - The image contains no embedded scientific value. Scope, method, support,

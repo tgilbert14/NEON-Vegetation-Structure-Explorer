@@ -918,3 +918,108 @@ The detailed checklist is [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). In brief
 6. semantic app/site readiness, inspected exports, and desktop plus
    390/375/361/360/320 public QA;
 7. app-local and central Driver/suite handoff with an explicit disposition.
+
+### 2026-08-05 19:31 MST - visible illustration-badge removal candidate / [Codex]
+
+**Outcome: IMPLEMENTED LOCALLY / STATIC + PAGES RESPONSIVE PASS / PINNED DERIVED
+BYTES PENDING / NO SCIENCE OR DRIVER DATA BYTE CHANGE.**
+
+- **Source/scope:** isolated branch `codex/remove-visible-art-badge` starts at
+  GitHub-verified default `main`
+  `d2b7ef08ee24c6a6378596271d89de7ac47210d4`. Removed only the visible Pages and
+  in-app illustration `figcaption` plus dead `.art-note` / `.lpa-art figcaption`
+  styling. Hook, promise, CTA, all responsive image bytes and hashes, descriptive
+  alt text, provenance, 42-place/DPID framing, sampled-plot honesty, slow-structure
+  limits, source family, estimators, exports, and Driver `HOLD / CONTEXT ONLY`
+  disposition are unchanged. Historical release receipts above remain untouched.
+- **Executable policy:** `check_cover.mjs` and `check_browser_contracts.mjs` now
+  fail if the badge sentence, markup, or CSS returns on either entry surface.
+  Current AGENTS, provenance, release checklist, suite handoff, and app playbook
+  carry editorial-art status through visible styling, meaningful alt text, and
+  durable provenance while keeping scientific limits in live HTML.
+- **Static/local results (PASS):** all 26 R files parsed under local R 4.5.3;
+  JavaScript syntax, `check_cover.mjs`, `check_browser_contracts.mjs`, the Python
+  inspector help path, `check_source_family.sh` (42 sites; SHA-256
+  `3e62514de12b0d7b11cbe8aa53dde76d9f05f65c0174418a3df64e1261a88ffb`),
+  `test_build_script_portability.R`, and `git diff --check` passed. The local
+  library lacks `dplyr`, so the bundle/helper/parity/runtime/offline ladder remains
+  pinned-validator evidence only.
+- **Focused visual/accessibility result (PASS):** read-only local Pages renders at
+  1280×900, 390×844, and 320×720 retained the approved crop, art-first compact
+  order, unchanged alt, zero badge nodes, 52 px CTA inside the first viewport, root
+  client/scroll equality of 375/375 and 305/305, and no console warning/error.
+  Keyboard order is Skip → Driver → CTA with a 3 px visible outline. This is not an
+  in-app or public deployment receipt.
+- **Expected manifest gate (BLOCKED pending pinned regeneration):**
+  `Rscript --vanilla scripts/verify_manifest.R` failed closed on exactly `ui.R`
+  and `www/veg.css`. Their committed/new MD5 values are
+  `c6c8badbe5b7f1bdd11666a9f8d20f45` →
+  `bfd3b2824d031063bd49cd0a6b00e525` and
+  `155fdbf086b04639384d328edcb92b7b` →
+  `f2a839a2998e28feb758c9a546de97ac`. Do not hand-edit either derived file or use
+  the noncanonical local runtime.
+- **Exact derived-byte route:** after pushing the source commit to a non-`main`
+  review branch, dispatch **`Regenerate derived bytes (manual)`** on that branch
+  (no custom inputs). The pinned Ubuntu 22.04/R 4.5.2 validator regenerates both
+  `data/search_index.rds` and `manifest.json` twice, uploads
+  `vegetation-derived-promotion-<source-sha>`, and the restricted publisher commits
+  only the verified artifact if the branch is still the exact source SHA. Ordinary
+  CI separately uploads `vegetation-structure-derived-<source-sha>-<run-id>`.
+- **Post-merge publication/health route:** Connect content
+  `019ee110-8fd3-abae-aee3-02ea8e4274c8` is git-backed to watched `main`; a reviewed
+  merge is the automatic Connect publication trigger, with signed-in Connect UI
+  republish only if the deployed revision lags. Unlike Small Mammal and Ground
+  Beetle, this exact default contains **no** `post-deploy` workflow, smoke script,
+  or `ddl-app-ready` marker. The current semantic production gate is therefore the
+  documented manual signed-in app/site interaction plus separate browser and
+  Connect worker-log review. That gap must not be represented as automated health.
+- **Writes/cleanup/residual risk:** no push, PR, workflow dispatch, derived-byte
+  promotion, manifest/index edit, Connect action, Pages deployment, production
+  probe, bundle/science change, or Driver write occurred. Temporary preview server
+  and browser tab were closed. Exact manifest/search bytes, complete pinned R
+  contracts, in-app runtime geometry, merge/Connect identities, and semantic public
+  health remain unclaimed.
+- **Next action:** commit this source candidate locally. When publication is
+  authorized, push to a review branch, dispatch the exact derived-byte workflow,
+  inspect its bot direct child and unchanged search index, require literal-head CI,
+  merge intentionally, then confirm the exact Connect revision and complete the
+  manual app/site, logs, export, and 1280/390/320 production sweep.
+
+### 2026-08-05 19:50 MST - bslib moving-repository repair / [Codex]
+
+- **Failed-run evidence (FAIL, production unchanged):** manual **Regenerate
+  derived bytes (manual)** run
+  [`31066393645`](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/31066393645),
+  generate job
+  [`92504894967`](https://github.com/tgilbert14/NEON-Vegetation-Structure-Explorer/actions/runs/31066393645/job/92504894967),
+  passed every prior dispatch, checkout, pinned-R, dependency-setup, and source
+  gate. Manifest generation then failed closed because the versionless `bslib`
+  request resolved `0.12.0` from moving repository `https://cran.rstudio.com`;
+  committed `manifest.json` records reviewed `bslib` `0.11.0` from the dated Jammy
+  snapshot.
+- **Root cause and repair:** the PR/push CI `release_contracts`, official refresh
+  `build_candidate`, and manual derived regeneration `generate` dependency lanes
+  all left `bslib` versionless. Each now requests `bslib@0.11.0`, and each rolls
+  `vegetation-geo-closure-v4` → `vegetation-geo-closure-v5`, preventing restoration
+  of the stale/moving closure. The fetch-only refresh job is not a manifest producer,
+  has no `bslib`, and correctly retains its independent fetch cache.
+- **Provenance boundary:** the moving-repository gate in
+  `scripts/write_manifest.R`, the independent R verifier, and the external Python
+  inspector are unchanged. This repair changes what the pinned validator installs;
+  it does not relabel a generated package or weaken any provenance check.
+- **Local result (PASS):** Ruby/Psych parsed CI, refresh, and manual-regeneration
+  workflows; an independent exact-count audit proved one `bslib@0.11.0` and one
+  `vegetation-geo-closure-v5` per manifest-producing lane; cover/browser contracts,
+  the 42-site source-family check, refresh/build portability, and
+  `git diff --check` passed. The local macOS/R 4.5.3 library lacks `dplyr`, so no
+  authoritative Ubuntu 22.04/R 4.5.2 derived-byte or bundle PASS is claimed.
+- **Writes/classification:** three workflow inputs plus this append-only receipt;
+  classification `suite-platform / release determinism`. No app/science/source/
+  search/manifest/Driver byte, push, dispatch, restricted publisher, Connect,
+  Pages, or production state changed.
+- **Next action:** commit this repair locally, then push only when authorized and
+  redispatch **Regenerate derived bytes (manual)** from the exact new review head.
+  Treat the rolled cache as a cold closure; require generated `bslib` `0.11.0` with
+  dated snapshot provenance and no moving `RemoteRepos`, verify the unchanged
+  search-index bytes, inspect the immutable artifact/direct-child bot commit, and
+  require literal-head CI before merge.
