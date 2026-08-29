@@ -1372,7 +1372,7 @@ server <- function(input, output, session) {
     if (is.null(lb) || !nrow(lb)) {
       ctr <- if (!is.null(rv$plots) && nrow(rv$plots))
         c(stats::median(rv$plots$lng, na.rm = TRUE), stats::median(rv$plots$lat, na.rm = TRUE)) else c(-98, 39)
-      return(leaflet::leaflet() %>% leaflet::addProviderTiles("CartoDB.Positron") %>%
+      return(leaflet::leaflet() %>% add_suite_basemap("CartoDB.Positron") %>%
         leaflet::setView(ctr[1], ctr[2], zoom = if (all(is.finite(ctr))) 9 else 4) %>%
         leaflet::addControl("No supported, matched plot-event summary is available to map. This is held—not zero.", position = "topright"))
     }
@@ -1395,7 +1395,7 @@ server <- function(input, output, session) {
     lb$ba_label <- ifelse(is.finite(lb$ba_ha), sprintf("%.1f", lb$ba_ha), "held / unsupported")
     lb$density_label <- ifelse(is.finite(lb$density_ha), format(round(lb$density_ha), big.mark = ",", scientific = FALSE), "held")
     lb$taxa_label <- ifelse(is.finite(lb$n_taxa), format(round(lb$n_taxa), big.mark = ",", scientific = FALSE), "—")
-    leaflet::leaflet(lb) %>% leaflet::addProviderTiles(input$view %||% "CartoDB.Positron") %>%
+    leaflet::leaflet(lb) %>% add_suite_basemap(input$view %||% "CartoDB.Positron") %>%
       leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = ~radius, fillColor = ~pal(val),
         color = "#fff", weight = 1, fillOpacity = 0.85, layerId = ~plotID,
         label = ~lapply(sprintf("<b>%s</b><br>%s m²/ha · %s stems/ha · %s recorded taxa", short_plot(plotID),
