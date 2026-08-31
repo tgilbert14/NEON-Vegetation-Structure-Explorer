@@ -85,7 +85,7 @@ mapPickerServer <- function(id, site_table, radius_metric, color_fn, label_fn,
         )
       )
       map <- leaflet::leaflet(st, options = leaflet::leafletOptions(minZoom = 2, worldCopyJump = TRUE)) %>%
-        leaflet::addProviderTiles("CartoDB.Positron", options = leaflet::providerTileOptions(noWrap = TRUE)) %>%
+        add_suite_basemap("light_all", noWrap = TRUE) %>%  # keyed CARTO Positron (global.R helper; CARTO watermarks unkeyed tiles)
         leaflet::setView(lng = -96, lat = 41, zoom = 4) %>%
         leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, layerId = ~site,
           radius = hit_radius, stroke = FALSE, color = "transparent", weight = 0,
