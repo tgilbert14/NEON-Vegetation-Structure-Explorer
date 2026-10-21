@@ -131,4 +131,86 @@ qcb <- qc_dictionary(qc_fixture)
 check(isTRUE(assert_qc_dictionary(qcb, qc_fixture)),
       "QC dictionary covers emitted receipt and evidence fields")
 
+# ---------------------------------------------------------------------------
+# REGRESSION (suite audit 2026-10-18, VEG-01): shared size-plausibility screen.
+# Rows are kept; implausible ones leave only the size extremes and raise a
+# warn-level size_spike flag.
+# ---------------------------------------------------------------------------
+cat("\n################  REGRESSION: size-plausibility screen  ################\n")
+size_fx <- data.frame(
+  plotID = c(rep("TALL_011", 3), rep("BART_001", 3), rep("HARV_002", 3), "WREF_001", "PLAN_001", "YELL_001", "SRER_001", "SRER_001"),
+  individualID = c(rep("NEON.PLA.D08.TALL.01932", 3), rep("NEON.PLA.D01.BART.05414", 3),
+                   rep("NEON.PLA.D01.HARV.01179", 3), "W1", "P1", "Y1", "S1", "S1"),
+  eventID = c("e2015", "e2020", "e2023", "e2016", "e2017", "e2018", "e2014", "e2015", "e2019",
+              "e2019", "e2019", "e2021", "e2019", "e2024"),
+  growthForm = c(rep("single bole tree", 11), "sapling", "single shrub", "single shrub"),
+  plantStatus = c(rep("Live", 6), "Live", "Dead, broken bole", "Dead, broken bole",
+                  "Live", "Live", "Live", "Live", "Live"),
+  height = c(8.9, 85.6, 11.3, 18.3, 119.8, 18.8, 16.0, 1.8, 1.7, 70.0, 25.0, 30.0, 7.0, 7.4),
+  stemDiameter = c(11.0, 11.4, 11.8, 22.1, 22.5, 22.6, 29.4, 28.1, 28.8, 150, 12, NA, NA, NA),
+  basalStemDiameter = c(rep(NA, 11), 1.4, 71.2, 73.5),
+  stringsAsFactors = FALSE)
+size_fx$live <- grepl("^Live", size_fx$plantStatus)
+size_fx$year <- as.integer(sub("^e", "", size_fx$eventID))
+size_fx$date <- as.Date(paste0(size_fx$year, "-06-01"))
+sc <- vst_size_screen(size_fx)
+check(identical(sc$size_plausible[1:3], c(TRUE, FALSE, TRUE)),
+      "TALL.01932 85.6 m on an 11.4 cm oak fails; its 8.9 m and 11.3 m events pass")
+check(grepl("height spike", sc$size_screen_reason[2]) && grepl("ratio", sc$size_screen_reason[2]),
+      "the 85.6 m record names both the spike and the height-to-DBH rule")
+check(!sc$size_plausible[5] && grepl("above 100 m", sc$size_screen_reason[5]),
+      "BART 119.8 m fails the 100 m cap")
+check(all(sc$size_plausible[7:9]),
+      "a live 16 m tree that later snaps to a 1.8 m broken bole is not a height spike")
+check(sc$size_plausible[10], "a 70 m tree on a 150 cm DBH (WREF Douglas-fir scale) passes")
+check(sc$size_plausible[11], "a 25 m plantation conifer on a 12 cm DBH (ratio 2.08) passes")
+check(!sc$size_plausible[12], "a 30 m sapling on a 1.4 cm basal diameter fails the shrub rule")
+check(all(sc$size_plausible[13:14]), "a stable 71-74 cm desert shrub basal diameter passes")
+size_fx$size_plausible <- sc$size_plausible
+check(identical(smax(size_screened(size_fx[size_fx$plotID == "TALL_011", ])$height), 11.3),
+      "size extremes skip the flagged record")
+check(nrow(size_screened(size_fx)) == sum(sc$size_plausible) && nrow(size_fx) == 14L,
+      "the screen never drops rows from the source table")
+size_rows <- .size_spike_rows(size_fx, SIZE_FOREST)
+check(nrow(size_rows) == 2L && setequal(size_rows$height_m, c(85.6, 119.8)),
+      "size_spike QC rows list the two tree-channel failures")
+size_q <- tree_qc_site(size_fx, SIZE_FOREST, NULL)
+check(!is.null(size_q) && any(vapply(size_q$flags, function(f) identical(f$key, "size_spike") && identical(f$level, "warn"), logical(1))),
+      "tree_qc_site raises a warn-level size_spike flag even without supported history")
+check(isTRUE(assert_qc_dictionary(qc_dictionary(size_q$report), size_q$report)),
+      "QC dictionary covers the size_spike columns")
+plant_flags <- tree_qc_flags(size_fx[size_fx$plotID == "TALL_011", ], SIZE_FOREST, NULL)
+check(any(vapply(plant_flags, function(f) identical(f$level, "warn") && grepl("2020 record \\(85.6 m, 11.4 cm\\) is out of line", f$text), logical(1))),
+      "the plant card names the 2020 record and says verify, not wrong")
+export_fx <- tidy_trees_export(cbind(size_fx, source_uid = paste0("u", seq_len(nrow(size_fx)))), NULL)
+check(all(c("size_plausible", "size_screen_reason") %in% names(export_fx)) && sum(!export_fx$size_plausible) == 3L,
+      "trees_long carries the screen result with the number")
+
+# ---------------------------------------------------------------------------
+# REGRESSION (VEG-03 part A): the mortality banner names the plot count and
+# the real hold reason; the false "needs 2 censuses" line is gone.
+# ---------------------------------------------------------------------------
+cat("\n################  REGRESSION: mortality reason copy  ################\n")
+mort_plots <- data.frame(
+  plotID = c("SRER_001", "SRER_001", "SRER_002", "SRER_003"),
+  eventID = c("e2016", "e2021", "e2019", "e2024"),
+  date = as.Date(c("2016-05-01", "2021-05-01", "2019-05-01", "2024-05-01")),
+  year = c(2016L, 2021L, 2019L, 2024L),
+  shrub_records = c(12L, 10L, 8L, 9L),
+  shrub_support = c("held_opportunity_unknown", "sampled_with_records", "held_opportunity_unknown", "held_identity_conflict"),
+  shrub_support_reason = c("samplingImpractical is missing", "supported", "samplingImpractical is missing", "conflict"),
+  stringsAsFactors = FALSE)
+why <- mortality_unavailable_reason(NULL, SIZE_SHRUB, mort_plots, "SRER")
+cat("  ", why, "\n")
+check(grepl("no plot at SRER has two supported censuses in this channel \\(1 plot has one\\)", why),
+      "mortality reason states the supported plot count")
+check(grepl("2 earlier record-bearing plot-censuses \\(2016-2019\\) are held, not zero, because NEON did not record samplingImpractical before March 2020", why),
+      "mortality reason names the pre-2020 samplingImpractical hold and its years")
+check(grepl("1 other record-bearing plot-census is held \\(identity conflict\\)", why),
+      "mortality reason counts the other holds")
+check(!grepl("needs \u22652 censuses|\u2014", why), "no false 'needs 2 censuses' line and no em dash")
+scope <- mortality_scope_note(list(n_plots = 2L, yr0 = 2020L, yr1 = 2024L, lo = NA_real_), mort_plots, SIZE_SHRUB)
+check(grepl("From 2 plots, 2020-2024\\. No interval: fewer than three plots\\.", scope),
+      "a reported rate carries its plot count, window and the withheld-interval reason")
+
 cat("\nALL TESTS PASSED\n")

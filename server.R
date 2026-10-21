@@ -186,6 +186,9 @@ server <- function(input, output, session) {
       return(invisible(FALSE))
     }
     b$trees$.plant_key <- plant_key_vec(b$trees)
+    # Shared size screen over each plant's full history (R/size_plausibility.R).
+    # Rows that fail stay in every summary; only the size extremes skip them.
+    b$trees <- with_size_screen(b$trees)
     selected_channel <- .veg_scalar_chr(requested_channel)
     if (is.na(selected_channel) || !selected_channel %in% available_channels) {
       selected_channel <- .veg_scalar_chr(b$meta$primary_channel)
@@ -487,8 +490,8 @@ server <- function(input, output, session) {
     sp <- SP(); shrub <- identical(sp$type, "shrubland")
     live_snap <- woody_only(live_only(snap), sp)
     woody_sp <- species_level_only(woody_only(one, sp))            # stand species
-    tallest <- smax(live_snap$height)
-    biggest <- smax(woody_only(live_snap, sp)[[sp$col]])
+    tallest <- smax(size_screened(live_snap)$height)
+    biggest <- smax(woody_only(size_screened(live_snap), sp)[[sp$col]])
     thresh  <- if (shrub) "(any basal stem diameter)" else "≥ 10 cm DBH (the protocol tree threshold)"
     hero <- function(v, l, suf = "", icon, tone, ttl = NULL, click = NULL) {
       attrs <- list(class = paste0("hero-stat hero-", tone, if (!is.null(click)) " hero-click" else ""), title = ttl)
@@ -519,7 +522,7 @@ server <- function(input, output, session) {
         hero(if (supported) dplyr::n_distinct(woody_sp$scientificName) else "—", "identified species", icon = "diagram-3", tone = "sky",
              ttl = sprintf("Identified species among live %s %s. Tap to inspect measured taxon contribution within this channel.", sp$nouns, thresh), click = if (nrow(woody_sp)) "species" else NULL),
         hero(if (is.finite(tallest)) round(tallest, 1) else "—", "m tallest", icon = "arrows-vertical", tone = "gold",
-             ttl = sprintf("Tallest live %s at the site.", sp$noun)),
+             ttl = sprintf("Tallest live %s at the site, among records that pass the size screen (an entry out of line with the plant's own records is flagged in Data quality, not shown here).", sp$noun)),
         hero(if (is.finite(biggest)) round(biggest, 1) else "—", paste0("cm biggest ", sp$size_lab), icon = "circle", tone = "bark",
              ttl = sprintf("Largest live %s by %s. Tap to see the biggest.", sp$noun, sp$size_full), click = if (is.finite(biggest)) "biggest" else NULL)))
   })
@@ -605,7 +608,8 @@ server <- function(input, output, session) {
   output$siteInsights <- renderUI({
     snap <- rv$snap; one <- rv$one; req(snap, one); sp <- SP()
     st <- stand_site(snap, rv$plots, sp); g <- tree_growth(rv$trees, sp, rv$plots); ss <- species_structure(snap, rv$plots, sp)
-    one_d <- one[is.finite(one[[sp$col]]), ]; one_h <- one[is.finite(one$height), ]
+    one_s <- size_screened(one)
+    one_d <- one_s[is.finite(one_s[[sp$col]]), ]; one_h <- one_s[is.finite(one_s$height), ]
     big  <- if (nrow(one_d)) one_d[which.max(one_d[[sp$col]]), ] else one[0, ]
     tall <- if (nrow(one_h)) one_h[which.max(one_h$height), ]      else one[0, ]
     pts <- c()
@@ -851,13 +855,16 @@ server <- function(input, output, session) {
   # compound ANNUAL mortality rate (distinct from the snapshot pie)
   output$mortalityBanner <- renderUI({
     sp <- SP(); mr <- stand_mortality(rv$trees, sp, rv$plots)
+    site <- rv$site %||% "this site"
     if (is.null(mr)) return(insight_banner("info-circle", tone = "navy",
-      HTML("<b>Annual mortality:</b> needs ≥2 censuses of a big-enough cohort, not estimable here yet, so only the live/standing-dead snapshot below is shown.")))
+      HTML(paste0("<b>", htmltools::htmlEscape(mortality_unavailable_reason(rv$trees, sp, rv$plots, site)),
+                  "</b> The live and standing-dead snapshot below is shown instead."))))
     ci <- if (is.finite(mr$lo) && is.finite(mr$hi))
       sprintf(" (95%% plot-cluster jackknife interval %s–%s)", fmt_num(mr$lo, 2), fmt_num(mr$hi, 2)) else ""
     insight_banner("heart-pulse", tone = "pine",
-      HTML(sprintf("Descriptive compound <b>annual cohort mortality ≈ <span class='ci-hero'>%s%%/yr</span></b>%s. <b>%s</b> of <b>%s</b> trackable plants transitioned from any-live to all-dead over a mean ~%s-year interval; lost/unknown fates are censored. The breakdown below is a separate point-in-time snapshot.",
-        fmt_num(mr$rate_pct, 2), ci, fmt_count(mr$deaths), fmt_count(mr$n0), fmt_num(mr$t_yrs, 1))))
+      HTML(sprintf("Descriptive compound <b>annual cohort mortality ≈ <span class='ci-hero'>%s%%/yr</span></b>%s. <b>%s</b> of <b>%s</b> trackable plants transitioned from any-live to all-dead over a mean ~%s-year interval; lost/unknown fates are censored.%s The breakdown below is a separate point-in-time snapshot.",
+        fmt_num(mr$rate_pct, 2), ci, fmt_count(mr$deaths), fmt_count(mr$n0), fmt_num(mr$t_yrs, 1),
+        htmltools::htmlEscape(mortality_scope_note(mr, rv$plots, sp)))))
   })
 
   # ---- SITE DATA-QUALITY scan (clickable inspector + downloadable report) -
@@ -1260,9 +1267,12 @@ server <- function(input, output, session) {
       tl <- tidy_trees_export(rv$trees, rv$meta)
       pl <- active_plots_export()
       contexts <- with_export_receipt(as.data.frame(rv$plots, stringsAsFactors = FALSE), rv$meta)
-      opportunity_source <- with_export_receipt(
-        as.data.frame(rv$bundle$opportunity_source, stringsAsFactors = FALSE), rv$meta
-      )
+      # measuredBy/recordedBy name NEON field staff; the app never uses them and
+      # does not republish them. Drop them here, whatever the bundle carries.
+      opportunity_source <- as.data.frame(rv$bundle$opportunity_source, stringsAsFactors = FALSE)
+      opportunity_source <- opportunity_source[
+        , setdiff(names(opportunity_source), c("measuredBy", "recordedBy")), drop = FALSE]
+      opportunity_source <- with_export_receipt(opportunity_source, rv$meta)
       exports <- list(trees_long = tl, plot_summary_latest = pl,
                       plot_event_contexts_all = contexts,
                       plot_opportunity_source = opportunity_source)
@@ -1497,7 +1507,7 @@ server <- function(input, output, session) {
                  value = b$events, unit = "events", stringsAsFactors = FALSE)
     } else {
       col <- if (identical(metric, "tallest")) "height" else sp$col
-      d <- one[is.finite(one[[col]]), ]; if (identical(metric, "biggest")) d <- woody_only(d, sp)
+      d <- size_screened(one); d <- d[is.finite(d[[col]]), ]; if (identical(metric, "biggest")) d <- woody_only(d, sp)
       if (!nrow(d)) return(NULL); d <- d[order(-d[[col]]), ]
       data.frame(id = plant_key_vec(d), tree = short_tree(d$individualID), species = d$scientificName,
                  value = round(d[[col]], 1), unit = if (identical(metric, "tallest")) "m" else paste0("cm ", sp$size_lab),
@@ -1546,14 +1556,16 @@ server <- function(input, output, session) {
         !identical(.veg_scalar_chr(b$contract$index$site$support_status), "supported_sampled_context") ||
         !(.veg_scalar_chr(b$meta$primary_channel) %in% c("tree_dbh", "shrub_sapling_basal"))) return(NULL)
     spc <- size_spec(b$meta$primary_channel)
+    b$trees <- with_size_screen(b$trees)
     snap <- tree_snapshot(b$trees, b$plots, spc)
     st <- stand_site(snap, b$plots, spc)
     active <- woody_only(live_only(snap), spc)
+    active_sized <- size_screened(active)
     one <- one_per_tree(active, spc); woody_sp <- species_level_only(one)
     list(site = site, st = st, channel = spc$channel, channel_label = spc$channel_label, size_lab = spc$size_lab,
          n_species = dplyr::n_distinct(woody_sp$scientificName),
-         tallest = round(smax(active$height), 1),
-         biggest = round(smax(active[[spc$col]]), 1))
+         tallest = round(smax(active_sized$height), 1),
+         biggest = round(smax(active_sized[[spc$col]]), 1))
   }
   observeEvent(input$compareBtn, {
     sites <- stats::setNames(site_table$site, sprintf("%s · %s", site_table$site, site_table$name))

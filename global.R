@@ -53,6 +53,7 @@ add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
 }
 
 source("R/site_metadata.R", local = FALSE)
+source("R/size_plausibility.R", local = FALSE)   # shared size screen (also used by the bundle builder)
 source("R/veg_helpers.R", local = FALSE)
 source("R/report_pdf.R", local = FALSE)
 source("R/map_picker.R", local = FALSE)   # reusable national site-picker map (flagship front door)
