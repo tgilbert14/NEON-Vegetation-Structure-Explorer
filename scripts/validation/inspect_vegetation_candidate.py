@@ -44,7 +44,7 @@ CHANNELS: Tuple[str, ...] = ("tree_dbh", "shrub_sapling_basal")
 PRODUCT = "DP1.10098.001"
 RELEASE = "RELEASE-2026"
 RELEASE_DOI = "https://doi.org/10.48443/pypa-qf12"
-CONTRACT_ID = "NEON-VST-DP1.10098.001-v2"
+CONTRACT_ID = "NEON-VST-DP1.10098.001-v3"
 AUDIT_SCHEMA = "NEON-VST-data-quality-audit-v2"
 SOURCE_NORMALIZATION = "portable-vectors+published-uid-byte-order-v1"
 PINNED_REPOSITORY = (
@@ -705,7 +705,7 @@ def parse_audit(path: Path, receipt: Mapping[str, str]) -> Tuple[List[Dict[str, 
                 f"audit row {index} schema mismatch")
         require(raw["contract_id"] == CONTRACT_ID,
                 f"audit row {index} contract mismatch")
-        require(raw["contract_version"] == "2",
+        require(raw["contract_version"] == "3",
                 f"audit row {index} contract version mismatch")
         require(raw["product"] == PRODUCT, f"audit row {index} product mismatch")
         require(raw["source_release"] == RELEASE,
@@ -1323,8 +1323,8 @@ def audit_candidate(root: Path) -> Dict[str, Any]:
     del rows
     manifest_summary = validate_manifest(root / "manifest.json", root, hashes)
 
-    require(hashes.file("data-sample/demo.rds") == hashes.file("data/sites/HARV.rds"),
-            "demo.rds is not byte-identical to the HARV runtime bundle")
+    require(hashes.file("data-sample/demo.rds") == hashes.file("data/sites/SRER.rds"),
+            "demo.rds is not byte-identical to the SRER runtime bundle")
 
     return {
         "ok": True,

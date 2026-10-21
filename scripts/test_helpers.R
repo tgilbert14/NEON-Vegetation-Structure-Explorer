@@ -249,4 +249,24 @@ scope <- mortality_scope_note(list(n_plots = 2L, yr0 = 2020L, yr1 = 2024L, lo = 
 check(grepl("From 2 plots, 2020-2024\\. No interval: fewer than three plots\\.", scope),
       "a reported rate carries its plot count, window and the withheld-interval reason")
 
+# ---------------------------------------------------------------------------
+# REGRESSION (contract v3, Option A): lettered secondary boles under 10 cm no
+# longer hold their plot-event, but stay out of every tree-channel estimand.
+# ---------------------------------------------------------------------------
+cat("\n################  REGRESSION: contract v3 Option A estimands  ################\n")
+oa <- data.frame(plotID = "GUAN_002",
+  eventID = rep(c("E20", "E23"), each = 4),
+  individualID = rep(c("NEON.PLA.D04.GUAN.01946", "NEON.PLA.D04.GUAN.01946A",
+                       "NEON.PLA.D04.GUAN.01946B", "NEON.PLA.D04.GUAN.01946C"), 2),
+  growthForm = "multi-bole tree",
+  plantStatus = c("Live", "Live", "Live", "Live", "Live", "Live", "Standing dead", "Live"),
+  stemDiameter = c(13.8, 8.9, 8.5, 10.2, 14.1, 9.1, 8.7, 10.6), stringsAsFactors = FALSE)
+kept <- .option_a_tree_rows(oa, SIZE_FOREST)
+check(setequal(unique(kept$individualID), c("NEON.PLA.D04.GUAN.01946", "NEON.PLA.D04.GUAN.01946C")) && nrow(kept) == 4L,
+      "Option A keeps the main bole and secondary boles >= 10 cm, and drops secondary boles under 10 cm")
+check(identical(.option_a_tree_rows(oa, SIZE_SHRUB), oa), "the shrub channel is untouched by the tree-class rule")
+oa_status <- status_summary(oa[oa$eventID == "E23", ], SIZE_FOREST)
+check(sum(oa_status$n) == 2L,
+      "the status snapshot counts the parent and its 10.6 cm bole, not the dead 8.7 cm or live 9.1 cm boles")
+
 cat("\nALL TESTS PASSED\n")

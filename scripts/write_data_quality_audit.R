@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Write a deterministic, human-inspectable quality audit for the exact v2
+# Write a deterministic, human-inspectable quality audit for the exact v3
 # Vegetation Structure release candidate. This script reports published
 # qualifiers; it does not use dataQF, tagStatus, or changedMeasurementLocation
 # as blanket row-exclusion rules.
@@ -8,7 +8,7 @@
 suppressPackageStartupMessages(library(jsonlite))
 source("scripts/vegetation_inventory.R", local = TRUE)
 
-VST_DQA_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VST_DQA_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 VST_DQA_SCHEMA <- "NEON-VST-data-quality-audit-v2"
 VST_DQA_PRODUCT <- "DP1.10098.001"
 VST_DQA_RELEASE <- "RELEASE-2026"
@@ -372,13 +372,13 @@ vst_dqa_validate_receipt <- function(bundle, site) {
   contract_id <- vst_dqa_scalar(bundle$meta$contract_id %||% NULL,
                                 paste0(site, " meta contract_id"))
   if (!identical(contract_id, VST_DQA_CONTRACT_ID)) {
-    stop(site, " is not an exact v2 bundle", call. = FALSE)
+    stop(site, " is not an exact v3 bundle", call. = FALSE)
   }
   contract <- bundle$contract %||% NULL
   if (!is.list(contract) ||
       !identical(as.character(contract$id %||% ""), VST_DQA_CONTRACT_ID) ||
-      !identical(as.integer(contract$version %||% NA_integer_), 2L)) {
-    stop(site, " lacks the exact embedded v2 contract", call. = FALSE)
+      !identical(as.integer(contract$version %||% NA_integer_), 3L)) {
+    stop(site, " lacks the exact embedded v3 contract", call. = FALSE)
   }
   if (!identical(as.character(contract$source_record_key %||% ""),
                  "source_uid") ||
@@ -390,7 +390,7 @@ vst_dqa_validate_receipt <- function(bundle, site) {
                  "source_record_key") ||
       !setequal(as.character(contract$support_status$held %||% character()),
                 VST_DQA_HELD)) {
-    stop(site, " embedded identity or held-status contract differs from v2",
+    stop(site, " embedded identity or held-status contract differs from v3",
          call. = FALSE)
   }
   receipt <- bundle$meta$source_receipt %||% NULL
@@ -423,7 +423,7 @@ vst_dqa_validate_receipt <- function(bundle, site) {
 vst_dqa_site_rows <- function(bundle, site) {
   if (!is.list(bundle) || !all(c("trees", "plots", "opportunity_source", "meta", "contract") %in%
                                names(bundle))) {
-    stop(site, " is not a complete v2 bundle", call. = FALSE)
+    stop(site, " is not a complete v3 bundle", call. = FALSE)
   }
   if (!is.data.frame(bundle$trees) || !is.data.frame(bundle$plots) ||
       !is.data.frame(bundle$opportunity_source) ||
@@ -739,6 +739,24 @@ vst_dqa_site_rows <- function(bundle, site) {
     metric_all <- suppressWarnings(as.numeric(trees[[spec$metric]]))
     valid_metric_all <- is.finite(metric_all) & metric_all > 0 &
       metric_all >= spec$minimum
+    if (identical(channel, "tree_dbh")) {
+      # Contract v3 multi-bole rule (NEON.DOC.000987 Table 8), recomputed
+      # independently: a lettered tree-form bole is valid at any positive DBH
+      # when its parent tag has a tree-form bole >= 10 cm in the same
+      # plotID x eventID.
+      bole_id <- as.character(trees$individualID)
+      bole_plot_event <- paste(as.character(trees$plotID),
+                               as.character(trees$eventID), sep = "\r")
+      bole_parents <- unique(paste(bole_plot_event, bole_id, sep = "\r")[
+        channel_keep & is.finite(metric_all) & metric_all >= 10
+      ])
+      secondary_ok <- channel_keep & !is.na(bole_id) &
+        grepl("[A-Za-z]$", bole_id) &
+        paste(bole_plot_event, sub("[A-Za-z]$", "", bole_id), sep = "\r") %in%
+          bole_parents
+      valid_metric_all <- valid_metric_all |
+        (secondary_ok & is.finite(metric_all) & metric_all > 0)
+    }
     expected_records <- vst_dqa_event_counts(trees, plots, channel_keep)
     expected_invalid <- vst_dqa_event_counts(
       trees, plots, channel_keep & live_all & !valid_metric_all
@@ -827,7 +845,7 @@ vst_dqa_site_rows <- function(bundle, site) {
       channel = channel,
       audit_schema = VST_DQA_SCHEMA,
       contract_id = VST_DQA_CONTRACT_ID,
-      contract_version = 2L,
+      contract_version = 3L,
       product = VST_DQA_PRODUCT,
       source_release = as.character(receipt$neon_release),
       release_doi = as.character(receipt$release_doi),

@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Positive and mutation fixtures for the deployed bundle gate. This test runs
-# only after a complete v2 candidate family has been built: it sources the same
+# only after a complete v3 candidate family has been built: it sources the same
 # global.R shipped to Connect, accepts an untouched actual bundle, and proves
 # valid-vocabulary support/status corruption cannot pass the runtime boundary.
 
@@ -13,7 +13,7 @@ assert_true <- function(value, message) {
 }
 
 assert_true(isTRUE(VEG_FAMILY_READY) && length(BUNDLED) == 42L,
-            "runtime mutation fixtures require the exact ready 42-site v2 family")
+            "runtime mutation fixtures require the exact ready 42-site v3 family")
 assert_true(identical(
   .veg_presence_state(c("Y", "Yes", "N", "No")),
   c("present", "present", "absent", "absent")

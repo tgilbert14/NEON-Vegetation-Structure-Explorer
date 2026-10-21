@@ -45,7 +45,7 @@ server <- function(input, output, session) {
                        pal = NULL, label = NULL, site = NULL, tree = NULL, ctx = NULL, is_demo = FALSE,
                        stype = NULL, spec = NULL, bundle = NULL,
                        available_channels = character(), lab_keys = character())
-  SP <- function() { req(rv$spec); rv$spec }     # exact v2 active physical channel
+  SP <- function() { req(rv$spec); rv$spec }     # exact v3 active physical channel
 
   # Site-wide source-gap evidence is intentionally separate from the active
   # physical channel. RELEASE-2026 includes measurement rows for some plot
@@ -158,7 +158,7 @@ server <- function(input, output, session) {
       return(div(class = "site-bio search-empty", role = "status", `aria-live` = "polite",
         bs_icon("exclamation-triangle-fill"),
         div(tags$b("Candidate data family on hold. "),
-          "The exact 42-site v2 contract, official source receipt, and search index do not yet agree. Derived counts, site views, and network search are unavailable—this is not evidence of zero vegetation.")))
+          "The exact 42-site v3 contract, official source receipt, and search index do not yet agree. Derived counts, site views, and network search are unavailable; this is not evidence of zero vegetation.")))
     }
     req(input$site)
     b <- site_bio(input$site)
@@ -179,7 +179,7 @@ server <- function(input, output, session) {
       session$sendCustomMessage("loadDone", list())
       if (!isTRUE(contract_check$ok)) {
         warning(sprintf("refused Vegetation bundle: %s", paste(contract_check$reason, collapse = "; ")))
-        showNotification("This site bundle is outside the exact validated v2 data family. Derived views remain on hold.", type = "warning", duration = 8)
+        showNotification("This site bundle is outside the exact validated v3 data family. Derived views remain on hold.", type = "warning", duration = 8)
       } else {
         showNotification("No supported census is available for this site; that is held—not zero.", type = "warning", duration = 8)
       }
@@ -309,7 +309,7 @@ server <- function(input, output, session) {
   observeEvent(input$browsePlaces, reset_to_places())
   observeEvent(input$searchNetworkBtn, {
     if (!isTRUE(VEG_FAMILY_READY)) {
-      showNotification("Network search is held until the exact v2 site and search indexes agree.", type = "warning", duration = 8)
+      showNotification("Network search is held until the exact v3 site and search indexes agree.", type = "warning", duration = 8)
       return()
     }
     shinyjs::hide("splash"); shinyjs::hide("treePickerWrap"); shinyjs::show("mainTabsWrap")

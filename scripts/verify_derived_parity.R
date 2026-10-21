@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Release gate for the exact 42-site v2 derived family. Support decisions are
+# Release gate for the exact 42-site v3 derived family. Support decisions are
 # independently checked by verify_bundle.R; this script then uses the deployed
 # consumer helpers to rebuild every embedded and network-facing site, channel,
 # and taxon summary from preserved rows.
@@ -22,7 +22,7 @@ bundles <- stats::setNames(lapply(sites, function(site) {
       !identical(as.character(bundle$meta$site %||% ""), site) ||
       !identical(as.character(bundle$meta$contract_id %||% ""),
                  VST_PARITY_CONTRACT_ID)) {
-    stop(site, " is not an exact v2 parity input", call. = FALSE)
+    stop(site, " is not an exact v3 parity input", call. = FALSE)
   }
   bundle
 }), sites)

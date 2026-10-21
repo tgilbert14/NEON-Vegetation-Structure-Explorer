@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Non-network release gate for the complete Vegetation Structure runtime family.
-# Legacy bytes remain diagnosable, but only the event-keyed v2 contract can be a
+# Legacy bytes remain diagnosable, but only the event-keyed v3 contract can be a
 # release candidate. The gate never turns a missing opportunity into an absence.
 
 suppressPackageStartupMessages({
@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
 source("scripts/vegetation_inventory.R")
 source("R/veg_helpers.R")
 
-VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 VST_SUPPORTED <- c("sampled_with_records", "sampled_absence")
 VST_HELD <- c(
   "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
@@ -413,8 +413,8 @@ for (path in site_files) {
   if (is_v2 && !length(missing_trees) && !length(missing_plots)) {
     contract <- bundle$contract %||% NULL
     if (!is.list(contract) || !identical(as.character(contract$id), VST_CONTRACT_ID) ||
-        !identical(as.integer(contract$version), 2L)) {
-      note(sprintf("%s lacks the exact embedded v2 contract", site))
+        !identical(as.integer(contract$version), 3L)) {
+      note(sprintf("%s lacks the exact embedded v3 contract", site))
     } else {
       if (!identical(as.character(contract$source_record_key), "source_uid") ||
           !identical(as.character(contract$mapping_source_record_key),
@@ -428,7 +428,7 @@ for (path in site_files) {
         note(sprintf("%s contract changes the opportunity-event key", site))
       if (!setequal(as.character(contract$support_status$supported), VST_SUPPORTED) ||
           !setequal(as.character(contract$support_status$held), VST_HELD))
-        note(sprintf("%s contract support vocabulary differs from v2", site))
+        note(sprintf("%s contract support vocabulary differs from v3", site))
       embedded_site <- contract$index$site %||% NULL
       if (!is.data.frame(embedded_site) || nrow(embedded_site) != 1L ||
           !identical(as.character(embedded_site$site), site) ||
@@ -650,6 +650,19 @@ for (path in site_files) {
       c("single shrub", "small shrub", "sapling")
     tree_diameter <- suppressWarnings(as.numeric(trees$stemDiameter))
     shrub_diameter <- suppressWarnings(as.numeric(trees$basalStemDiameter))
+    # Contract v3 multi-bole rule (NEON.DOC.000987 Table 8), recomputed here
+    # from preserved rows: a lettered tree-form bole is valid at any positive
+    # DBH when its parent tag has a tree-form bole >= 10 cm in the same
+    # plotID x eventID.
+    bole_id <- as.character(trees$individualID)
+    bole_plot_event <- paste(as.character(trees$plotID), as.character(trees$eventID),
+                             sep = "\r")
+    bole_parents <- unique(paste(bole_plot_event, bole_id, sep = "\r")[
+      tree_form & is.finite(tree_diameter) & tree_diameter >= 10
+    ])
+    secondary_bole_ok <- tree_form & !is.na(bole_id) & grepl("[A-Za-z]$", bole_id) &
+      paste(bole_plot_event, sub("[A-Za-z]$", "", bole_id), sep = "\r") %in%
+        bole_parents
     live <- grepl(
       "^live", trimws(as.character(trees$plantStatus)), ignore.case = TRUE
     )
@@ -658,8 +671,9 @@ for (path in site_files) {
         records = event_counts(trees, plots, tree_form),
         invalid = event_counts(
           trees, plots,
-          tree_form & live & !(is.finite(tree_diameter) & tree_diameter > 0 &
-                               tree_diameter >= 10)
+          tree_form & live &
+            !((is.finite(tree_diameter) & tree_diameter > 0 & tree_diameter >= 10) |
+              (secondary_bole_ok & is.finite(tree_diameter) & tree_diameter > 0))
         ),
         identity_conflicts = identity_conflict_counts(trees, plots, tree_form),
         presence = presence_state(plots$treesPresent)
@@ -788,9 +802,9 @@ receipt_count <- sum(vapply(receipts, Negate(is.null), logical(1)))
 common_receipt <- NULL
 if (length(v2_sites)) {
   if (!identical(sort(v2_sites), expected))
-    note(sprintf("mixed contract family: only %d/%d bundles use v2", length(v2_sites), length(expected)))
+    note(sprintf("mixed contract family: only %d/%d bundles use v3", length(v2_sites), length(expected)))
   if (receipt_count != length(expected))
-    note(sprintf("source receipt is present on only %d/%d v2 bundles", receipt_count, length(expected)))
+    note(sprintf("source receipt is present on only %d/%d v3 bundles", receipt_count, length(expected)))
   if (receipt_count == length(expected)) {
     common_receipt <- tryCatch(vst_receipts_identical(receipts), error = function(error) {
       note(conditionMessage(error)); NULL
@@ -867,9 +881,9 @@ if (!is.null(site_index)) {
     note("site_index contains duplicate sites")
   if (length(v2_sites) && "contract_id" %in% names(site_index) &&
       any(as.character(site_index$contract_id) != VST_CONTRACT_ID))
-    note("site_index contains a non-v2 contract row")
+    note("site_index contains a non-v3 contract row")
   if (length(v2_sites) && !identical(attr(site_index, "contract_id"), VST_CONTRACT_ID))
-    note("site_index contract_id attribute differs from v2")
+    note("site_index contract_id attribute differs from v3")
   if (length(v2_sites) && !length(missing)) {
     unavailable <- as.character(site_index$primary_channel) == "unavailable"
     unavailable_fields <- c(
@@ -923,7 +937,7 @@ if (!is.null(search)) {
     if (length(search$built) != 1L || !inherits(search$built, "Date") || !is.na(search$built))
       note("search_index built must be deterministic NA_Date_; build time belongs in the source receipt")
     if (length(v2_sites) && !identical(as.character(search$contract_id), VST_CONTRACT_ID))
-      note("search_index contract_id differs from v2")
+      note("search_index contract_id differs from v3")
     if (length(v2_sites) && is.data.frame(search$channel_sites)) {
       channel_required <- c(
         "site", "contract_id", "channel", "channel_label", "is_default_channel",
@@ -949,7 +963,7 @@ if (!is.null(search)) {
           note("search_index channel_sites differs from the exact site x physical-channel grid")
         }
         if (any(as.character(search$channel_sites$contract_id) != VST_CONTRACT_ID))
-          note("search_index channel_sites contains a non-v2 row")
+          note("search_index channel_sites contains a non-v3 row")
         supported_channel <- search$channel_sites$support_status ==
           "supported_sampled_context"
         if (any(supported_channel &
@@ -971,14 +985,14 @@ if (!is.null(search)) {
 }
 
 demo <- read_checked("data-sample/demo.rds")
-if (!is.null(demo) && !is.null(bundles[["HARV"]]) &&
-    !isTRUE(all.equal(demo, bundles[["HARV"]], check.attributes = TRUE)))
-  note("data-sample/demo.rds differs from the HARV runtime bundle")
+if (!is.null(demo) && !is.null(bundles[["SRER"]]) &&
+    !isTRUE(all.equal(demo, bundles[["SRER"]], check.attributes = TRUE)))
+  note("data-sample/demo.rds differs from the SRER runtime bundle")
 
 audit_path <- file.path("data/source", "vegetation-data-quality-audit.csv")
 if (length(v2_sites)) {
   if (!file.exists(audit_path)) {
-    note("v2 family lacks data/source/vegetation-data-quality-audit.csv")
+    note("v3 family lacks data/source/vegetation-data-quality-audit.csv")
   } else {
     audit_environment <- new.env(parent = globalenv())
     audit_temp <- tempfile(fileext = ".csv")
@@ -987,7 +1001,7 @@ if (length(v2_sites)) {
       expected_audit <- audit_environment$vst_build_data_quality_audit("data/sites")
       audit_environment$vst_write_data_quality_audit(expected_audit, audit_temp)
       if (!identical(read_file_bytes(audit_path), read_file_bytes(audit_temp))) {
-        note("data-quality audit differs from the deterministic 42-site v2 recomputation")
+        note("data-quality audit differs from the deterministic 42-site v3 recomputation")
       }
     }, error = function(error) {
       note(sprintf("data-quality audit verification failed: %s",
@@ -1094,7 +1108,7 @@ if (receipt_count == length(expected)) {
   }
 }
 
-cat(sprintf("bundles=%d; v2=%d; sourceReceipts=%d; denominatorMismatchSites=%s\n",
+cat(sprintf("bundles=%d; v3=%d; sourceReceipts=%d; denominatorMismatchSites=%s\n",
             length(bundles), length(v2_sites), receipt_count,
             if (length(denominator_mismatches))
               paste(names(denominator_mismatches), collapse = ",") else "none"))

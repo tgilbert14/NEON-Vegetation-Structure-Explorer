@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Deterministic fixture gate for the DP1.10098.001 v2 ingestion contract.
+# Deterministic fixture gate for the DP1.10098.001 v3 ingestion contract.
 # It runs without network/data artifacts and exercises the scientific failure
 # modes that a candidate release must resolve before bundle promotion.
 
@@ -174,7 +174,7 @@ raw <- list(
 )
 bundle <- vst_build_site_from_tables("TEST", raw)
 
-assert_equal(bundle$meta$contract_id, "NEON-VST-DP1.10098.001-v2",
+assert_equal(bundle$meta$contract_id, "NEON-VST-DP1.10098.001-v3",
              "contract ID changed")
 assert_equal(bundle$meta$release, "RELEASE-2026", "release is not explicit")
 assert_equal(bundle$contract$source_record_key, "source_uid",
@@ -294,7 +294,7 @@ assert_equal(bundle$contract$index$site$ba_ha,
              bundle$contract$channel_summary$tree_dbh$ba_ha,
              "site index does not copy the chosen canonical channel summary")
 assert_equal(bundle$contract$index$site$metric_kind,
-             "bole-DBH basal area (breast height)",
+             "bole-DBH basal area, boles 10 cm and over (breast height)",
              "site index lost the physical meaning of its measured-area value")
 
 # Measurement rows without a published vst_perplotperyear row remain visible as
@@ -890,5 +890,42 @@ assert_error(
   "blank uid",
   "blank opportunity source uid did not fail the build"
 )
+
+# Contract v3 multi-bole rule (suite audit 2026-10-18, VEG-02; NEON.DOC.000987
+# Table 8). GUAN_002 2023: 01946 = 14.1 cm, 01946A = 9.1, 01946B = 8.7 are one
+# tagged multi-bole tree and must not hold the plot-event.
+bole_trees <- data.frame(
+  plotID = c(rep("GUAN_002", 3), rep("GUAN_003", 2), rep("GUAN_004", 2), rep("GUAN_005", 2), "GUAN_006"),
+  eventID = c(rep("E23", 3), rep("E23", 2), rep("E23", 2), rep("E23", 2), "E23"),
+  individualID = c("NEON.PLA.D04.GUAN.01946", "NEON.PLA.D04.GUAN.01946A", "NEON.PLA.D04.GUAN.01946B",
+                   "NEON.PLA.D04.GUAN.02000", "NEON.PLA.D04.GUAN.02000A",
+                   "NEON.PLA.D04.GUAN.03000", "NEON.PLA.D04.GUAN.03000A",
+                   "NEON.PLA.D04.GUAN.04000", "NEON.PLA.D04.GUAN.04000A",
+                   "NEON.PLA.D04.GUAN.05000"),
+  growthForm = c(rep("multi-bole tree", 9), "single bole tree"),
+  plantStatus = c("Live", "Live", "Live", "Live", "Live", "Standing dead", "Live", "Live", "Live", "Live"),
+  stemDiameter = c(14.1, 9.1, 8.7, 9.5, 4.0, 20.0, 2.0, 15.0, NA, 8.0),
+  stringsAsFactors = FALSE)
+bole_trees$live <- grepl("^Live", bole_trees$plantStatus)
+bole_plots <- data.frame(plotID = paste0("GUAN_00", 2:6), eventID = "E23", stringsAsFactors = FALSE)
+secondary <- vst_tree_secondary_bole_ok(bole_trees)
+assert_equal(secondary, c(FALSE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE, FALSE, TRUE, FALSE),
+             "secondary boles qualify only through a same-event parent bole >= 10 cm")
+bole_invalid <- vst_count_invalid_metric_records(
+  bole_trees, bole_plots, VST_TREE_FORMS, "stemDiameter", 10, secondary_ok = secondary)
+assert_equal(bole_invalid, c(0L, 2L, 0L, 1L, 1L),
+             "multi-bole holds: GUAN_002 lifted; sub-10 parent holds; a dead >= 10 parent qualifies its 2 cm bole; a lettered bole with no DBH and an unlettered sub-10 stem still hold")
+assert_equal(vst_count_invalid_metric_records(
+  bole_trees, bole_plots, VST_TREE_FORMS, "stemDiameter", 10), c(2L, 2L, 1L, 1L, 1L),
+  "without the v3 predicate the v2 rule is unchanged")
+assert_equal(VST_CONTRACT_ID, "NEON-VST-DP1.10098.001-v3", "builder registers contract v3")
+pii_raw <- raw
+pii_raw$vst_perplotperyear$measuredBy <- "crew-a@example.org"
+pii_raw$vst_perplotperyear$recordedBy <- "crew-b@example.org"
+pii_raw$vst_perplotperyear$remarks <- "kept"
+pii_bundle <- vst_build_site_from_tables("TEST", pii_raw)
+assert_true(!any(VST_PERSONNEL_FIELDS %in% names(pii_bundle$opportunity_source)) &&
+              "remarks" %in% names(pii_bundle$opportunity_source),
+            "v3 bundles drop measuredBy/recordedBy and keep every other source column")
 
 cat("PASS: event-keyed bundle contract fixtures\n")
