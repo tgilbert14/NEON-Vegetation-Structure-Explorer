@@ -3236,22 +3236,25 @@
       "checksum": "f6e7ed96b49d12b274153371348e51e3"
     },
     "global.R": {
-      "checksum": "c8ea70bee82ab03369d78d8924f04a73"
+      "checksum": "27ed13a28eecee72bfaf4af6c7c1637d"
     },
     "R/map_picker.R": {
       "checksum": "c86379a3c534368a8e579bc0db03907f"
     },
     "R/report_pdf.R": {
-      "checksum": "051afaf41dd8662d588f3f9c1984335e"
+      "checksum": "07d9da78b18538fde296c233fd99f74e"
     },
     "R/site_metadata.R": {
       "checksum": "94b992239dd8e82983f9689704ac1dda"
     },
+    "R/size_plausibility.R": {
+      "checksum": "cab245670564a93a8c0763271a67f8c9"
+    },
     "R/veg_helpers.R": {
-      "checksum": "a68e62e0aac23826021aecd8d4f484bf"
+      "checksum": "dbc8c6d53eb1549cdcf2e7cf7139e01f"
     },
     "server.R": {
-      "checksum": "143b0a80796f96bdb8dfe3229e24d242"
+      "checksum": "af4288137db290680832d3c2403dd3d3"
     },
     "ui.R": {
       "checksum": "003382a4d13defce825432d2ab5afc30"
