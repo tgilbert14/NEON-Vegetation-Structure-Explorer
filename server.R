@@ -490,8 +490,8 @@ server <- function(input, output, session) {
     sp <- SP(); shrub <- identical(sp$type, "shrubland")
     live_snap <- woody_only(live_only(snap), sp)
     woody_sp <- species_level_only(woody_only(one, sp))            # stand species
-    tallest <- smax(size_screened(live_snap)$height)
-    biggest <- smax(woody_only(size_screened(live_snap), sp)[[sp$col]])
+    tallest <- smax(size_screened(live_snap, "height")$height)
+    biggest <- smax(woody_only(size_screened(live_snap, "diameter"), sp)[[sp$col]])
     thresh  <- if (shrub) "(any basal stem diameter)" else "≥ 10 cm DBH (the protocol tree threshold)"
     hero <- function(v, l, suf = "", icon, tone, ttl = NULL, click = NULL) {
       attrs <- list(class = paste0("hero-stat hero-", tone, if (!is.null(click)) " hero-click" else ""), title = ttl)
@@ -524,7 +524,7 @@ server <- function(input, output, session) {
         hero(if (is.finite(tallest)) round(tallest, 1) else "—", "m tallest", icon = "arrows-vertical", tone = "gold",
              ttl = sprintf("Tallest live %s at the site, among records that pass the size screen (an entry out of line with the plant's own records is flagged in Data quality, not shown here).", sp$noun)),
         hero(if (is.finite(biggest)) round(biggest, 1) else "—", paste0("cm biggest ", sp$size_lab), icon = "circle", tone = "bark",
-             ttl = sprintf("Largest live %s by %s. Tap to see the biggest.", sp$noun, sp$size_full), click = if (is.finite(biggest)) "biggest" else NULL)))
+             ttl = sprintf("Largest live %s by %s, among records whose diameter passes the size screen. Tap to see the biggest.", sp$noun, sp$size_full), click = if (is.finite(biggest)) "biggest" else NULL)))
   })
 
   # ---- OVERVIEW -----------------------------------------------------------
@@ -608,10 +608,12 @@ server <- function(input, output, session) {
   output$siteInsights <- renderUI({
     snap <- rv$snap; one <- rv$one; req(snap, one); sp <- SP()
     st <- stand_site(snap, rv$plots, sp); g <- tree_growth(rv$trees, sp, rv$plots); ss <- species_structure(snap, rv$plots, sp)
-    one_s <- size_screened(one)
-    one_d <- one_s[is.finite(one_s[[sp$col]]), ]; one_h <- one_s[is.finite(one_s$height), ]
+    # Same rows as the hero: biggest from the screened diameters, tallest from
+    # every screened live stem (not only each plant's widest stem).
+    one_d <- size_screened(one, "diameter"); one_d <- one_d[is.finite(one_d[[sp$col]]), ]
+    live_h <- size_screened(woody_only(live_only(snap), sp), "height"); live_h <- live_h[is.finite(live_h$height), ]
     big  <- if (nrow(one_d)) one_d[which.max(one_d[[sp$col]]), ] else one[0, ]
-    tall <- if (nrow(one_h)) one_h[which.max(one_h$height), ]      else one[0, ]
+    tall <- if (nrow(live_h)) live_h[which.max(live_h$height), ] else one[0, ]
     pts <- c()
     if (!is.null(st)) pts <- c(pts, sprintf("Across <b>%d supported sampled plots</b>, the mean is <b>%s stems/ha</b> and <b>%s m²/ha</b>%s (stem-weighted quadratic mean %s: %s cm). This describes the sampled plot channel, not the whole site.", st$n_plots, fmt_count(st$density_ha), fmt_num(st$ba_ha), if (!is.null(st$ba_se) && is.finite(st$ba_se)) sprintf(" (plot SE %s m²/ha)", fmt_num(st$ba_se)) else "", sp$size_lab, fmt_num(st$qmd)))
     if (nrow(big) && nrow(tall)) pts <- c(pts, sprintf("The biggest %s is a <b><i>%s</i></b> at <b>%s cm</b> %s; the tallest reaches <b>%s m</b> (<i>%s</i>).", sp$noun, big$scientificName, round(big[[sp$col]],1), sp$size_lab, round(tall$height,1), tall$scientificName))
@@ -1465,7 +1467,7 @@ server <- function(input, output, session) {
         div(class = "rank-modal-sub", sprintf("Live %s, ranked within this supported physical channel. This is contribution to the sampled measurement, not proof of ecological dominance.", sp$nouns)),
         tags$ul(class = "rank-list", items), footer = modalButton("Close")))
     } else if (identical(input$heroClick, "biggest")) {
-      one <- size_screened(rv$one); req(one); d <- woody_only(one[is.finite(one[[sp$col]]), ], sp); req(nrow(d) > 0)
+      one <- size_screened(rv$one, "diameter"); req(one); d <- woody_only(one[is.finite(one[[sp$col]]), ], sp); req(nrow(d) > 0)
       d <- d[order(-d[[sp$col]]), ][seq_len(min(20, nrow(d))), ]
       items <- lapply(seq_len(nrow(d)), function(i) tags$li(class = "rank-row rank-click",
         role = "button", tabindex = "0",
@@ -1507,7 +1509,8 @@ server <- function(input, output, session) {
                  value = b$events, unit = "events", stringsAsFactors = FALSE)
     } else {
       col <- if (identical(metric, "tallest")) "height" else sp$col
-      d <- size_screened(one); d <- d[is.finite(d[[col]]), ]; if (identical(metric, "biggest")) d <- woody_only(d, sp)
+      d <- size_screened(one, if (identical(metric, "tallest")) "height" else "diameter")
+      d <- d[is.finite(d[[col]]), ]; if (identical(metric, "biggest")) d <- woody_only(d, sp)
       if (!nrow(d)) return(NULL); d <- d[order(-d[[col]]), ]
       data.frame(id = plant_key_vec(d), tree = short_tree(d$individualID), species = d$scientificName,
                  value = round(d[[col]], 1), unit = if (identical(metric, "tallest")) "m" else paste0("cm ", sp$size_lab),
@@ -1560,12 +1563,11 @@ server <- function(input, output, session) {
     snap <- tree_snapshot(b$trees, b$plots, spc)
     st <- stand_site(snap, b$plots, spc)
     active <- woody_only(live_only(snap), spc)
-    active_sized <- size_screened(active)
     one <- one_per_tree(active, spc); woody_sp <- species_level_only(one)
     list(site = site, st = st, channel = spc$channel, channel_label = spc$channel_label, size_lab = spc$size_lab,
          n_species = dplyr::n_distinct(woody_sp$scientificName),
-         tallest = round(smax(active_sized$height), 1),
-         biggest = round(smax(active_sized[[spc$col]]), 1))
+         tallest = round(smax(size_screened(active, "height")$height), 1),
+         biggest = round(smax(size_screened(active, "diameter")[[spc$col]]), 1))
   }
   observeEvent(input$compareBtn, {
     sites <- stats::setNames(site_table$site, sprintf("%s · %s", site_table$site, site_table$name))

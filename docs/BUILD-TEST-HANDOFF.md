@@ -1044,5 +1044,14 @@ BYTES PENDING / NO SCIENCE OR DRIVER DATA BYTE CHANGE.**
   verify_bundle, verify_derived_parity, runtime gate, app source with 42 bundles ready; browser check of
   title/lang, SRER preselect, registry, Enter on a QC flag, TALL hero 37.0 m, SRER banner; PDF report renders with the screened biggest list.
   `manifest.json` from the manual derived-bytes workflow on this branch.
+- **Independent review (Opus 5.5 at max; Fable limit reached):** applied. The screen is per measure
+  (a bad height leaves the tallest extremes only, a bad diameter the biggest only, the ratio rule both);
+  heights compare intact live records only ("broken" and "physically damaged" statuses excluded);
+  size_spike rows carry the other-event reference median; the candidate inspector lists
+  `R/size_plausibility.R` as a runtime file (hash re-pinned); banner copy says "is blank on these
+  pre-March-2020 records", "two or more" and "mostly" only for a true majority. Network: 297 flagged
+  rows of 527,000 (244 live).
+- **Interim:** until v3 is rebuilt, the network ranking, threshold search and map popups still read the
+  bundled index (TALL 85.6 m first) while the TALL hero shows 37.0 m.
 - **Next action:** Tim reviews and merges this branch after exact-head CI is green; then the stacked
   `claude/veg-contract-v3` PR, once its official v3 candidate is promoted.
