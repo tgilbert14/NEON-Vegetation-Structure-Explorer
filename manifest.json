@@ -3242,19 +3242,19 @@
       "checksum": "c86379a3c534368a8e579bc0db03907f"
     },
     "R/report_pdf.R": {
-      "checksum": "07d9da78b18538fde296c233fd99f74e"
+      "checksum": "9a56b1011c3234b946db9458305fb79a"
     },
     "R/site_metadata.R": {
       "checksum": "94b992239dd8e82983f9689704ac1dda"
     },
     "R/size_plausibility.R": {
-      "checksum": "cab245670564a93a8c0763271a67f8c9"
+      "checksum": "a3abe8ae63e9a2420e77c484516de396"
     },
     "R/veg_helpers.R": {
-      "checksum": "dbc8c6d53eb1549cdcf2e7cf7139e01f"
+      "checksum": "6fb1da609b6be99470278c198d40b1b4"
     },
     "server.R": {
-      "checksum": "af4288137db290680832d3c2403dd3d3"
+      "checksum": "f0cb9676d58463d7af341f8bba9c5c4f"
     },
     "ui.R": {
       "checksum": "003382a4d13defce825432d2ab5afc30"
