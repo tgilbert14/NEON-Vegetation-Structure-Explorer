@@ -58,7 +58,7 @@ mapPickerServer <- function(id, site_table, radius_metric, color_fn, label_fn,
         vapply(seq_len(nrow(st)),
           function(i) as.character(popup_fn(st[i, , drop = FALSE])), character(1)) else NULL
       pop_opts <- if (!is.null(popup_fn)) leaflet::popupOptions(maxWidth = 300, minWidth = 230,
-        autoPan = TRUE, autoPanPadding = c(40, 55), keepInView = TRUE,
+        autoPan = TRUE, autoPanPadding = c(40, 55), keepInView = FALSE,
         closeButton = TRUE, closeOnClick = FALSE, className = "pm-pop-card") else NULL
       visible_radius <- picker_radius(st[[radius_metric]])
       # Keep the visual hierarchy (6..24px radius), but place an invisible

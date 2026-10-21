@@ -3,7 +3,9 @@
 # ===========================================================================
 ui <- bslib::page_fillable(
   theme = app_theme,
-  window_title = "NEON Vegetation Structure Explorer", fillable = FALSE,
+  # page_fillable() has title= and lang=; window_title= / fillable= were not
+  # arguments and rendered as stray <body> attributes with no <title> at all.
+  title = "NEON Vegetation Structure Explorer", lang = "en",
 
   tags$head(
     tags$link(rel = "stylesheet", href = asset_url("vendor/sweetalert2/sweetalert2.min.css")),

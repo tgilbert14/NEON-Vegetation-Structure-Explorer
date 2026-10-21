@@ -143,8 +143,11 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "site", choices = site_picker_choices(),
                          selected = selected, server = TRUE)
   }
+  # Preselect the suite default (SRER) so the first Load is one tap; the
+  # splash still waits for an explicit Explore/Load, nothing auto-loads.
+  boot_site <- if (DEFAULT_SITE %in% BUNDLED) DEFAULT_SITE else ""
   observeEvent(TRUE, {
-    refresh_site_picker()
+    refresh_site_picker(selected = boot_site)
     if (!isTRUE(VEG_FAMILY_READY)) {
       shinyjs::disable("loadBtn")
       shinyjs::disable("searchNetworkBtn")
@@ -1418,7 +1421,7 @@ server <- function(input, output, session) {
         p(class = "caveat", bs_icon("exclamation-triangle"), " Size distributions are descriptive snapshots; they do not establish recruitment or regeneration. Above-ground biomass is deliberately ", tags$b("not"), " estimated.")),
       div(class = "about-card", h4(bs_icon("diagram-3"), " Part of the suite"),
         p("One doorway in the unofficial NEON Explorer Suite. This app keeps tree DBH and shrub/sapling basal measurements in their own supported physical channels; ",
-          tags$a(href = "https://tgilbert14.github.io/NEON-Driver-Cascade/", target = "_blank", rel = "noopener", "Driver Cascade"),
+          tags$a(href = "https://tgilbert14.github.io/NEON-Driver-Cascade/", target = "_blank", rel = "noopener", "the Response Atlas"),
           " links the full suite."),
         p(bs_icon("envelope"), " ", tags$a(href = "mailto:desertdatalabs@gmail.com", "desertdatalabs@gmail.com"),
           " · ", tags$a(href = "https://data.neonscience.org/data-products/DP1.10098.001", target = "_blank", "NEON data product"),
@@ -1428,7 +1431,13 @@ server <- function(input, output, session) {
         p(class = "caveat",
           "Built with data from the National Ecological Observatory Network (NEON), a U.S. National Science Foundation program operated by Battelle. NEON data are provided under a Creative Commons Attribution 4.0 International (CC BY 4.0) license (",
           tags$a(href = "https://creativecommons.org/licenses/by/4.0/", target = "_blank", "creativecommons.org/licenses/by/4.0"),
-          "). This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.")))
+          "). This app aggregates and derives summary metrics from the raw NEON data products; the underlying measurements are unaltered. It is an independent, unofficial tool and is not endorsed by NEON, Battelle, or the NSF.")),
+      div(class = "about-card sib-card", h4(bs_icon("compass"), " Explore the NEON series"),
+        p("This is one of a family of small explorers, each built on a different NEON data product. Same look and feel, same honest-numbers approach, different living thing."),
+        div(class = "sib-grid", lapply(.SIBLINGS, function(s)
+          tags$a(class = "sib-link", href = s$url, target = "_blank", rel = "noopener",
+            tags$span(class = "sib-name", s$name),
+            tags$span(class = "sib-prod", s$prod))))))
   })
 
   # ---- clickable hero stats -> ranked-breakdown modals -------------------

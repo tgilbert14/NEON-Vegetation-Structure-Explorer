@@ -65,6 +65,6 @@ tagged tree's diameter, height & growth career, stand size-structure & basal are
 
 ## Working notes
 
-- **Default the demo/example to an accessible forest site** (e.g. SCBI or HARV) — the clearest structure story.
+- **Default and demo site is SRER** (the suite-wide default; `DEFAULT_SITE` in global.R). Use HARV or SCBI only when a forest example is needed in prose.
 - **Honesty discipline:** the caveat goes ON the number; recompute any headline straight from the `.rds`
   before trusting it; a QC flag that fires 0 times is guilty until proven innocent.

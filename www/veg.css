@@ -499,3 +499,14 @@ button.podium-card { display: block; }
   .measure-spin .measure-mark { animation: none !important; }
   .lpa-skip, .home-btn, .hero-stat, .podium-card { transition: none !important; }
 }
+
+/* ---- in-app suite registry (About > Explore the NEON series) ------------ */
+.sib-card { grid-column: 1 / -1; }
+.sib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 6px; }
+.sib-link { display: flex; flex-direction: column; gap: 1px; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--paper); text-decoration: none; transition: border-color .15s, transform .15s, box-shadow .15s; }
+.sib-link:hover, .sib-link:focus-visible { border-color: var(--pine); transform: translateY(-2px); box-shadow: 0 6px 16px -8px var(--shadow); }
+.sib-name { font-weight: 700; font-size: 13.5px; color: var(--pine); }
+.sib-prod { font-size: 12px; color: var(--muted); }
+[data-bs-theme="dark"] .sib-name { color: #9be67a; }
+@media (prefers-reduced-motion: reduce) { .sib-link, .sib-link:hover { transition: none; transform: none; } }
