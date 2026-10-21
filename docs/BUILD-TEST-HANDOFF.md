@@ -1023,3 +1023,26 @@ BYTES PENDING / NO SCIENCE OR DRIVER DATA BYTE CHANGE.**
   dated snapshot provenance and no moving `RemoteRepos`, verify the unchanged
   search-index bytes, inspect the immutable artifact/direct-child bot commit, and
   require literal-head CI before merge.
+
+### 2026-10-21 MST - suite audit Wave 2: shell batch and app-side item 14 / [Claude]
+
+- **Scope:** branch `claude/veg-shell-wave2` (this PR). Shell: `<title>` and `lang` via
+  `page_fillable(title=, lang=)`; SRER preselected at boot (`DEFAULT_SITE`), `DEMO_META` on SRER;
+  About suite registry (`.SIBLINGS`, nine siblings, Response Atlas hub); `keepInView = FALSE`;
+  keyboard contracts. Item 14, app side only: shared size screen `R/size_plausibility.R`
+  (size-screen-v1) on the size extremes plus a warn-level `size_spike` QC flag and two trees_long
+  columns; mortality banner states plot count and the real hold reason (pre-2020
+  samplingImpractical, identity conflicts) instead of "needs ≥2 censuses"; zip export drops
+  measuredBy/recordedBy.
+- **No bundle byte changed.** Network ranking and map popups still read the bundled site index
+  (TALL 85.6 m) until contract v3 is rebuilt (stacked branch `claude/veg-contract-v3`).
+- **Rule choices that differ from cedar's memo:** ratio rule from DBH >= 10 cm (71 of 78 live
+  sub-10 ratio flags were secondary boles carrying the whole tree height); height spikes compare live
+  records only (snapped boles produced dozens of false spikes at HARV).
+- **Local PASS (macOS, R 4.5.2, not the pinned Ubuntu closure):** browser and cover contracts,
+  source family, portability, test_bundle_contract, test_helpers, search index rebuilt byte-identical,
+  verify_bundle, verify_derived_parity, runtime gate, app source with 42 bundles ready; browser check of
+  title/lang, SRER preselect, registry, Enter on a QC flag, TALL hero 37.0 m, SRER banner; PDF report renders with the screened biggest list.
+  `manifest.json` from the manual derived-bytes workflow on this branch.
+- **Next action:** Tim reviews and merges this branch after exact-head CI is green; then the stacked
+  `claude/veg-contract-v3` PR, once its official v3 candidate is promoted.

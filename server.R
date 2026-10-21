@@ -1465,7 +1465,7 @@ server <- function(input, output, session) {
         div(class = "rank-modal-sub", sprintf("Live %s, ranked within this supported physical channel. This is contribution to the sampled measurement, not proof of ecological dominance.", sp$nouns)),
         tags$ul(class = "rank-list", items), footer = modalButton("Close")))
     } else if (identical(input$heroClick, "biggest")) {
-      one <- rv$one; req(one); d <- woody_only(one[is.finite(one[[sp$col]]), ], sp); req(nrow(d) > 0)
+      one <- size_screened(rv$one); req(one); d <- woody_only(one[is.finite(one[[sp$col]]), ], sp); req(nrow(d) > 0)
       d <- d[order(-d[[sp$col]]), ][seq_len(min(20, nrow(d))), ]
       items <- lapply(seq_len(nrow(d)), function(i) tags$li(class = "rank-row rank-click",
         role = "button", tabindex = "0",
