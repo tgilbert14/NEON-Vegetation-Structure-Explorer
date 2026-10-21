@@ -3236,10 +3236,10 @@
       "checksum": "f6e7ed96b49d12b274153371348e51e3"
     },
     "global.R": {
-      "checksum": "22626d46bf24e6f0bdff7ababca296cd"
+      "checksum": "c8ea70bee82ab03369d78d8924f04a73"
     },
     "R/map_picker.R": {
-      "checksum": "f0c805a2b573046a2a629e8514e75482"
+      "checksum": "c86379a3c534368a8e579bc0db03907f"
     },
     "R/report_pdf.R": {
       "checksum": "051afaf41dd8662d588f3f9c1984335e"
@@ -3251,10 +3251,10 @@
       "checksum": "a68e62e0aac23826021aecd8d4f484bf"
     },
     "server.R": {
-      "checksum": "c31957da01f231462036988de11e1f62"
+      "checksum": "143b0a80796f96bdb8dfe3229e24d242"
     },
     "ui.R": {
-      "checksum": "bfd3b2824d031063bd49cd0a6b00e525"
+      "checksum": "003382a4d13defce825432d2ab5afc30"
     },
     "www/app.js": {
       "checksum": "d2f6eb714093f3c53a7095fad47dea41"
@@ -3275,7 +3275,7 @@
       "checksum": "8ddbacfa1e1485c598150ecb85ec2c54"
     },
     "www/veg.css": {
-      "checksum": "f2a839a2998e28feb758c9a546de97ac"
+      "checksum": "547940cb7654d09aa2396863d9a67e1d"
     },
     "www/vendor/driver/driver.css": {
       "checksum": "9a7949052a7f506e86cc0fe3b6bf1733"
