@@ -63,9 +63,18 @@ v3 changes the rules below. Every other rule in this contract is unchanged.
    the plot count and the real reason: how many plots have one supported
    census, how many record-bearing plot-censuses predate NEON's 2020-03-10
    `samplingImpractical` field (changelog 16306) and are held, not zero, and
-   how many are held for other reasons ("mostly" only for a true majority). A reported rate carries its plot
-   count and census window, and says "No interval: fewer than three plots"
-   when the jackknife is withheld.
+   how many are held for other reasons ("mostly" only for a true majority).
+5. **Statistics (hk, 2026-10-21).** Mortality, growth, size classes, QMD and
+   the compare highlight follow the rules in "Snapshot and sampled-plot
+   estimator" and "Change and status" below: explicit dead states, time at risk
+   to the first all-dead census, a 5-plot and 30-plant gate with a
+   Korn-Graubard interval on every printed rate, a 20-plant and 3-plot gate for
+   growth medians, equal-plot size classes that sum to the headline density,
+   QMD from the plot means, and a Welch test for the compare highlight.
+6. **QC evidence and NEON issue log.** QC rows carry the dates and values that
+   triggered them, a clean QC message says which checks could run, and the
+   curated NEON issue-log entries (`R/neon_issue_log.R`) appear beside the
+   estimates they qualify and in the plot export (`issue_ids`).
 
 **Follow-up, not in v3:** a `supported_legacy_schema` state for pre-2020
 events (trigger: `samplingImpractical` missing and event date before
@@ -195,8 +204,18 @@ or are missing. From the matching snapshot it:
    valid areas, including 40 m² nested areas;
 5. treats explicit sampled absence as zero and held opportunities as `NA`;
 6. reports the equal-plot mean and `sd(plot values) / sqrt(n plots)`;
-7. reports stem-weighted QMD as
-   `sqrt(sum(diameter_cm²) / number_of_live_stem_rows)`.
+7. reports QMD from the same equal-plot means as basal area and density,
+   `sqrt(40000 × BA / (π × density))` (Curtis & Marshall 2000), so the three
+   headline numbers agree (from v3; v2 pooled `sqrt(sum(d²) / stems)`);
+8. reports size classes as the equal-plot mean of each plot's class count over
+   that plot's own area (zero-filled), so the bars sum to the headline density;
+   the plot-to-plot SE is shown in the hover only.
+
+The compare tab highlights a difference only for basal area and density, only
+within one physical channel, only when both stands have at least 6 supported
+plots, and only when a Welch t test on the per-plot values (95%, plots treated
+as independent) separates them. QMD, record sizes and plot counts are never
+highlighted.
 
 The estimator describes supported sampled plots. It is not a wall-to-wall site
 inventory and is not annual productivity, biomass, or carbon.
@@ -213,7 +232,10 @@ ecological-dominance estimates.
 Growth uses permanent `plotID × individualID` plants with at least two ordered
 events. Tree events use equivalent diameter `sqrt(sum(d²))`; annual change is
 the first-to-last difference divided by elapsed days/365.25. A changed point of
-measurement is flagged and excluded from displayed growth summaries. Multi-stem
+measurement is flagged and excluded from displayed growth summaries, as are
+pairs remeasured less than 0.9 years apart (kept for QC). A growth median is
+printed only from at least 20 comparable plants in at least 3 plots; otherwise
+the app says how many plants and plots it has. Multi-stem
 basal trajectories are withheld because `tempStemID` is not stable enough across
 years to align shrub/sapling stems. Dead-to-live “resurrections” are held from
 growth and flagged for review. Diameter decreases remain preserved and flagged;
@@ -225,12 +247,17 @@ alias accepted only for compatibility). It is not inferred from diameter or
 another measurement-height field.
 
 Status is reduced once per composite plant and event: any live stem means Live;
-all observed stems dead/downed means Dead; lost, removed, and unknown states are
-not deaths. The compound mortality cohort starts live, requires at least two
-known events and `n ≥ 10`, censors after the first censored event, and excludes
-resurrection histories. It reports
-`100 × [1 − (1 − deaths/n)^(1/mean_years)]`; its interval is a delete-one-plot
-jackknife and is withheld with fewer than three usable plot clusters.
+all observed stems in one of NEON's three dead states ("Standing dead", "Dead,
+broken bole", "Downed") means Dead; every "Lost, ..." state (including "Lost,
+presumed dead"), "Removed" and "No longer qualifies" is a censored fate, never
+a death. The compound mortality cohort starts live, requires at least two known
+events, censors after the first censored event, ends time at risk at the first
+all-dead event, and excludes resurrection histories. It reports
+`100 × [1 − (1 − deaths/n)^(1/mean_years)]` only with at least 5 plot clusters
+and 30 trackable plants (most cohorts are NEON's 5 annual tower plots), and
+every printed rate carries a 95% Korn-Graubard cluster beta interval (Korn &
+Graubard 1998) with plots as clusters. A cohort with no deaths reports its
+upper bound; a withheld rate says which gate it missed.
 
 A single census can support a current sampled-plot snapshot but cannot support a
 growth or mortality estimand.
