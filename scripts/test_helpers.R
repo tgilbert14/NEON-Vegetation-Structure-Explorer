@@ -245,9 +245,93 @@ check(grepl("3 other record-bearing plot-censuses are held \\(mostly identity co
       "'mostly' only for a true majority")
 check(grepl("\\(1 identity conflict, 1 missing area\\)", tie) && !grepl("mostly", tie),
       "a tie lists the counts instead of claiming 'mostly'")
-scope <- mortality_scope_note(list(n_plots = 2L, yr0 = 2020L, yr1 = 2024L, lo = NA_real_), mort_plots, SIZE_SHRUB)
-check(grepl("From 2 plots, 2020-2024\\. No interval: fewer than three plots\\.", scope),
-      "a reported rate carries its plot count, window and the withheld-interval reason")
+
+# ---------------------------------------------------------------------------
+# REGRESSION (hk, 2026-10-21): mortality and growth gates, Korn-Graubard
+# interval, explicit dead states, first-death time at risk, size classes that
+# sum to the headline density, and QMD from the plot means.
+# ---------------------------------------------------------------------------
+cat("\n################  REGRESSION: hk statistics gates  ################\n")
+mr_rep <- list(status = "reported", rate_pct = 1.9, lo = 0.5, hi = 3.9, n0 = 160L, deaths = 12L, n_plots = 5L,
+               n_tower = 5L, n_distributed = 0L, t_yrs = 3.1, yr0 = 2020L, yr1 = 2023L)
+txt <- mortality_text(mr_rep, NULL, SIZE_FOREST, NULL, "GUAN")$text
+check(grepl("Annual mortality about 1.90%/yr \\(95% interval 0.50 to 3.90\\): 12 of 160 trackable plants died over a mean 3.1 years in 5 plots, 2020-2023, all tower plots\\.", txt),
+      "a reported rate names its interval, cohort, plot count, window and tower-only design")
+txt0 <- mortality_text(modifyList(mr_rep, list(deaths = 0L, rate_pct = 0, lo = 0, hi = 1.1, n_tower = 2L, n_distributed = 3L)),
+                       NULL, SIZE_FOREST, NULL, "X")$text
+check(grepl("No deaths among 160 trackable plants in 5 plots over a mean 3.1 years, 2020-2023; 95% upper bound 1.10%/yr\\.", txt0),
+      "a cohort with no deaths reports its upper bound, not a zero rate")
+txtk <- mortality_text(modifyList(mr_rep, list(status = "insufficient_clusters", n_plots = 2L, deaths = 3L)), NULL, SIZE_FOREST, NULL, "X")$text
+check(grepl("Annual mortality is not reported: 160 trackable plants in 2 plots \\(3 died\\), too few plot clusters for a rate \\(needs 5\\)\\.", txtk),
+      "fewer than 5 plot clusters withholds the rate and says why")
+txtn <- mortality_text(modifyList(mr_rep, list(status = "insufficient_plants", n0 = 12L, deaths = 1L)), NULL, SIZE_FOREST, NULL, "X")$text
+check(grepl("12 trackable plants in 5 plots \\(1 died\\), too few trackable plants for a rate \\(needs 30\\)\\.", txtn),
+      "fewer than 30 trackable plants withholds the rate and says why")
+
+# synthetic cohort: 6 tower plots x 6 permanent trees, censuses 2020 and 2023
+mk <- function(plots) {
+  rows <- list()
+  for (p in plots) for (i in 1:6) {
+    id <- sprintf("NEON.PLA.D00.SYN.%s%02d", sub("P", "", p), i)
+    status23 <- if (p == "P1" && i <= 2) "Standing dead" else if (p == "P2" && i == 1) "Dead, broken bole" else
+      if (p == "P3" && i == 1) "Lost, presumed dead" else "Live"
+    rows[[length(rows) + 1]] <- data.frame(plotID = p, individualID = id, eventID = "E20", date = as.Date("2020-06-01"),
+      growthForm = "single bole tree", plantStatus = "Live", stemDiameter = 20, permanent = TRUE, stringsAsFactors = FALSE)
+    rows[[length(rows) + 1]] <- data.frame(plotID = p, individualID = id, eventID = "E23", date = as.Date("2023-06-01"),
+      growthForm = "single bole tree", plantStatus = status23, stemDiameter = 20.5, permanent = TRUE, stringsAsFactors = FALSE)
+    if (p == "P2" && i == 1) rows[[length(rows) + 1]] <- data.frame(plotID = p, individualID = id, eventID = "E24",
+      date = as.Date("2024-06-01"), growthForm = "single bole tree", plantStatus = "Standing dead", stemDiameter = 20.5,
+      permanent = TRUE, stringsAsFactors = FALSE)
+  }
+  tr <- do.call(rbind, rows); tr$live <- grepl("^Live", tr$plantStatus)
+  ev <- unique(tr[, c("plotID", "eventID", "date")])
+  pl <- data.frame(ev, tree_support = "sampled_with_records", tree_support_reason = "x", area_trees = 400,
+                   plotType = "tower", stringsAsFactors = FALSE)
+  list(trees = tr, plots = pl)
+}
+syn <- mk(paste0("P", 1:6))
+mr <- stand_mortality(syn$trees, SIZE_FOREST, syn$plots)
+check(identical(mr$status, "reported") && mr$n_plots == 6L && mr$n_tower == 6L,
+      "6 tower plots and 35 trackable plants report a rate")
+check(mr$n0 == 35L && mr$deaths == 3L,
+      "'Lost, presumed dead' is censored, not a death (35 trackable plants, 3 deaths)")
+check(isTRUE(all.equal(mr$t_yrs, round(as.numeric(as.Date("2023-06-01") - as.Date("2020-06-01")) / 365.25, 1))),
+      "time at risk ends at the first all-dead census, not at a repeat dead record a year later")
+expected <- round(100 * (1 - (1 - 3 / 35)^(1 / (as.numeric(as.Date("2023-06-01") - as.Date("2020-06-01")) / 365.25))), 2)
+check(identical(mr$rate_pct, expected) && mr$lo > 0 && mr$lo < mr$rate_pct && mr$hi > mr$rate_pct,
+      "the Korn-Graubard interval brackets the Sheil-May rate with a positive lower bound when deaths occurred")
+check(identical(stand_mortality(syn$trees[syn$trees$plotID %in% paste0("P", 1:4), ], SIZE_FOREST, syn$plots)$status, "insufficient_clusters"),
+      "4 plot clusters withhold the rate")
+check(identical(veg_status_state(c("Live, broken bole", "Lost, presumed dead", "Lost, burned", "Downed", "Standing dead", "No longer qualifies")),
+                c("live", "censored", "censored", "dead", "dead", "censored")),
+      "dead means NEON's three dead states only")
+
+# growth gate
+gfx <- function(n, plots) data.frame(plotID = rep_len(plots, n), individualID = paste0("G", seq_len(n)),
+  growth_cm_yr = seq(0.1, 0.5, length.out = n), mh_change = FALSE, short_interval = FALSE, stringsAsFactors = FALSE)
+gs <- growth_summary(gfx(25, c("A", "B", "C")))
+check(identical(gs$status, "reported") && gs$n_plants == 25L && gs$n_plots == 3L,
+      "25 comparable plants in 3 plots report a median")
+check(identical(growth_summary(gfx(19, c("A", "B", "C")))$status, "insufficient") &&
+        identical(growth_summary(gfx(30, c("A", "B")))$status, "insufficient"),
+      "fewer than 20 plants or fewer than 3 plots withhold the median")
+gx <- gfx(25, c("A", "B", "C")); gx$short_interval[1:3] <- TRUE; gx$mh_change[4] <- TRUE; gx$growth_cm_yr[5] <- 7
+gsx <- growth_summary(gx)
+check(gsx$n_plants == 20L && gsx$n_short_interval == 3L && gsx$n_mh_excluded == 1L && gsx$n_offscreen == 1L,
+      "short intervals, moved measurement points and off-screen changes are excluded and counted")
+check(grepl("too few for a summary \\(needs 20 in 3 plots\\)", growth_text(growth_summary(gfx(8, c("A", "B"))), SIZE_FOREST)),
+      "the withheld growth note says what is missing")
+
+# size classes sum to the headline density; QMD comes from the plot means
+for (site_spec in list(list("HARV", SIZE_FOREST), list("SRER", SIZE_SHRUB))) {
+  b <- readRDS(file.path("data/sites", paste0(site_spec[[1]], ".rds")))
+  snap <- tree_snapshot(b$trees, b$plots, site_spec[[2]])
+  st <- stand_site(snap, b$plots, site_spec[[2]]); sc <- size_class(snap, b$plots, site_spec[[2]])
+  check(isTRUE(all.equal(sum(sc$stems_ha), st$density_ha, tolerance = 1e-9)),
+        sprintf("%s size-class stems/ha sum to the headline density", site_spec[[1]]))
+  check(isTRUE(all.equal(st$qmd, sqrt(40000 * st$ba_ha / (pi * st$density_ha)))),
+        sprintf("%s QMD equals sqrt(40000 BA / (pi density))", site_spec[[1]]))
+}
 
 # ---------------------------------------------------------------------------
 # REGRESSION (contract v3, Option A): lettered secondary boles under 10 cm no

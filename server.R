@@ -665,13 +665,11 @@ server <- function(input, output, session) {
     big  <- if (nrow(one_d)) one_d[which.max(one_d[[sp$col]]), ] else one[0, ]
     tall <- if (nrow(live_h)) live_h[which.max(live_h$height), ] else one[0, ]
     pts <- c()
-    if (!is.null(st)) pts <- c(pts, sprintf("Across <b>%d supported sampled plots</b>, the mean is <b>%s stems/ha</b> and <b>%s m²/ha</b>%s (stem-weighted quadratic mean %s: %s cm). This describes the sampled plot channel, not the whole site.", st$n_plots, fmt_count(st$density_ha), fmt_num(st$ba_ha), if (!is.null(st$ba_se) && is.finite(st$ba_se)) sprintf(" (plot SE %s m²/ha)", fmt_num(st$ba_se)) else "", sp$size_lab, fmt_num(st$qmd)))
+    if (!is.null(st)) pts <- c(pts, sprintf("Across <b>%d supported sampled plots</b>, the mean is <b>%s stems/ha</b> and <b>%s m²/ha</b>%s (quadratic mean %s from those means: %s cm). This describes the sampled plot channel, not the whole site.", st$n_plots, fmt_count(st$density_ha), fmt_num(st$ba_ha), if (!is.null(st$ba_se) && is.finite(st$ba_se)) sprintf(" (plot SE %s m²/ha)", fmt_num(st$ba_se)) else "", sp$size_lab, fmt_num(st$qmd)))
     if (nrow(big) && nrow(tall)) pts <- c(pts, sprintf("The biggest %s is a <b><i>%s</i></b> at <b>%s cm</b> %s; the tallest reaches <b>%s m</b> (<i>%s</i>).", sp$noun, htmltools::htmlEscape(as.character(big$scientificName)), round(big[[sp$col]],1), sp$size_lab, round(tall$height,1), htmltools::htmlEscape(as.character(tall$scientificName))))
     else if (nrow(big)) pts <- c(pts, sprintf("The biggest %s is a <b><i>%s</i></b> at <b>%s cm</b> %s.", sp$noun, htmltools::htmlEscape(as.character(big$scientificName)), round(big[[sp$col]],1), sp$size_lab))
-    if (!is.null(g) && nrow(g)) {
-      gg <- g[!g$mh_change & is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2, ]
-      if (nrow(gg)) pts <- c(pts, sprintf("Across <b>%s</b> comparable remeasured %s, median annualized %s change is <b>%.2f cm/yr</b>.", format(nrow(gg), big.mark=","), sp$nouns, sp$size_lab, stats::median(gg$growth_cm_yr, na.rm=TRUE)))
-    }
+    gs <- growth_summary(g, rv$plots)
+    if (identical(gs$status, "reported")) pts <- c(pts, sprintf("Across <b>%s</b> comparable remeasured %s in %d plots, median annualized %s change is <b>%s cm/yr</b>.", fmt_count(gs$n_plants), sp$nouns, gs$n_plots, sp$size_lab, fmt_num(gs$median, 2)))
     pts <- c(pts, "Sampled absence is retained as zero; impractical, dendrometer-only, or otherwise unsupported plot-events are held out rather than turned into zeros. Biomass is not estimated.")
     div(class = "insight-list", lapply(pts, function(t) div(class = "il-item", bs_icon("dot"), tags$span(HTML(t)))))
   })
@@ -681,10 +679,17 @@ server <- function(input, output, session) {
     sp <- SP(); sc <- size_class(rv$snap, rv$plots, sp); if (is.null(sc)) return(note_plot("No diameter data"))
     has_ha <- "stems_ha" %in% names(sc) && any(is.finite(sc$stems_ha))
     sc$yval <- if (has_ha) sc$stems_ha else sc$stems
-    ylab <- if (has_ha) "Live stems / ha" else "Live stems (sampled)"
+    ylab <- if (has_ha) "Live stems / ha (mean of supported plots)" else "Live stems (sampled)"
     forest <- !identical(sp$type, "shrubland")
+    # Plot-to-plot SE lives in the hover only (hk): many classes rest on few
+    # plots, so error bars would dominate the chart.
+    sc$hover <- if (has_ha) sprintf("%s cm %s<br>%s stems/ha%s, in %d of %d plots",
+      as.character(sc$cls), sp$size_lab, fmt_count(sc$stems_ha),
+      ifelse(is.finite(sc$stems_ha_se), paste0(" \u00b1 ", vapply(sc$stems_ha_se, fmt_count, character(1)), " SE"), ""),
+      as.integer(sc$n_plots_present), as.integer(sc$n_plots)) else
+      sprintf("%s cm %s<br>%s stems", as.character(sc$cls), sp$size_lab, fmt_count(sc$stems))
     p <- plot_ly(sc, x = ~cls, y = ~yval, type = "bar", name = "observed", marker = list(color = DDL$green),
-      hovertemplate = paste0("%{x} cm ", sp$size_lab, "<br>%{y} ", if (has_ha) "stems/ha" else "stems", "<extra></extra>"))
+      text = ~hover, textposition = "none", hovertemplate = "%{text}<extra></extra>")
     # A one-time size distribution is descriptive. Do not overlay an "expected"
     # curve or infer recruitment, regeneration, or age from its shape alone.
     p %>% plotly_theme(legend = FALSE) %>%
@@ -695,7 +700,8 @@ server <- function(input, output, session) {
   output$sizeInsight <- renderUI({
     sp <- SP(); sc <- size_class(rv$snap, rv$plots, sp); req(!is.null(sc))
     bk <- size_breaks(sp)
-    small <- sum(sc$stems[sc$cls %in% bk$small]); big <- sum(sc$stems[sc$cls %in% bk$big])
+    yv <- if ("stems_ha" %in% names(sc) && any(is.finite(sc$stems_ha))) sc$stems_ha else sc$stems
+    small <- sum(yv[sc$cls %in% bk$small]); big <- sum(yv[sc$cls %in% bk$big])
     ratio <- if (big > 0) round(small / big, 1) else NA
     if (identical(sp$type, "shrubland")) {
       shape <- if (is.na(ratio)) "concentrated in the smaller measured stems" else
@@ -790,7 +796,7 @@ server <- function(input, output, session) {
     issue_notes <- veg_issue_notes(rv$site, st$per_plot$date[st$per_plot$supported %in% TRUE],
                                    c("structure", "coverage"))
     insight_banner("calculator", tone = "gold",
-      HTML(sprintf("%sAcross <b>%d supported sampled plots</b> (%s): <span class='ci-hero'>%s m²/ha</span>%s measured cross-sectional area, <b>%s stems/ha</b>%s, stem-weighted quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± plot SE. %s This is not a wall-to-wall inventory.</span>",
+      HTML(sprintf("%sAcross <b>%d supported sampled plots</b> (%s): <span class='ci-hero'>%s m²/ha</span>%s measured cross-sectional area, <b>%s stems/ha</b>%s, quadratic mean %s from those means <b>%s cm</b>.%s <span class='dim'>Mean ± plot SE. %s This is not a wall-to-wall inventory.</span>",
         pre, st$n_plots, scope, fmt_num(st$ba_ha), se_ba, fmt_count(st$density_ha), se_d, sp$size_lab, fmt_num(st$qmd), dom_txt, support_txt)),
       design_pop, source_gap_inline(), veg_issue_chips(issue_notes))
   })
@@ -805,7 +811,9 @@ server <- function(input, output, session) {
   # ---- GROWTH & MORTALITY -------------------------------------------------
   output$growthPlot <- renderPlotly({
     sp <- SP(); g <- tree_growth(rv$trees, sp, rv$plots); if (is.null(g) || !nrow(g)) return(note_plot(sprintf("No supported remeasured %s yet for a growth estimate", sp$nouns)))
-    gg <- g$growth_cm_yr[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2 & !g$mh_change]
+    gs <- growth_summary(g, rv$plots)
+    if (!identical(gs$status, "reported")) return(note_plot(growth_text(gs, sp)))
+    gg <- g$growth_cm_yr[is.finite(g$growth_cm_yr) & g$growth_cm_yr <= 5 & g$growth_cm_yr >= -2 & !g$mh_change & !(g$short_interval %in% TRUE)]
     plot_ly(x = gg, type = "histogram", nbinsx = 30, marker = list(color = DDL$green),
       hovertemplate = paste0("%{x} cm/yr<br>%{y} ", sp$nouns, "<extra></extra>")) %>%
       plotly_theme(legend = FALSE) %>%
@@ -814,18 +822,10 @@ server <- function(input, output, session) {
   })
   output$growthInsight <- renderUI({
     sp <- SP(); g <- tree_growth(rv$trees, sp, rv$plots); req(!is.null(g), nrow(g) > 0)
-    nmh <- sum(g$mh_change, na.rm = TRUE)
-    gv <- g[!g$mh_change & is.finite(g$growth_cm_yr), ]
-    clean <- gv[gv$growth_cm_yr <= 5 & gv$growth_cm_yr >= -2, ]; req(nrow(clean) > 0)
-    trunc_n <- nrow(gv) - nrow(clean)
-    med <- stats::median(clean$growth_cm_yr, na.rm = TRUE)
-    q <- stats::quantile(clean$growth_cm_yr, c(.25, .75), na.rm = TRUE, names = FALSE)
-    neg <- round(100 * mean(clean$growth_cm_yr < -0.1, na.rm = TRUE))
-    insight_banner("graph-up", tone = "pine",
-      HTML(sprintf("Across <b>%s</b> comparable remeasurements, median annualized %s change is <span class='ci-hero'>%.2f cm/yr</span> (IQR %.2f–%.2f). About <b>%d%%</b> decrease between events; decreases can reflect biology, damage, or measurement differences, so they are retained and flagged.%s%s",
-        format(nrow(clean), big.mark = ","), sp$size_lab, med, q[1], q[2], neg,
-        if (nmh > 0) sprintf(" %s %s with a changed measurement height are excluded.", format(nmh, big.mark = ","), sp$nouns) else "",
-        if (trunc_n > 0) sprintf(" %s outside the −2 to +5 cm/yr review screen are off-chart but kept in the data.", format(trunc_n, big.mark = ",")) else "")))
+    gs <- growth_summary(g, rv$plots)
+    insight_banner(if (identical(gs$status, "reported")) "graph-up" else "info-circle",
+      tone = if (identical(gs$status, "reported")) "pine" else "navy",
+      htmltools::htmlEscape(growth_text(gs, sp)), veg_issue_chips(change_issue_notes()))
   })
   output$statusPlot <- renderPlotly({
     sp <- SP(); ss <- status_summary(rv$snap, sp); if (is.null(ss) || !nrow(ss)) return(note_plot("No status data"))
@@ -917,16 +917,13 @@ server <- function(input, output, session) {
   # compound ANNUAL mortality rate (distinct from the snapshot pie)
   output$mortalityBanner <- renderUI({
     sp <- SP(); mr <- stand_mortality(rv$trees, sp, rv$plots)
-    site <- rv$site %||% "this site"
-    if (is.null(mr)) return(insight_banner("info-circle", tone = "navy",
-      HTML(paste0("<b>", htmltools::htmlEscape(mortality_unavailable_reason(rv$trees, sp, rv$plots, site)),
-                  "</b> The live and standing-dead snapshot below is shown instead."))))
-    ci <- if (is.finite(mr$lo) && is.finite(mr$hi))
-      sprintf(" (95%% plot-cluster jackknife interval %s–%s)", fmt_num(mr$lo, 2), fmt_num(mr$hi, 2)) else ""
-    insight_banner("heart-pulse", tone = "pine",
-      HTML(sprintf("Descriptive compound <b>annual cohort mortality ≈ <span class='ci-hero'>%s%%/yr</span></b>%s. <b>%s</b> of <b>%s</b> trackable plants transitioned from any-live to all-dead over a mean ~%s-year interval; lost/unknown fates are censored.%s The breakdown below is a separate point-in-time snapshot.",
-        fmt_num(mr$rate_pct, 2), ci, fmt_count(mr$deaths), fmt_count(mr$n0), fmt_num(mr$t_yrs, 1),
-        htmltools::htmlEscape(mortality_scope_note(mr, rv$plots, sp)))))
+    mt <- mortality_text(mr, rv$trees, sp, rv$plots, rv$site %||% "this site")
+    reported <- identical(mt$status, "reported")
+    insight_banner(if (reported) "heart-pulse" else "info-circle", tone = if (reported) "pine" else "navy",
+      HTML(paste0(if (reported) "<b>Compound annual cohort mortality (descriptive).</b> " else "",
+                  htmltools::htmlEscape(mt$text),
+                  " The live and standing-dead breakdown below is a separate point-in-time snapshot.")),
+      veg_issue_chips(change_issue_notes()))
   })
 
   # ---- SITE DATA-QUALITY scan (clickable inspector + downloadable report) -
@@ -1395,7 +1392,7 @@ server <- function(input, output, session) {
         sprintf(" * Plot metrics scope to %s and are not a wall-to-wall inventory.", scope),
         " * Sampled absence is zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-metric, identity-conflict, and missing-opportunity-source states are held/NA with reasons.",
         " * Tower and distributed designs remain labeled; pooled summaries are descriptive, not certified site-wide estimators.",
-        if (!is.null(st)) sprintf(" * Supported sampled-plot mean: %s m2/ha (+/-%s plot SE), %s stems/ha, stem-weighted QMD %s cm, n=%d plots.",
+        if (!is.null(st)) sprintf(" * Supported sampled-plot mean: %s m2/ha (+/-%s plot SE), %s stems/ha, QMD from those means %s cm, n=%d plots.",
                                   fmt_num(st$ba_ha), fmt_num(st$ba_se), fmt_count(st$density_ha), fmt_num(st$qmd), st$n_plots) else "")
       if (!is.null(tl)) utils::write.csv(tl, file.path(tmp, "trees_long.csv"), row.names = FALSE, na = "")
       if (!is.null(pl)) utils::write.csv(pl, file.path(tmp, "plot_summary_latest.csv"), row.names = FALSE, na = "")
@@ -1512,7 +1509,7 @@ server <- function(input, output, session) {
           ") across ", tags$b("42 bundled sites"), ". NEON tags woody plants, maps them, and revisits their ", tags$b("diameter, height, and status"), ". This app turns those field records into an explorable sampled-plot story while keeping the original keys and support states visible.")),
       div(class = "about-card", h4(bs_icon("rulers"), " Two measurement channels"),
         p("Full-plot tree records use ", tags$b("DBH"), " (diameter at breast height) with the tree sampled area. Nested shrub and sapling records use basal diameter with their separate shrub/sapling sampled area. Small-tree DBH records stay in the preserved download but are intentionally withheld from summaries until a dedicated nested-area DBH channel is registered. The app never ranks unlike physical channels as though they were one quantity."),
-        p(class = "caveat", bs_icon("exclamation-triangle"), " Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched records are held as unsupported, not converted to zero. Per-hectare summaries are means across supported sampled plots, not wall-to-wall site estimates. QMD is stem-weighted.")),
+        p(class = "caveat", bs_icon("exclamation-triangle"), " Sampled absence is a real zero. Sampling-impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched records are held as unsupported, not converted to zero. Per-hectare summaries are means across supported sampled plots, not wall-to-wall site estimates. QMD comes from the plot-mean basal area and density.")),
       div(class = "about-card", h4(bs_icon("graph-up"), " Growth & status"),
         p("Comparable diameter increments require the same plot + plant identity, stable event order, and an unchanged measurement point. Multi-stem basal records whose temporary stem labels cannot be aligned are not forced into a growth rate. Lost/unknown fates are censored from mortality."),
         p(class = "caveat", bs_icon("exclamation-triangle"), " Size distributions are descriptive snapshots; they do not establish recruitment or regeneration. Above-ground biomass is deliberately ", tags$b("not"), " estimated.")),
@@ -1681,17 +1678,28 @@ server <- function(input, output, session) {
     if (is.null(a) || is.null(b) || is.null(a$st) || is.null(b$st))
       return(div(class = "compare-hint", bs_icon("exclamation-triangle"), " One of those sites isn't bundled with usable plot data."))
     mixed <- !identical(a$channel, b$channel)
-    rowf <- function(lab, va, vb, digits = 1, comparable = TRUE) {
-      na <- suppressWarnings(as.numeric(va)); nb <- suppressWarnings(as.numeric(vb))
-      # Suppress the winner-highlight on diameter-based rows across the paradigm fork:
-      # forest DBH basal area is bole stocking at breast height, shrubland is basal
-      # cover at the base — a ~500x measurement-height artifact, not a real "more".
-      # Omitting the highlight (vs adding a caveat per row) keeps the table clean.
-      wa <- comparable && is.finite(na) && is.finite(nb) && na > nb
-      wb <- comparable && is.finite(na) && is.finite(nb) && nb > na
+    # Highlight only a difference beyond plot-to-plot noise (hk): basal area
+    # and density, same physical channel, at least 6 plots in each stand, and a
+    # Welch t test on the per-plot values (95%). QMD (no SE), record sizes
+    # (they grow with sampling effort) and plot counts are never highlighted.
+    welch_win <- function(ma, sa, ka, mb, sb, kb) {
+      if (!all(is.finite(c(ma, sa, mb, sb))) || ka < 6 || kb < 6) return(c(FALSE, FALSE))
+      va <- sa^2; vb <- sb^2; pooled <- sqrt(va + vb)
+      if (!is.finite(pooled) || pooled <= 0) return(c(FALSE, FALSE))
+      df <- (va + vb)^2 / (va^2 / (ka - 1) + vb^2 / (kb - 1))
+      beyond <- abs(ma - mb) > stats::qt(0.975, df) * pooled
+      c(beyond && ma > mb, beyond && mb > ma)
+    }
+    cell <- function(v, se, k, digits) {
+      if (!is.finite(suppressWarnings(as.numeric(v)))) return(fmt_num(v, digits, big = digits == 0))
+      if (is.null(se)) return(fmt_num(v, digits, big = digits == 0))
+      if (is.finite(se) && k > 1) sprintf("%s \u00b1 %s (%d plots)", fmt_num(v, digits, big = digits == 0), fmt_num(se, digits, big = digits == 0), k)
+      else sprintf("%s (%d plot%s, no SE)", fmt_num(v, digits, big = digits == 0), k, if (k == 1) "" else "s")
+    }
+    rowf <- function(lab, va, vb, digits = 1, sea = NULL, seb = NULL, win = c(FALSE, FALSE)) {
       tags$tr(tags$td(class = "cmp-lab", lab),
-        tags$td(class = paste("cmp-val", if (wa) "cmp-win"), fmt_num(va, digits, big = digits == 0)),
-        tags$td(class = paste("cmp-val", if (wb) "cmp-win"), fmt_num(vb, digits, big = digits == 0)))
+        tags$td(class = paste("cmp-val", if (win[1]) "cmp-win"), cell(va, sea, a$st$n_plots, digits)),
+        tags$td(class = paste("cmp-val", if (win[2]) "cmp-win"), cell(vb, seb, b$st$n_plots, digits)))
     }
     sizelab <- if (mixed) "stem ø" else a$size_lab
     cmp <- !mixed   # diameter-based rows are only comparable within one paradigm
@@ -1700,16 +1708,19 @@ server <- function(input, output, session) {
         tags$th(div(class = "cmp-head", a$site, tags$small(sprintf(" · %s", a$channel_label)))),
         tags$th(div(class = "cmp-head", b$site, tags$small(sprintf(" · %s", b$channel_label)))))),
       tags$tbody(
-        rowf("Measured cross-sectional area (m²/ha)", a$st$ba_ha, b$st$ba_ha, comparable = cmp),
-        rowf("Stem density (/ha)", a$st$density_ha, b$st$density_ha, digits = 0, comparable = cmp),
-        rowf(sprintf("Quadratic mean %s (cm)", sizelab), a$st$qmd, b$st$qmd, comparable = cmp),
-        rowf("Observed species", a$n_species, b$n_species, digits = 0, comparable = FALSE),
-        rowf("Tallest measured (m)", a$tallest, b$tallest, comparable = FALSE),
-        rowf(sprintf("Biggest %s (cm)", sizelab), a$biggest, b$biggest, comparable = cmp),
+        rowf("Measured cross-sectional area (m²/ha)", a$st$ba_ha, b$st$ba_ha, sea = a$st$ba_se, seb = b$st$ba_se,
+             win = if (cmp) welch_win(a$st$ba_ha, a$st$ba_se, a$st$n_plots, b$st$ba_ha, b$st$ba_se, b$st$n_plots) else c(FALSE, FALSE)),
+        rowf("Stem density (/ha)", a$st$density_ha, b$st$density_ha, digits = 0, sea = a$st$density_se, seb = b$st$density_se,
+             win = if (cmp) welch_win(a$st$density_ha, a$st$density_se, a$st$n_plots, b$st$density_ha, b$st$density_se, b$st$n_plots) else c(FALSE, FALSE)),
+        rowf(sprintf("Quadratic mean %s (cm)", sizelab), a$st$qmd, b$st$qmd),
+        rowf("Observed species", a$n_species, b$n_species, digits = 0),
+        rowf("Tallest measured (m)", a$tallest, b$tallest),
+        rowf(sprintf("Biggest %s (cm)", sizelab), a$biggest, b$biggest),
         rowf("Plots sampled", a$st$n_plots, b$st$n_plots, digits = 0)))
     div(tbl, div(class = "compare-foot", bs_icon("info-circle"),
       if (mixed) " The sites use different physical channels and sampled areas, so diameter, area, and density rows are context, not a ranking. " else " ",
-      "Summaries cover supported sampled plots; observed species and record sizes also vary with sampling effort. No row is a wall-to-wall site inventory."))
+      "Summaries cover supported sampled plots; observed species and record sizes also vary with sampling effort. No row is a wall-to-wall site inventory. ",
+      if (!mixed) "Shaded: higher beyond plot-to-plot noise (Welch t, 95%, plots treated as independent; 6 or more plots in each stand)." else NULL))
   })
 
   # ---- guided tour (on demand) -------------------------------------------

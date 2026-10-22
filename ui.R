@@ -246,7 +246,7 @@ ui <- bslib::page_fillable(
           card(card_head("calculator", "Supported sampled-plot summary",
             info_pop("Per-hectare",
               p("Measured cross-sectional area (m²/ha) and stem density use each plot-event's exact compatible sampled area, then summarize supported plots. Every valid positive area, including small 40 m² nested areas, is retained."),
-              p("Sampled absence is zero; impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched opportunities are held. QMD is stem-weighted. Nothing here is a wall-to-wall inventory."))),
+              p("Sampled absence is zero; impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched opportunities are held. QMD comes from the plot-mean basal area and density. Nothing here is a wall-to-wall inventory."))),
           uiOutput("densityBanner"))),
 
       nav_panel(title = tagList(bs_icon("trophy"), " Champions"), value = "fame",

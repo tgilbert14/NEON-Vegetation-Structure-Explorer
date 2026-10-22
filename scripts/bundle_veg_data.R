@@ -949,7 +949,10 @@ vst_channel_summary <- function(snapshot) {
     n_sampled_absence = sum(per_plot$.support_status == "sampled_absence"),
     ba_ha = mean(per_plot$ba_ha),
     density_ha = mean(per_plot$density_ha),
-    qmd_cm = if (total_stems > 0) sqrt(sum(per_plot$sum_d2) / total_stems) else NA_real_,
+    # Quadratic mean diameter from the equal-plot means of basal area and
+    # density (Curtis & Marshall 2000), the same rule the app uses.
+    qmd_cm = if (total_stems > 0 && mean(per_plot$density_ha) > 0)
+      sqrt(40000 * mean(per_plot$ba_ha) / (pi * mean(per_plot$density_ha))) else NA_real_,
     metric_kind = spec$metric,
     tallest_m = vst_safe_max(records$height[records$.size_height_ok %in% TRUE]),
     biggest_diam_cm = vst_safe_max(records$.diameter_cm[records$.size_diameter_ok %in% TRUE])

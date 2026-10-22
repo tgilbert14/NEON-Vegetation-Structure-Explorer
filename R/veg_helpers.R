@@ -427,11 +427,15 @@ stand_site <- function(snap, plots, spec = SIZE_FOREST, plot_types = NULL) {
   n <- nrow(ok)
   se <- function(x) if (n > 1) stats::sd(x, na.rm = TRUE) / sqrt(n) else NA_real_
   n_stems <- sum(ok$stems, na.rm = TRUE)
-  list(ba_ha = mean(ok$ba_ha, na.rm = TRUE),
+  ba_mean <- mean(ok$ba_ha, na.rm = TRUE); dens_mean <- mean(ok$density_ha, na.rm = TRUE)
+  list(ba_ha = ba_mean,
        ba_se = se(ok$ba_ha),
-       density_ha = mean(ok$density_ha, na.rm = TRUE),
+       density_ha = dens_mean,
        density_se = se(ok$density_ha),
-       qmd = if (n_stems > 0) sqrt(sum(ok$sumD2, na.rm = TRUE) / n_stems) else NA_real_,
+       # Quadratic mean diameter from the same equal-plot means as basal area
+       # and density (Curtis & Marshall 2000), so the three headline numbers
+       # agree: QMD = sqrt(40000 * BA / (pi * density)).
+       qmd = if (n_stems > 0 && is.finite(dens_mean) && dens_mean > 0) sqrt(40000 * ba_mean / (pi * dens_mean)) else NA_real_,
        n_plots = n,
        n_absence = sum(ok$sampled_absence %in% TRUE),
        n_excluded = sum(!(per$supported %in% TRUE)),
@@ -481,20 +485,32 @@ size_class <- function(snap, plots = NULL, spec = SIZE_FOREST) {
   per <- if (!is.null(plots)) stand_by_plot(snap, plots, spec) else NULL
   s <- if (!is.null(per)) .selected_stems(snap, per, spec, live = TRUE) else woody_only(live_only(snap), spec)
   bk <- size_breaks(spec)
+  labs <- factor(bk$labs, levels = bk$labs)
   if (is.null(s) || !nrow(s)) {
     if (is.null(per) || !any(per$supported %in% TRUE)) return(NULL)
-    out <- data.frame(cls = factor(bk$labs, levels = bk$labs), stems = 0L)
-  } else {
-    s$cls <- cut(s[[spec$col]], breaks = bk$brks, labels = bk$labs, right = FALSE)
-    out <- s %>% dplyr::count(.data$cls, name = "stems") %>%
-      tidyr::complete(cls = factor(bk$labs, levels = bk$labs), fill = list(stems = 0))
+    s <- s[FALSE, , drop = FALSE]
   }
-  # area-standardize to stems/ha when plots are supplied (raw counts are
-  # sampling-effort-dependent). Pooled over the sampled area of contributing plots.
-  if (!is.null(per)) {
-    tot_ha <- sum(per$area_ha[per$supported %in% TRUE], na.rm = TRUE)
-    out$stems_ha <- if (is.finite(tot_ha) && tot_ha > 0) out$stems / tot_ha else NA_real_
+  s$cls <- if (nrow(s)) cut(s[[spec$col]], breaks = bk$brks, labels = bk$labs, right = FALSE) else factor(character(), levels = bk$labs)
+  out <- data.frame(cls = labs, stems = as.integer(table(factor(s$cls, levels = bk$labs))[bk$labs]))
+  if (is.null(per)) return(out)
+  # Equal-plot mean (hk, 2026-10-21): each supported plot's class count over
+  # that plot's own area, zero-filled, averaged across supported plots, so the
+  # bars sum to the headline density. The SE is plot-to-plot.
+  ok <- per[per$supported %in% TRUE & is.finite(per$area_ha) & per$area_ha > 0, , drop = FALSE]
+  K <- nrow(ok)
+  if (!K) { out$stems_ha <- NA_real_; out$stems_ha_se <- NA_real_; out$n_plots_present <- 0L; out$n_plots <- 0L; return(out) }
+  pk <- paste(ok$plotID, ok$eventID, sep = "\r")
+  sk <- paste(s$plotID, s$eventID, sep = "\r")
+  counts <- matrix(0, nrow = K, ncol = length(bk$labs), dimnames = list(pk, bk$labs))
+  if (nrow(s)) {
+    tab <- table(factor(sk, levels = pk), factor(s$cls, levels = bk$labs))
+    counts[, ] <- as.numeric(tab)
   }
+  dens <- counts / ok$area_ha
+  out$stems_ha <- as.numeric(colMeans(dens))
+  out$stems_ha_se <- if (K > 1) as.numeric(apply(dens, 2, stats::sd) / sqrt(K)) else NA_real_
+  out$n_plots_present <- as.integer(colSums(counts > 0))
+  out$n_plots <- K
   out
 }
 
@@ -504,6 +520,14 @@ size_class <- function(snap, plots = NULL, spec = SIZE_FOREST) {
 # (shrinkage = measurement error / bole damage) are flagged, not deleted. Uses
 # the paradigm's diameter (DBH for trees, basal for shrubs).
 # ---------------------------------------------------------------------------
+# Growth gates (hk, 2026-10-21): a median needs 20 comparable remeasured plants
+# in 3 plots (at n = 20 the median's distribution-free 95% interval is about
+# as wide as the IQR); pairs under 0.9 years apart are excluded.
+VEG_GROWTH_MIN_PLANTS <- 20L
+VEG_GROWTH_MIN_PLOTS <- 3L
+VEG_GROWTH_MIN_YEARS <- 0.9
+VEG_GROWTH_SCREEN <- c(-2, 5)
+
 tree_growth <- function(trees, spec = SIZE_FOREST, plots = NULL) {
   g <- .supported_history(trees, plots, spec)
   if (is.null(g) || !nrow(g)) return(NULL)
@@ -583,6 +607,9 @@ tree_growth <- function(trees, spec = SIZE_FOREST, plots = NULL) {
     dplyr::filter(.data$yrs > 0) %>%
     dplyr::mutate(growth_cm_yr = (.data$d1 - .data$d0) / .data$yrs,
                   shrank = .data$growth_cm_yr < -0.1,
+                  # Remeasured less than 0.9 years apart (hk): kept for QC,
+                  # left out of growth summaries.
+                  short_interval = .data$yrs < VEG_GROWTH_MIN_YEARS,
                   contract_id = VEG_CONTRACT_ID)
   out$.plant_key <- NULL
   if (!nrow(out)) NULL else out
@@ -639,6 +666,40 @@ tree_trajectory <- function(trees, id, col, plots = NULL) {
   list(per_date = as.data.frame(per_date),
        raw = data.frame(eventID = g$eventID, date = g$date, d = g$.d)[order(.date_num(g$date), .chr(g$eventID)), , drop = FALSE],
        contract_id = VEG_CONTRACT_ID)
+}
+
+# Summary of comparable growth for a channel, with its gate. Comparable means
+# an unchanged measurement point, at least 0.9 years between censuses, and a
+# change inside the -2 to +5 cm/yr review screen (outside it is kept in the
+# data and counted, not summarised).
+growth_summary <- function(g, plots = NULL) {
+  empty <- list(status = "none", n_plants = 0L, n_plots = 0L, n_tower = 0L,
+                median = NA_real_, q25 = NA_real_, q75 = NA_real_,
+                n_mh_excluded = 0L, n_offscreen = 0L, n_short_interval = 0L,
+                share_decrease = NA_real_)
+  if (is.null(g) || !nrow(g)) return(empty)
+  short <- if ("short_interval" %in% names(g)) g$short_interval %in% TRUE else rep(FALSE, nrow(g))
+  mh <- g$mh_change %in% TRUE
+  fin <- is.finite(g$growth_cm_yr)
+  usable <- !mh & !short & fin
+  on_screen <- usable & g$growth_cm_yr >= VEG_GROWTH_SCREEN[1] & g$growth_cm_yr <= VEG_GROWTH_SCREEN[2]
+  clean <- g[on_screen, , drop = FALSE]
+  plots_in <- unique(.chr(clean$plotID))
+  ptype <- if (!is.null(plots) && all(c("plotID", "plotType") %in% names(plots)))
+    tolower(.chr(plots$plotType[match(plots_in, plots$plotID)])) else rep(NA_character_, length(plots_in))
+  out <- empty
+  out$n_plants <- nrow(clean); out$n_plots <- length(plots_in)
+  out$n_tower <- sum(ptype %in% "tower")
+  out$n_mh_excluded <- sum(mh); out$n_short_interval <- sum(short & !mh)
+  out$n_offscreen <- sum(usable & !on_screen)
+  out$status <- if (out$n_plants >= VEG_GROWTH_MIN_PLANTS && out$n_plots >= VEG_GROWTH_MIN_PLOTS) "reported" else "insufficient"
+  if (identical(out$status, "reported")) {
+    out$median <- stats::median(clean$growth_cm_yr)
+    qq <- stats::quantile(clean$growth_cm_yr, c(0.25, 0.75), names = FALSE)
+    out$q25 <- qq[1]; out$q75 <- qq[2]
+    out$share_decrease <- mean(clean$growth_cm_yr < -0.1)
+  }
+  out
 }
 
 # ---------------------------------------------------------------------------
@@ -1168,10 +1229,10 @@ status_summary <- function(snap, spec = SIZE_FOREST) {
   s <- .option_a_tree_rows(snap[snap$growthForm %in% forms, , drop = FALSE], spec)
   if (!nrow(s)) return(NULL)
   s$.plant_key <- .plant_key(s)
-  st <- .chr(s$plantStatus)
-  s$.live <- !is.na(st) & grepl("^Live", st)
-  s$.dead <- !is.na(st) & grepl("Dead|Downed", st, ignore.case = TRUE)
-  s$.lost <- !is.na(st) & grepl("Lost|Removed|No longer", st, ignore.case = TRUE)
+  state <- veg_status_state(s$plantStatus)
+  s$.live <- state %in% "live"
+  s$.dead <- state %in% "dead"
+  s$.lost <- state %in% "censored"
   per <- s %>% dplyr::group_by(.data$.plant_key) %>%
     dplyr::summarise(
       any_live = any(.data$.live),
@@ -1195,7 +1256,31 @@ status_summary <- function(snap, spec = SIZE_FOREST) {
 # is dead/downed, and censored for lost/removed/unknown. Uncertainty uses a
 # delete-one-plot jackknife, not an independence-assuming plant-level binomial CI.
 # ---------------------------------------------------------------------------
-stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL, min_n0 = 10L) {
+# Plant status, explicitly (hk, 2026-10-21). Dead means one of NEON's three
+# dead states; every "Lost, ...", "Removed" and "No longer qualifies" record is
+# a censored (unknown) fate, never a death.
+VEG_DEAD_STATUS <- c("standing dead", "dead, broken bole", "downed")
+veg_status_state <- function(status) {
+  s <- tolower(trimws(.chr(status)))
+  dead <- Reduce(`|`, lapply(VEG_DEAD_STATUS, function(x) startsWith(ifelse(is.na(s), "", s), x)))
+  ifelse(is.na(s) | !nzchar(s), NA_character_,
+         ifelse(grepl("^live", s), "live", ifelse(dead, "dead", "censored")))
+}
+# Mortality gates (hk): a rate needs at least 5 plot clusters (NEON's annual
+# tower subset is 5 plots) and 30 trackable plants (one death then moves the
+# rate by about 1%/yr over 3 years).
+VEG_MORT_MIN_PLOTS <- 5L
+VEG_MORT_MIN_N0 <- 30L
+
+# Compound annual cohort mortality (Sheil-May) from supported censuses. The
+# cohort is permanent plants live at their first supported census with a known
+# later fate; time at risk ends at the first all-dead census; a fate after a
+# censored (lost, removed) census is unknown; plants recorded Live after an
+# all-dead census are held out (see the QC flag). Returns NULL when no cohort
+# exists, else a list whose status is "reported", "insufficient_clusters" or
+# "insufficient_plants"; rate and interval are NA unless reported. The 95%
+# interval is a Korn-Graubard cluster beta interval with plots as clusters.
+stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL) {
   if (is.null(trees) || !nrow(trees) || !"date" %in% names(trees)) return(NULL)
   d <- .supported_history(trees, plots, spec)
   if (is.null(d) || !nrow(d)) return(NULL)
@@ -1203,25 +1288,26 @@ stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL, min_n0 = 10
   d <- d[d$growthForm %in% forms & is.finite(.date_num(d$date)), , drop = FALSE]
   if ("permanent" %in% names(d)) d <- d[d$permanent %in% TRUE, , drop = FALSE]
   if (is.null(d) || !nrow(d) || !"plantStatus" %in% names(d)) return(NULL)
-  st <- .chr(d$plantStatus)
-  d$.live <- !is.na(st) & grepl("^Live", st)
-  d$.dead <- !is.na(st) & grepl("Dead|Downed", st, ignore.case = TRUE)
-  d$.lost <- !is.na(st) & grepl("Lost|Removed|No longer", st, ignore.case = TRUE)
+  d$.state <- veg_status_state(d$plantStatus)
   d$.event_date <- .date_num(d$date)
   d$.plant_key <- .plant_key(d)
   ev <- d %>% dplyr::group_by(.data$plotID, .data$individualID, .data$.plant_key, .data$eventID) %>%
     dplyr::summarise(date = as.Date(min(.data$.event_date), origin = "1970-01-01"),
-                     any_live = any(.data$.live),
-                     all_dead = all(.data$.dead),
-                     any_lost = any(.data$.lost), .groups = "drop")
+                     any_live = any(.data$.state %in% "live"),
+                     all_dead = all(.data$.state %in% "dead"), .groups = "drop")
   ev$state <- ifelse(ev$any_live, "live", ifelse(ev$all_dead, "dead", "censored"))
   ev <- ev[order(ev$.plant_key, ev$date, .chr(ev$eventID)), , drop = FALSE]
+  n_censored_events <- sum(ev$state == "censored")
   bad <- ev %>% dplyr::group_by(.data$.plant_key) %>%
     dplyr::summarise(resurrected = any(.data$state == "live" & cumsum(.data$state == "dead") > 0), .groups = "drop")
   ev <- ev[!(ev$.plant_key %in% bad$.plant_key[bad$resurrected %in% TRUE]), , drop = FALSE]
+  # Unknown after the first censored census; time at risk stops at the first
+  # all-dead census (repeat dead records add no time at risk).
   ev <- ev %>% dplyr::group_by(.data$.plant_key) %>%
-    dplyr::mutate(after_censor = cumsum(.data$state == "censored") > 0) %>% dplyr::ungroup()
-  known <- ev[ev$state %in% c("live", "dead") & !ev$after_censor, , drop = FALSE]
+    dplyr::mutate(after_censor = cumsum(.data$state == "censored") > 0,
+                  after_death = dplyr::lag(cumsum(.data$state == "dead") > 0, default = FALSE)) %>%
+    dplyr::ungroup()
+  known <- ev[ev$state %in% c("live", "dead") & !ev$after_censor & !ev$after_death, , drop = FALSE]
   if (!nrow(known)) return(NULL)
   per <- known %>% dplyr::group_by(.data$.plant_key) %>%
     dplyr::filter(dplyr::n_distinct(.data$eventID) >= 2) %>%
@@ -1231,28 +1317,39 @@ stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL, min_n0 = 10
                      d0 = dplyr::first(.data$date), d1 = dplyr::last(.data$date),
                      .groups = "drop")
   coh <- per[per$first_state == "live" & per$t > 0, , drop = FALSE]
-  n0 <- nrow(coh); if (n0 < max(1L, as.integer(min_n0))) return(NULL)
+  n0 <- nrow(coh)
+  if (!n0) return(NULL)
   coh$death <- coh$last_state == "dead"
-  estimate <- function(x) {
-    if (!nrow(x)) return(NA_real_)
-    tt <- mean(x$t, na.rm = TRUE); q <- mean(x$death)
-    if (!is.finite(tt) || tt <= 0) return(NA_real_)
-    100 * (1 - (1 - q)^(1 / tt))
+  D <- sum(coh$death); q <- D / n0; tbar <- mean(coh$t)
+  plots_in <- unique(coh$plotID); K <- length(plots_in)
+  ptype <- if (!is.null(plots) && all(c("plotID", "plotType") %in% names(plots)))
+    tolower(.chr(plots$plotType[match(plots_in, plots$plotID)])) else rep(NA_character_, K)
+  status <- if (K < VEG_MORT_MIN_PLOTS) "insufficient_clusters" else
+    if (n0 < VEG_MORT_MIN_N0) "insufficient_plants" else "reported"
+  to_rate <- function(x) 100 * (1 - (1 - x)^(1 / tbar))
+  rate <- lo <- hi <- deff <- NA_real_
+  if (identical(status, "reported") && is.finite(tbar) && tbar > 0) {
+    by_plot <- split(coh$death, coh$plotID)
+    d_p <- vapply(by_plot, sum, numeric(1)); n_p <- vapply(by_plot, length, numeric(1))
+    v <- K / (K - 1) * sum((d_p - q * n_p)^2) / n0^2
+    base_n <- if (q > 0 && q < 1 && v > 0) min(n0, q * (1 - q) / v) else n0
+    neff <- base_n * (stats::qnorm(0.975) / stats::qt(0.975, K - 1))^2
+    q_lo <- if (D == 0) 0 else stats::qbeta(0.025, neff * q, neff * (1 - q) + 1)
+    q_hi <- if (q >= 1) 1 else stats::qbeta(0.975, neff * q + 1, neff * (1 - q))
+    rate <- to_rate(q); lo <- to_rate(q_lo); hi <- to_rate(q_hi)
+    deff <- if (q > 0 && q < 1 && v > 0) v / (q * (1 - q) / n0) else NA_real_
   }
-  rate <- estimate(coh); if (!is.finite(rate)) return(NULL)
-  pl <- unique(coh$plotID); jk <- numeric()
-  if (length(pl) >= 3) jk <- vapply(pl, function(p) estimate(coh[coh$plotID != p, , drop = FALSE]), numeric(1))
-  jk <- jk[is.finite(jk)]
-  if (length(jk) >= 3) {
-    se <- sqrt((length(jk) - 1) / length(jk) * sum((jk - mean(jk))^2))
-    ci <- pmax(0, pmin(100, rate + c(-1, 1) * 1.96 * se))
-  } else ci <- c(NA_real_, NA_real_)
-  list(rate_pct = round(rate, 2), n0 = n0, deaths = sum(coh$death), t_yrs = round(mean(coh$t), 1),
-       lo = if (is.finite(ci[1])) round(ci[1], 2) else NA_real_,
-       hi = if (is.finite(ci[2])) round(ci[2], 2) else NA_real_,
-       n_plots = length(pl), n_censored_events = sum(ev$state == "censored"),
+  list(status = status,
+       rate_pct = if (is.finite(rate)) round(rate, 2) else NA_real_,
+       lo = if (is.finite(lo)) round(lo, 2) else NA_real_,
+       hi = if (is.finite(hi)) round(hi, 2) else NA_real_,
+       n0 = n0, deaths = D, n_plots = K,
+       n_tower = sum(ptype %in% "tower"), n_distributed = sum(ptype %in% "distributed"),
+       t_yrs = round(tbar, 1),
        yr0 = as.integer(format(min(coh$d0), "%Y")), yr1 = as.integer(format(max(coh$d1), "%Y")),
-       ci_method = if (length(jk) >= 3) "delete-one-plot jackknife" else "not reported (<3 plot clusters)",
+       deff = if (is.finite(deff)) round(deff, 2) else NA_real_,
+       n_censored_events = n_censored_events,
+       ci_method = "Korn-Graubard cluster beta interval (plots as clusters)",
        contract_id = VEG_CONTRACT_ID)
 }
 
@@ -1319,19 +1416,61 @@ mortality_unavailable_reason <- function(trees, spec = SIZE_FOREST, plots = NULL
     }
     return(paste0(lead, .pre2020_sentence(ctx), other))
   }
-  small <- stand_mortality(trees, spec, plots, min_n0 = 1L)
-  n0 <- if (is.null(small)) 0L else small$n0
-  paste0(sprintf("Annual mortality is not reported: %d %s at %s %s at least two supported censuses, but only %d %s live at the first and %s a known later fate; the rate needs at least 10.",
-                 ctx$k2, .plural(ctx$k2, "plot"), site, if (ctx$k2 == 1L) "has" else "have",
-                 n0, .plural(n0, "plant was", "plants were"), if (n0 == 1L) "has" else "have"),
+  paste0(sprintf("Annual mortality is not reported: %d %s at %s %s at least two supported censuses, but no permanent plant there was live at the first with a known later fate.",
+                 ctx$k2, .plural(ctx$k2, "plot"), site, if (ctx$k2 == 1L) "has" else "have"),
          .pre2020_sentence(ctx))
 }
-mortality_scope_note <- function(mr, plots, spec = SIZE_FOREST) {
+
+# Number formatting for helper-built copy (mirrors server.R fmt_num/fmt_count).
+.vh_num <- function(x, digits = 1) {
+  x <- suppressWarnings(as.numeric(x))
+  if (!length(x) || !is.finite(x[[1]])) return("\u2013")
+  formatC(round(x[[1]], digits), format = "f", digits = digits, big.mark = ",")
+}
+.vh_count <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  if (!length(x) || !is.finite(x[[1]])) return("\u2013")
+  format(round(x[[1]]), big.mark = ",", scientific = FALSE, trim = TRUE)
+}
+
+# The mortality banner sentence for a stand_mortality() result (hk copy).
+# Returns list(status, text); text is plain (escape it before HTML).
+mortality_text <- function(mr, trees = NULL, spec = SIZE_FOREST, plots = NULL, site = "this site") {
+  if (is.null(mr)) return(list(status = "none", text = mortality_unavailable_reason(trees, spec, plots, site)))
   ctx <- mortality_context(plots, spec)
+  pl <- function(n, one, many = paste0(one, "s")) sprintf("%s %s", .vh_count(n), .plural(n, one, many))
   window <- if (is.na(mr$yr0 %||% NA)) "" else if (mr$yr0 == mr$yr1) sprintf(", %d", mr$yr0) else sprintf(", %d-%d", mr$yr0, mr$yr1)
-  paste0(sprintf(" From %d %s%s.", mr$n_plots, .plural(mr$n_plots, "plot"), window),
-         if (!is.finite(mr$lo %||% NA_real_)) " No interval: fewer than three plots." else "",
-         .pre2020_sentence(ctx))
+  tower <- if (isTRUE(mr$n_distributed == 0L && mr$n_tower > 0L)) ", all tower plots" else ""
+  text <- switch(mr$status,
+    insufficient_clusters = sprintf("Annual mortality is not reported: %s in %s (%d died), too few plot clusters for a rate (needs %d).",
+      pl(mr$n0, "trackable plant"), pl(mr$n_plots, "plot"), mr$deaths, VEG_MORT_MIN_PLOTS),
+    insufficient_plants = sprintf("Annual mortality is not reported: %s in %s (%d died), too few trackable plants for a rate (needs %d).",
+      pl(mr$n0, "trackable plant"), pl(mr$n_plots, "plot"), mr$deaths, VEG_MORT_MIN_N0),
+    if (mr$deaths > 0) sprintf("Annual mortality about %s%%/yr (95%% interval %s to %s): %s of %s died over a mean %s years in %s%s%s.",
+      .vh_num(mr$rate_pct, 2), .vh_num(mr$lo, 2), .vh_num(mr$hi, 2), .vh_count(mr$deaths), pl(mr$n0, "trackable plant"),
+      .vh_num(mr$t_yrs, 1), pl(mr$n_plots, "plot"), window, tower)
+    else sprintf("No deaths among %s in %s over a mean %s years%s%s; 95%% upper bound %s%%/yr.",
+      pl(mr$n0, "trackable plant"), pl(mr$n_plots, "plot"), .vh_num(mr$t_yrs, 1), window, tower, .vh_num(mr$hi, 2)))
+  list(status = mr$status,
+       text = paste0(text, " Lost and unknown fates are censored.", .pre2020_sentence(ctx)))
+}
+
+# The growth banner sentence for a growth_summary() result (hk copy).
+growth_text <- function(gs, spec = SIZE_FOREST) {
+  if (is.null(gs) || identical(gs$status, "none")) return(NULL)
+  pl <- function(n, one, many = paste0(one, "s")) sprintf("%s %s", .vh_count(n), .plural(n, one, many))
+  extra <- paste0(
+    if (gs$n_mh_excluded > 0) sprintf(" %s with a changed measurement point %s excluded.", pl(gs$n_mh_excluded, "pair"), if (gs$n_mh_excluded == 1) "is" else "are") else "",
+    if (gs$n_short_interval > 0) sprintf(" %s remeasured under 0.9 years apart %s excluded.", pl(gs$n_short_interval, "pair"), if (gs$n_short_interval == 1) "is" else "are") else "",
+    if (gs$n_offscreen > 0) sprintf(" %s outside the -2 to +5 cm/yr review screen %s kept in the data but not summarised.", pl(gs$n_offscreen, "change"), if (gs$n_offscreen == 1) "is" else "are") else "")
+  if (!identical(gs$status, "reported")) {
+    return(paste0(sprintf("%s comparable remeasured %s in %s: too few for a summary (needs %d in %d plots).",
+      .vh_count(gs$n_plants), if (gs$n_plants == 1) spec$noun else spec$nouns, pl(gs$n_plots, "plot"),
+      VEG_GROWTH_MIN_PLANTS, VEG_GROWTH_MIN_PLOTS), extra))
+  }
+  paste0(sprintf("Median annualized %s change %s cm/yr (IQR %s to %s) across %s comparable remeasured %s in %s. About %d%% decreased between censuses; decreases can reflect biology, damage or measurement differences, so they are kept and flagged.",
+    spec$size_lab, .vh_num(gs$median, 2), .vh_num(gs$q25, 2), .vh_num(gs$q75, 2),
+    .vh_count(gs$n_plants), spec$nouns, pl(gs$n_plots, "plot"), round(100 * gs$share_decrease)), extra)
 }
 
 # Rows that fail the shared size screen in this channel's growth forms, shaped
