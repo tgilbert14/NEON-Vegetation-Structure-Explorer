@@ -51,6 +51,29 @@ The manifest verifier requires complete HTTPS repository URLs, including archive
 geospatial packages such as `wk`; this prevents the missing-protocol Connect
 failure seen in the previous deployment.
 
+- **Connect content variable.** The app reads `CARTO_BASEMAP_KEY` at runtime.
+  Set it as a Connect Cloud content variable (see `.env.example`), not a repo
+  secret. It is a public, rate-limited tile identifier that rides in the tile
+  URL, not a credential. Without it the maps fall back to Esri's grey canvas,
+  which has no detail past z16 at rural sites, so plot zoom is degraded.
+- **Response headers are the platform's.** Connect Cloud controls the HTTP
+  response headers; the repo cannot set CSP, HSTS, or `frame-ancestors`. The app
+  has no login and holds no user data, so this is accepted as a platform setting.
+- **Branch ruleset (owner setting).** `main` should carry a ruleset that requires
+  a pull request and the `release_contracts` check, and blocks force-push and
+  deletion. Tim sets it in GitHub settings; agents do not change it.
+- **Post-deploy revision check.** `.github/workflows/post-deploy.yml` runs on
+  every push to `main` (and on manual dispatch). It computes the expected
+  `ddl-build-digest` from the merged commit's `manifest.json` (sha256 over the
+  sorted `<path>:<md5>` lines, checked against the one file list in
+  `R/build_receipt.R` `veg_app_files()`), then polls the public URL for up to 20
+  minutes until the app's own page (not the "Posit Connect Cloud" boot shell)
+  carries `<meta name="ddl-build-digest">` with that value. Green proves the live
+  app runs the exact deployed file bytes of the merged commit; red prints both
+  digests. It does not prove the package closure or the data science; those stay
+  with CI and the release checklist. Check it locally with
+  `python3 scripts/check_build_digest.py manifest.json`.
+
 ## Routine refreshes
 
 Scheduled and manual refreshes use the same official-release and double-build

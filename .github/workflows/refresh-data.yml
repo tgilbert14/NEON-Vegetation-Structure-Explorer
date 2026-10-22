@@ -129,10 +129,10 @@ jobs:
       - name: Install fetch-only closure
         uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          packages: neonUtilities, arrow, digest, jsonlite
+          packages: neonUtilities@4.0.2, arrow, digest, jsonlite
           pak-version: stable
           dependencies: '"hard"'
-          cache-version: vegetation-release-fetch-r452-2026-07-15-v1
+          cache-version: vegetation-release-fetch-r452-2026-07-15-v2
           cache: always
           install-pandoc: 'false'
           install-quarto: 'false'
@@ -178,13 +178,36 @@ jobs:
           echo "source_normalization=$source_normalization" >> "$GITHUB_OUTPUT"
           echo "Validated $neon_release source receipt for 42 sites."
 
+      - name: Summarize the fetch against the committed raw digest
+        env:
+          RAW_DIR: ${{ runner.temp }}/vegetation-raw
+          RAW_DIGEST: ${{ steps.receipt.outputs.raw_digest }}
+          NEON_RELEASE: ${{ steps.receipt.outputs.neon_release }}
+        run: |
+          set -euo pipefail
+          site_count=$(grep -c . "$RAW_DIR/SOURCE-SHA256SUMS.txt")
+          committed=$(tr -d '\r\n' < data/source/vegetation-raw-family-SHA256.txt 2>/dev/null || true)
+          if [[ "$RAW_DIGEST" == "$committed" ]]; then matches=yes; else matches=no; fi
+          {
+            echo "### NEON vegetation fetch"
+            echo ""
+            echo "- Sites fetched: $site_count"
+            echo "- NEON release: $NEON_RELEASE"
+            echo "- Raw family digest: \`$RAW_DIGEST\`"
+            echo "- Committed raw family digest: \`${committed:-missing}\`"
+            echo "- Matches committed raw digest: $matches"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$matches" == "no" ]]; then
+            echo "::warning title=New NEON vegetation data::raw family digest $RAW_DIGEST differs from the committed ${committed:-missing}; review the candidate artifact."
+          fi
+
       - name: Upload immutable raw staging
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vegetation-raw-${{ env.VST_SOURCE_SHA }}-${{ github.run_id }}
           path: ${{ runner.temp }}/vegetation-raw
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 35
 
   build_candidate:
     needs: [fetch_raw]
@@ -529,4 +552,4 @@ jobs:
           # release artifact and must never be overlaid onto a reviewed branch.
           path: ${{ runner.temp }}/vegetation-promotion
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 35
