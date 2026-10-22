@@ -21,6 +21,8 @@
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
 # Shared size-plausibility screen (also sourced by the bundle builder).
 if (!exists("vst_size_screen", mode = "function")) source("R/size_plausibility.R")
+# Curated NEON issue-log notes (app-side; shown beside the numbers they affect).
+if (!exists("veg_issue_notes", mode = "function")) source("R/neon_issue_log.R")
 mode_chr <- function(x) { x <- x[!is.na(x)]; if (!length(x)) return(NA_character_); names(sort(table(x), decreasing = TRUE))[1] }
 smax <- function(x) { x <- x[is.finite(x)]; if (!length(x)) NA_real_ else max(x) }   # NA (not -Inf) on empty
 smean <- function(x) { x <- x[is.finite(x)]; if (!length(x)) NA_real_ else mean(x) }
@@ -857,7 +859,6 @@ tidy_trees_export <- function(trees, meta = NULL) {
     individualID = d$individualID,
     tempStemID = d$tempStemID,
     subplotID = col_or_na(d, "subplotID"),
-    mapping_eventID = col_or_na(d, "mappingEventID"),
     mapping_created_date = .iso_date(col_or_na(d, "mappingCreatedDate")),
     taxonID = col_or_na(d, "taxonID"),
     taxon_label = .taxon_name(d),
@@ -923,7 +924,9 @@ plots_export <- function(snap, plots, spec = SIZE_FOREST, meta = NULL) {
     qmd_cm = ps$qmd, n_live_stems = ps$stems, n_live_plants = ps$plants,
     n_taxa = ps$n_taxa, n_species = ps$n_species,
     tallest_m = ps$tallest, biggest_diam_cm = ps$biggest,
-    largest_stem_taxon = ps$dominant, stringsAsFactors = FALSE)
+    largest_stem_taxon = ps$dominant,
+    issue_ids = veg_issue_ids((meta %||% list())$site %||% NA_character_, ps$date),
+    stringsAsFactors = FALSE)
   with_export_receipt(out, meta)
 }
 veg_codebook <- function() {
@@ -946,8 +949,7 @@ veg_codebook <- function() {
     c("eventID","trees_long/plot_summary_latest/plot_event_contexts_all","character","","NEON sampling event identifier. Plot-event identity is plotID x eventID; date alone is never used as the event key."),
     c("individualID","trees_long","character","","NEON plant tag. Always pair with plotID; TEMP.PLA ids are not stable remeasurement identities."),
     c("tempStemID","trees_long","character","","Stem-within-event locator. It is not stable across years for multi-bole shrubs/saplings and can be missing or conflicting in documented source anomalies."),
-    c("subplotID","trees_long","character","","Nested subplot within the plot."),
-    c("mapping_eventID","trees_long","character","","Mapping/tagging event chosen by the deterministic latest-created identity join."),
+    c("subplotID","trees_long","character","subplot_area[_nested]","NEON RELEASE-2026 subplotID from vst_apparentindividual: subplot number plus sampled area in m2, plus the nested subplot when there is one (for example 41_25_1). It can change between events for the same plant (NEON issue 81910)."),
     c("mapping_created_date","trees_long","date (ISO)","YYYY-MM-DD","Creation date used to select the mapping/tagging identity record."),
     c("taxonID","trees_long","character","","Published taxon identifier where available."),
     c("taxon_label","trees_long","character","","Best available explicit label, including unresolved/coarse identifications; physical records are never dropped for missing species names."),
@@ -1002,6 +1004,7 @@ veg_codebook <- function() {
     c("n_species","plots","integer","","Count of distinct live species-or-finer labels (`is_species = TRUE`) in the plot. Supported zeros are 0; held opportunities remain NA."),
     c("tallest_m","plots","numeric","m","Height of the tallest live plant in the plot among rows that pass the shared size screen."),
     c("biggest_diam_cm","plots","numeric","cm","Largest eligible live stem diameter in the plot among records whose diameter passes the shared size screen: DBH for tree_dbh, basal stem diameter for shrub_sapling_basal."),
+    c("issue_ids","plots","character","NEON issue ids; semicolon-separated","NEON issue-log entries (DP1.10098.001 changeLogs, curated in R/neon_issue_log.R) whose site and date range cover this plot event. Blank when none applies."),
     c("largest_stem_taxon","plot_summary_latest","character","","Taxon label attached to the largest eligible live stem in the selected plot event; not an ecological-dominance estimate."),
     c("date","plot_event_contexts_all","date (ISO)","YYYY-MM-DD","Published vst_perplotperyear date for a source-backed context; NA for a measurement-only context. It is ordering context, not event identity."),
     c("opportunity_source_uid","plot_event_contexts_all","character","published uid","Deterministically selected source row retained only to carry nominal fields when a plot-event has multiple source records; a conflict is always held. NA for measurement-only contexts."),
@@ -1109,6 +1112,15 @@ qc_dictionary <- function(report = NULL) {
     c("level","character","high/warn/info","Review priority: high = incompatible with a registered analysis contract; warn = unusual and worth a second look; info = context retained but excluded from the affected summary."),
     c("issue","character","","Human-readable flag name (e.g. 'Implausible diameter jump (>5 cm/yr)')."),
     c("flag","character","resurrection/jump/shrink/mh/size_spike","Stable machine key for the flag type (present on per-flag downloads)."),
+    c("dead_eventID","character","","First all-dead event of a plant later recorded Live (resurrection only)."),
+    c("dead_date","character","YYYY-MM-DD","Date of that all-dead event (resurrection only)."),
+    c("live_eventID","character","","First Live event after it (resurrection only)."),
+    c("live_date","character","YYYY-MM-DD","Date of that Live event (resurrection only)."),
+    c("date_start","character","YYYY-MM-DD","Date of the earlier supported event in the compared pair (jump, shrink, mh)."),
+    c("date_later","character","YYYY-MM-DD","Date of the later supported event in the compared pair (jump, shrink, mh)."),
+    c("years","numeric","years","Elapsed time between the two compared events (jump, shrink)."),
+    c("mh_start_cm","numeric","cm","Measurement height on the stem at the earlier event (mh only)."),
+    c("mh_later_cm","numeric","cm","Measurement height on the stem at the later event (mh only)."),
     c("plotID","character","","NEON plot identifier; pair with individualID."),
     c("plant_key","character","plotID::individualID","Canonical join key for the flagged plant."),
     c("individualID","character","","FULL NEON tag. It is not a sufficient join key without plotID."),
@@ -1401,13 +1413,28 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST, plots = NULL) {
     res <- pd %>% dplyr::group_by(.data$.plant_key) %>%
       dplyr::summarise(plotID = dplyr::first(.data$plotID), individualID = dplyr::first(.data$individualID),
         scientificName = .first_known(.data$scientificName),
-        resurrected = any(.data$live & cumsum(.data$dead) > 0), .groups = "drop")
+        resurrected = any(.data$live & cumsum(.data$dead) > 0),
+        # the triggering pair: the first all-dead event and the first live event after it
+        dead_i = { i <- which(.data$dead)[1]; if (length(i) && !is.na(i)) i else NA_integer_ },
+        dead_eventID = if (is.na(dead_i)) NA_character_ else .chr(.data$eventID[dead_i]),
+        dead_date = if (is.na(dead_i)) as.Date(NA) else .data$date[dead_i],
+        live_i = { j <- if (is.na(dead_i)) integer() else which(.data$live & seq_along(.data$live) > dead_i); if (length(j)) j[1] else NA_integer_ },
+        live_eventID = if (is.na(live_i)) NA_character_ else .chr(.data$eventID[live_i]),
+        live_date = if (is.na(live_i)) as.Date(NA) else .data$date[live_i],
+        .groups = "drop")
     rr <- res[res$resurrected %in% TRUE, , drop = FALSE]
-    if (nrow(rr)) add("high", "resurrection", "Live status recorded after Dead",
-      "This status reversal is incompatible with the mortality state contract; verify identity, status coding, and the event records before interpretation.",
+    # Clonal shrubs resprout after top-kill by fire or browsing, so on the
+    # shrub channel a reversal is a warn-level check, not a contract breach.
+    shrub_channel <- identical(spec$channel, "shrub_sapling_basal")
+    if (nrow(rr)) add(if (shrub_channel) "warn" else "high", "resurrection", "Live status recorded after Dead",
+      if (shrub_channel) "Shrubs can resprout after being top-killed by fire or browsing, so a live record after an all-dead one can be real; verify identity, status coding and the event records, and note that the mortality rate censors these plants."
+      else "This status reversal is incompatible with the mortality state contract; verify identity, status coding, and the event records before interpretation.",
       data.frame(plotID = rr$plotID, plant_key = paste(rr$plotID, rr$individualID, sep = "::"),
         individualID = as.character(rr$individualID), plant = short(rr$individualID),
-        species = rr$scientificName, stringsAsFactors = FALSE))
+        species = rr$scientificName,
+        dead_eventID = rr$dead_eventID, dead_date = .iso_date(rr$dead_date),
+        live_eventID = rr$live_eventID, live_date = .iso_date(rr$live_date),
+        stringsAsFactors = FALSE))
   }
 
   # growth-derived flags (per permanent individual, like-for-like increments)
@@ -1419,21 +1446,28 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST, plots = NULL) {
       data.frame(plotID = jump$plotID, plant_key = paste(jump$plotID, jump$individualID, sep = "::"),
         individualID = as.character(jump$individualID), plant = short(jump$individualID),
         species = jump$scientificName,
-        start_cm = round(jump$d0, 1), later_cm = round(jump$d1, 1), cm_per_yr = jump$growth_cm_yr, stringsAsFactors = FALSE))
+        start_cm = round(jump$d0, 1), later_cm = round(jump$d1, 1), cm_per_yr = jump$growth_cm_yr,
+        date_start = .iso_date(jump$date0), date_later = .iso_date(jump$date1), years = round(jump$yrs, 2),
+        stringsAsFactors = FALSE))
     shrink <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr < -2 & !g$mh_change, , drop = FALSE]
     if (nrow(shrink)) add("warn", "shrink", "Large shrink (< −2 cm/yr)",
       "A decrease steeper than 2 cm/yr can reflect biology, damage, or measurement differences; verify the measurement point, tag, units, and source record.",
       data.frame(plotID = shrink$plotID, plant_key = paste(shrink$plotID, shrink$individualID, sep = "::"),
         individualID = as.character(shrink$individualID), plant = short(shrink$individualID),
         species = shrink$scientificName,
-        start_cm = round(shrink$d0, 1), later_cm = round(shrink$d1, 1), cm_per_yr = shrink$growth_cm_yr, stringsAsFactors = FALSE))
+        start_cm = round(shrink$d0, 1), later_cm = round(shrink$d1, 1), cm_per_yr = shrink$growth_cm_yr,
+        date_start = .iso_date(shrink$date0), date_later = .iso_date(shrink$date1), years = round(shrink$yrs, 2),
+        stringsAsFactors = FALSE))
     mh <- g[g$mh_change %in% TRUE, , drop = FALSE]
     if (nrow(mh)) add("info", "mh", "Measurement height moved between events",
       "The point on the stem where diameter is taken changed, so the before/after increment isn't apples-to-apples, and these are kept but excluded from growth stats.",
       data.frame(plotID = mh$plotID, plant_key = paste(mh$plotID, mh$individualID, sep = "::"),
         individualID = as.character(mh$individualID), plant = short(mh$individualID),
         species = mh$scientificName,
-        start_cm = round(mh$d0, 1), later_cm = round(mh$d1, 1), stringsAsFactors = FALSE))
+        start_cm = round(mh$d0, 1), later_cm = round(mh$d1, 1),
+        mh_start_cm = round(mh$mh0, 1), mh_later_cm = round(mh$mh1, 1),
+        date_start = .iso_date(mh$date0), date_later = .iso_date(mh$date1),
+        stringsAsFactors = FALSE))
   }
   ord <- c(high = 1L, warn = 2L, info = 3L)
   flags <- flags[order(vapply(flags, function(f) ord[[f$level]], integer(1)))]
@@ -1443,5 +1477,20 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST, plots = NULL) {
     r <- f$rows; r$flag <- NULL
     cbind(level = f$level, issue = f$label, r, stringsAsFactors = FALSE) })) else data.frame()
   if (nrow(report)) report <- cbind(contract_id = VEG_CONTRACT_ID, report, stringsAsFactors = FALSE)
-  list(flags = flags, n_flag = length(flags), report = report, contract_id = VEG_CONTRACT_ID)
+  list(flags = flags, n_flag = length(flags), report = report, contract_id = VEG_CONTRACT_ID,
+       n_history = if (has_history) nrow(trees) else 0L,
+       n_growth_pairs = if (is.null(g)) 0L else nrow(g))
+}
+
+# The QC report frame for a download: the scan's report, or a zero-row frame
+# with every documented column when nothing was flagged, so a clean site's
+# qc_report.csv has the same columns as a flagged one.
+qc_report_frame <- function(q) {
+  if (!is.null(q) && is.data.frame(q$report) && nrow(q$report)) return(q$report)
+  dict <- qc_dictionary()
+  cols <- lapply(seq_len(nrow(dict)), function(i) {
+    switch(dict$type[[i]], numeric = numeric(), integer = integer(), logical = logical(), character())
+  })
+  names(cols) <- dict$column
+  as.data.frame(cols, stringsAsFactors = FALSE, check.names = FALSE)
 }
