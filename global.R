@@ -58,6 +58,7 @@ source("R/neon_issue_log.R", local = FALSE)      # curated NEON issue-log notes
 source("R/veg_helpers.R", local = FALSE)
 source("R/report_pdf.R", local = FALSE)
 source("R/map_picker.R", local = FALSE)   # reusable national site-picker map (flagship front door)
+source("R/build_receipt.R", local = FALSE)   # deployed file set + ddl-build-digest meta tag
 
 NEON_DPID <- "DP1.10098.001"   # Vegetation structure
 .NEON_PKG <- paste0("neon", "Utilities")

@@ -27,8 +27,8 @@ if (nzchar(QUERY_END) && !grepl("^[0-9]{4}-(0[1-9]|1[0-2])$", QUERY_END))
   stop("VST_QUERY_END must be YYYY-MM", call. = FALSE)
 if (nzchar(QUERY_END) && QUERY_END < QUERY_START)
   stop("VST_QUERY_END must not precede VST_QUERY_START", call. = FALSE)
-if (utils::packageVersion("neonUtilities") < package_version("3.0.3"))
-  stop("official RELEASE-2026 access requires neonUtilities >= 3.0.3", call. = FALSE)
+if (utils::packageVersion("neonUtilities") < package_version("4.0.1"))
+  stop("NEON data downloads need neonUtilities >= 4.0.1 (token auth)", call. = FALSE)
 
 token <- trimws(Sys.getenv("NEON_TOKEN", unset = ""))
 if (!nzchar(token)) {
@@ -67,6 +67,89 @@ product_metadata <- tryCatch({
 }, error = function(error) {
   stop("NEON product availability request failed: ", conditionMessage(error), call. = FALSE)
 })
+
+# ---- upstream watches (report only; never fail the run) -------------------
+# Both read the anonymous product metadata above. They print GitHub warning
+# annotations and, inside Actions, append to the step summary. They never
+# touch OUT_DIR, so the raw staging inventory and checksums are unchanged.
+watch_summary <- function(lines) {
+  path <- Sys.getenv("GITHUB_STEP_SUMMARY", unset = "")
+  if (nzchar(path)) cat(lines, file = path, sep = "\n", append = TRUE)
+}
+watch_clean <- function(text, limit = 200L) {
+  text <- gsub("[[:space:]]+", " ", trimws(as.character(text %||% "")))
+  if (nchar(text) > limit) text <- paste0(substr(text, 1L, limit - 3L), "...")
+  gsub("%", "%25", text, fixed = TRUE)
+}
+watch_release <- function() {
+  tags <- vapply(product_metadata$releases %||% list(),
+                 function(item) as.character(item$release %||% ""), "")
+  tags <- tags[grepl("^RELEASE-[0-9]{4}$", tags)]
+  if (!length(tags)) return(invisible(NULL))
+  newest <- tags[which.max(as.integer(sub("^RELEASE-", "", tags)))]
+  if (as.integer(sub("^RELEASE-", "", newest)) >
+      as.integer(sub("^RELEASE-", "", NEON_RELEASE))) {
+    line <- sprintf("::warning title=Newer NEON release::%s is published; this run fetched %s",
+                    newest, NEON_RELEASE)
+    cat(line, "\n", sep = "")
+    watch_summary(line)
+  }
+  invisible(NULL)
+}
+watch_cutoff <- function() {
+  date_pattern <- "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+  runtime <- tryCatch(readLines("data/source/vegetation-fetch-runtime.txt", warn = FALSE),
+                      error = function(error) character(0))
+  hit <- grep(sprintf("^(builtAt|buildDate|queryDate|fetchedAt)=%s", date_pattern),
+              runtime, value = TRUE)
+  if (length(hit)) {
+    return(list(date = as.Date(regmatches(hit[1L], regexpr(date_pattern, hit[1L]))),
+                source = "data/source/vegetation-fetch-runtime.txt"))
+  }
+  receipt <- tryCatch(readLines("docs/VEGETATION-SOURCE-RECEIPT.md", warn = FALSE),
+                      error = function(error) character(0))
+  hit <- grep(sprintf("bundle build date: `%s`", date_pattern), receipt, value = TRUE)
+  if (length(hit)) {
+    return(list(date = as.Date(regmatches(hit[1L], regexpr(date_pattern, hit[1L]))),
+                source = "docs/VEGETATION-SOURCE-RECEIPT.md build date"))
+  }
+  list(date = Sys.Date() - 120L, source = "last 120 days (no committed receipt date parsed)")
+}
+watch_issue_log <- function() {
+  cutoff <- watch_cutoff()
+  entries <- product_metadata$changeLogs %||% list()
+  entry_date <- function(entry) {
+    raw <- as.character(entry$issueDate %||% entry$dateRangeStart %||% "")
+    if (!length(raw) || !grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}", raw)) return(as.Date(NA))
+    as.Date(substr(raw, 1L, 10L))
+  }
+  dates <- do.call(c, c(list(as.Date(character(0))), lapply(entries, entry_date)))
+  recent <- which(!is.na(dates) & dates > cutoff$date)
+  if (!length(recent)) return(invisible(NULL))
+  rows <- character(0)
+  for (index in recent[order(dates[recent])]) {
+    entry <- entries[[index]]
+    id <- watch_clean(entry$id, 20L)
+    when <- format(dates[[index]])
+    where <- watch_clean(entry$locationAffected, 80L)
+    text <- watch_clean(entry$issue)
+    cat(sprintf("::warning title=NEON issue log::%s (%s; %s): %s\n", id, when, where, text))
+    rows <- c(rows, sprintf("| %s | %s | %s | %s |", id, when,
+                            gsub("|", "/", where, fixed = TRUE),
+                            gsub("|", "/", watch_clean(entry$issue, 120L), fixed = TRUE)))
+  }
+  watch_summary(c(
+    "", sprintf("### NEON issue log entries after %s (%s)", format(cutoff$date), cutoff$source),
+    "", "| id | date | locations | issue |", "| --- | --- | --- | --- |", rows, ""
+  ))
+  invisible(NULL)
+}
+for (watch in list(watch_release, watch_issue_log)) {
+  tryCatch(watch(), error = function(error) {
+    cat(sprintf("::warning title=NEON metadata watch::skipped: %s\n",
+                watch_clean(conditionMessage(error))))
+  })
+}
 release_sites <- sort(unique(vapply(Filter(function(site) {
   any(vapply(site$availableReleases %||% list(), function(item) {
     identical(item$release, NEON_RELEASE)

@@ -131,6 +131,16 @@ box only with an attached exact receipt.
 - [x] Rollback targets (`0709bd0` / Connect #58 for PR #8, `433bbd2` / #57 for
       PR #7, and `91a7814` / #56 for PR #6) and failed-attempt evidence recorded.
 
+### Every merge to main (post-merge)
+
+- [ ] The `Post-deploy revision check` run for the merge commit is green: the
+      live `ddl-build-digest` equals the digest computed from that commit's
+      `manifest.json`.
+- [ ] Map tiles on the live app load from `basemaps.cartocdn.com`, not
+      `arcgisonline.com` (the Esri fallback means `CARTO_BASEMAP_KEY` is unset).
+- [ ] axe on the live app at 375 px and 1440 px passes `document-title` and
+      `html-has-lang`.
+
 ## Suite closeout
 
 - [x] `BUILD-TEST-HANDOFF.md` finalized through the #59 runtime receipt with

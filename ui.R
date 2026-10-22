@@ -24,6 +24,7 @@ ui <- bslib::page_fillable(
   title = "NEON Vegetation Structure Explorer", lang = "en",
 
   tags$head(
+    veg_build_meta_tag(),
     tags$link(rel = "stylesheet", href = asset_url("vendor/sweetalert2/sweetalert2.min.css")),
     tags$script(src = asset_url("vendor/sweetalert2/sweetalert2.all.min.js")),
     tags$script(src = asset_url("vendor/html-to-image/html-to-image.js")),
