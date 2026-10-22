@@ -773,6 +773,9 @@ SEARCH_INDEX_CHECK <- if (SITE_INDEX_CHECK$ok) {
 VEG_FAMILY_READY <- isTRUE(SITE_INDEX_CHECK$ok) && isTRUE(SEARCH_INDEX_CHECK$ok)
 VEG_FAMILY_HOLD_REASON <- unique(c(SITE_INDEX_CHECK$reason, SEARCH_INDEX_CHECK$reason))
 SITE_INDEX <- if (VEG_FAMILY_READY) SITE_INDEX_CANDIDATE else NULL
+# Newest measurement date in the validated family (written by the index
+# builders from contract v3 on); NULL on an older family or a held family.
+SITE_DATA_THROUGH <- if (!is.null(SITE_INDEX)) attr(SITE_INDEX, "data_through") else NULL
 SEARCH_INDEX <- if (VEG_FAMILY_READY) SEARCH_INDEX_CANDIDATE else NULL
 BUNDLED <- if (VEG_FAMILY_READY) as.character(SITE_INDEX$site) else character(0)
 

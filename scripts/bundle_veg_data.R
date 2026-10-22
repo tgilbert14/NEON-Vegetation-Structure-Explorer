@@ -1154,6 +1154,7 @@ vst_bundle_main <- function() {
   }
 
   index_rows <- list()
+  latest_dates <- character()
   for (site in sites) {
     cat("=== bundling", site, "===\n")
     raw <- readRDS(file.path(raw_dir, paste0(site, "_raw.rds")))
@@ -1164,6 +1165,8 @@ vst_bundle_main <- function() {
       saveRDS(bundle, file.path(sample_dir, "demo.rds"), compress = "xz")
     }
     index_rows[[site]] <- bundle$contract$index$site
+    dates <- suppressWarnings(as.Date(bundle$trees$date))
+    if (any(!is.na(dates))) latest_dates <- c(latest_dates, as.character(max(dates, na.rm = TRUE)))
     cat(sprintf(
       "  %s: %d measurement rows; %d plot-event contexts; primary=%s; size=%s\n",
       site, nrow(bundle$trees), nrow(bundle$plots), bundle$meta$primary_channel,
@@ -1177,6 +1180,7 @@ vst_bundle_main <- function() {
     stop("candidate index does not cover the registered site family", call. = FALSE)
   }
   attr(index, "contract_id") <- VST_CONTRACT_ID
+  if (length(latest_dates)) attr(index, "data_through") <- max(latest_dates)
   if (!is.null(source_receipt)) attr(index, "source_receipt") <- source_receipt
   saveRDS(index, site_index_out, compress = "xz")
   vst_assert_site_inventory(site_dir)

@@ -2,20 +2,19 @@
 # NEON Vegetation Structure Explorer — ui.R
 # ===========================================================================
 
-# Landing "data through" line, read from the validated site-index receipt only.
-# query_end is shown as YYYY-MM when it is a date; a full-release receipt shows
-# the release name alone; a missing or held receipt shows nothing.
+# Landing "data through" line, read from the validated family only: the
+# release from the site-index receipt, and the newest measurement date the
+# index builders record (SITE_DATA_THROUGH). A dated query_end is the fallback;
+# a missing or held receipt shows nothing.
 DATA_THROUGH_LINE <- local({
   rc <- if (exists("SITE_SOURCE_RECEIPT")) SITE_SOURCE_RECEIPT else NULL
   rel <- if (is.list(rc) && length(rc$neon_release)) as.character(rc$neon_release[[1]]) else NA_character_
   qe  <- if (is.list(rc) && length(rc$query_end)) as.character(rc$query_end[[1]]) else NA_character_
-  if (is.na(rel) || !nzchar(rel)) {
-    ""
-  } else if (!is.na(qe) && grepl("^[0-9]{4}-[0-9]{2}", qe)) {
-    paste0("NEON ", rel, " · data through ", substr(qe, 1, 7))
-  } else {
-    paste0("NEON ", rel)
-  }
+  dt  <- if (exists("SITE_DATA_THROUGH") && length(SITE_DATA_THROUGH)) as.character(SITE_DATA_THROUGH[[1]]) else NA_character_
+  through <- if (!is.na(dt) && grepl("^[0-9]{4}-[0-9]{2}", dt)) substr(dt, 1, 7) else
+    if (!is.na(qe) && grepl("^[0-9]{4}-[0-9]{2}", qe)) substr(qe, 1, 7) else NA_character_
+  if (is.na(rel) || !nzchar(rel)) "" else
+    if (!is.na(through)) paste0("NEON ", rel, " · data through ", through) else paste0("NEON ", rel)
 })
 
 ui <- bslib::page_fillable(

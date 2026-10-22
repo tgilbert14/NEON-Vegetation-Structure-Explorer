@@ -11,6 +11,7 @@ SITE_DIR <- Sys.getenv("VST_SITE_DIR", unset = "data/sites")
 SITE_INDEX_OUT <- Sys.getenv("VST_SITE_INDEX_OUT", unset = "data/site_index.rds")
 sites <- vst_assert_site_inventory(SITE_DIR)
 receipts <- list()
+latest_dates <- character()
 
 rows <- lapply(sites, function(site) {
   path <- file.path(SITE_DIR, paste0(site, ".rds"))
@@ -24,6 +25,8 @@ rows <- lapply(sites, function(site) {
     stop(site, " bundle has an invalid canonical site-index payload", call. = FALSE)
   }
   receipts[[site]] <<- bundle$meta$source_receipt %||% NULL
+  dates <- suppressWarnings(as.Date(bundle$trees$date))
+  if (any(!is.na(dates))) latest_dates <<- c(latest_dates, as.character(max(dates, na.rm = TRUE)))
   row
 })
 
@@ -34,6 +37,8 @@ if (nrow(index) != length(VST_EXPECTED_SITES) ||
        call. = FALSE)
 }
 attr(index, "contract_id") <- VST_CONTRACT_ID
+# Newest measurement date in the family, for the landing "data through" line.
+if (length(latest_dates)) attr(index, "data_through") <- max(latest_dates)
 if (any(vapply(receipts, Negate(is.null), logical(1)))) {
   if (length(receipts) != length(VST_EXPECTED_SITES) ||
       !all(vapply(receipts, Negate(is.null), logical(1)))) {
