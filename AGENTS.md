@@ -10,7 +10,7 @@ Code via `CLAUDE.md`. The tool-neutral source of truth is the canonical suite pl
 `docs/VEGETATION-SOURCE-RECEIPT.md`; read those first and keep tool-specific notes to this
 file. Close every session with a dated `BUILD-TEST-HANDOFF.md` entry tagged with your tool
 (`[Codex]` / `[Claude]`) and a one-line next action. Before coding: plan, question, and
-challenge the work, and always surface at least one improvement — see canonical playbook §9.
+challenge the work, and always surface at least one improvement; see canonical playbook §9.
 Branch defaults are split across the suite: this repo and Small Mammal are `main`;
 Driver-Cascade is `master` — never assume.
 

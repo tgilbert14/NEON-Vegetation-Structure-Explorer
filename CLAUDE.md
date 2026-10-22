@@ -60,8 +60,8 @@ tagged tree's diameter, height & growth career, stand size-structure & basal are
 
 - **`.claude/agents/LESSONS.md`** — project-local, one-line lessons; read on cold boot, append after a
   durable run. The canonical cross-cutting log lives in `TG-Data-Apps`; `curator` promotes recurring
-  lessons up (and turns proven patterns into skills — canonical playbook §9).
-- **`docs/neonize-playbook.md`** — pointer to the canonical suite playbook
+  lessons up (and turns proven patterns into skills: canonical playbook §9).
+- **`docs/neonize-playbook.md`**: pointer to the canonical suite playbook
   `NEON-Driver-Cascade/docs/neonize-playbook.md` (§1-§9).
 
 ## Working notes
