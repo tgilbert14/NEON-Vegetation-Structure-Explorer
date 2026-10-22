@@ -1,5 +1,6 @@
 /* =========================================================================
    pincards.js — tap-to-pin cards + export-with-pins for the Size Lab scatter.
+   Suite chrome lineage: forked from NEON-Plant-Diversity@ac7ae91 (2026-06-18) and adapted here.
 
    Ported from the Big 12 Girth Index pin-card system (ggiraph) onto PLOTLY:
    the same draggable/resizable navy card + gold leader line + html-to-image
@@ -368,7 +369,7 @@
   function toastStart(msg) {
     if (typeof Swal === "undefined") return;
     Swal.fire({ toast: true, position: "top-end", title: msg, showConfirmButton: false,
-      allowOutsideClick: false, didOpen: function () { if (Swal.showLoading) Swal.showLoading(); } });
+      didOpen: function () { if (Swal.showLoading) Swal.showLoading(); } });
   }
   function toastDone(msg, isErr) {
     if (typeof Swal === "undefined") return;
@@ -418,7 +419,7 @@
           n.classList.contains("smt-pin-resize") || n.classList.contains("smt-snap-btn") ||
           n.classList.contains("smt-clear-btn"))); } })   // keep cards + leader lines; drop chrome buttons
         .then(function (url) { downloadUrl(url, name); toastDone("Saved ✓"); })
-        .catch(function () { toastDone("Render failed — try again", true); })
+        .catch(function () { toastDone("Render failed. Try again.", true); })
         .then(function () { cleanup(); saving = false; });
     }, 90);
   }

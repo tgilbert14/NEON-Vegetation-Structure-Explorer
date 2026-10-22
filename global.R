@@ -75,7 +75,7 @@ DEMO_META <- list(site = DEFAULT_SITE, label = "SRER · Santa Rita Experimental 
 # with the Response Atlas as the hub. Kept as a plain list so the block cannot
 # drift from the covers; the same list shape is used in the sibling apps.
 .SIBLINGS <- list(
-  list(name = "Response Atlas",   prod = "cross-product synthesis", url = "https://tgilbert14.github.io/NEON-Driver-Cascade/"),
+  list(name = "Cross-Product Response Atlas", prod = "cross-product synthesis", url = "https://tgilbert14.github.io/NEON-Driver-Cascade/"),
   list(name = "Small Mammals",    prod = "DP1.10072.001",           url = "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/"),
   list(name = "Breeding Birds",   prod = "DP1.10003.001",           url = "https://tgilbert14.github.io/NEON-Breeding-Birds/"),
   list(name = "Ground Beetles",   prod = "DP1.10022.001",           url = "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/"),

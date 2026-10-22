@@ -1,5 +1,6 @@
 /* =========================================================================
    app.js — NEON Vegetation Structure Explorer
+   Suite chrome lineage: shell patterns forked from NEON-Small-Mammal-Tracker-App@22ae61c (2026-06-18); theme and copy are this app's own.
    count-up stat counters, accessible loading state, the on-demand guided tour,
    and the Shiny custom-message handlers.
    ========================================================================= */
@@ -12,7 +13,7 @@ function animateCount(el) {
   // most reliable signal to dismiss the loading overlay (no reliance on a
   // custom Shiny message, which doesn't always register in time).
   if (typeof smtLoadDone === "function") smtLoadDone();
-  const rawTarget = el.getAttribute("data-target") || "—";
+  const rawTarget = el.getAttribute("data-target") || "–";
   const target = parseFloat(rawTarget);
   if (!Number.isFinite(target)) {
     el.textContent = rawTarget;
@@ -133,7 +134,7 @@ function smtLoadStart(label) {
   clearTimeout(smtSafetyTimer);
   smtSafetyTimer = setTimeout(function () {
     var slowNote = document.querySelector(".load-note");
-    if (slowNote) slowNote.textContent = "Still working—this place has more measurements to open.";
+    if (slowNote) slowNote.textContent = "Still working. This place has more measurements to open.";
   }, 25000);
 }
 function smtLoadDone() {
@@ -182,7 +183,7 @@ function vegTour() {
   var D = window.driver.js.driver;
   var steps = [
     { element: ".living-poster-app", popover: { title: "A living record", side: "bottom",
-        description: "This app follows <b>tagged woody plants</b>—trees and shrubs that NEON crews measure again over time." } },
+        description: "This app follows <b>tagged woody plants</b>: trees and shrubs that NEON crews measure again over time." } },
     { element: ".map-picker-wrap", popover: { title: "Pick a place", side: "top",
         description: "Tap any dot for a short place card, then choose <b>Open this place</b>." } },
     { element: ".select-panel-compact", popover: { title: "Or type a name", side: "top",

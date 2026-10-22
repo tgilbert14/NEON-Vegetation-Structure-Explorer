@@ -52,7 +52,8 @@ if (/Editorial illustration—not a field photograph or data record\./i.test(shi
 }
 requireText(/42 places/i, "cover must state its 42-place scope");
 requireText(/DP1\.10098\.001/i, "cover must identify the source data product");
-requireText(/Driver Cascade/i, "cover must identify the suite ambassador");
+requireText(/NEON Cross-Product Response Atlas/, "cover must name the suite hub as the NEON Cross-Product Response Atlas");
+if (/\u2014|&mdash;|&#8212;|&#x2014;/i.test(html)) fail("cover must not contain an em dash (character or entity)");
 requireText(/vegetation-living-poster-840\.webp\s+840w[^"']*vegetation-living-poster\.webp\s+1672w/i,
   "cover must offer compact and full responsive WebP art");
 requireText(/stand numbers describe the sampled plots/i,
