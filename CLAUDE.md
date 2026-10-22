@@ -5,14 +5,14 @@
 > `TG-Data-Apps` repo (and in user scope, so every agent is available here too).
 >
 > **Worked by more than one agent (Claude Code + ChatGPT/Codex).** The tool-neutral source of truth is
-> `docs/neonize-playbook.md` (the flagship `NEON-Small-Mammal-Tracker-App` copy is the reference for
-> §6–9), `docs/BUILD-TEST-HANDOFF.md`, `docs/SCIENCE-CONTRACT.md`, and `docs/VEGETATION-SOURCE-RECEIPT.md`
+> the canonical suite playbook `NEON-Driver-Cascade/docs/neonize-playbook.md` (pointer:
+> `docs/neonize-playbook.md`), `docs/BUILD-TEST-HANDOFF.md`, `docs/SCIENCE-CONTRACT.md`, and `docs/VEGETATION-SOURCE-RECEIPT.md`
 > — read those first; `CLAUDE.md` / `AGENTS.md` only add tool-specific notes on top. Close every session
 > with a dated `BUILD-TEST-HANDOFF.md` entry tagged with your tool (`[Claude]` / `[Codex]`) and a one-line
 > next action, so the other agent can pick up cold.
 >
 > **Before you code: plan, question, and challenge the work** — and always name at least one improvement
-> you spot. The how-we-work principles are the flagship playbook §9.
+> you spot. The how-we-work principles are canonical playbook §9.
 
 ## What this is
 
@@ -34,7 +34,7 @@ tagged tree's diameter, height & growth career, stand size-structure & basal are
   (twice, byte-identical) and fails if the committed copies differ. With no local R this forces a
   push → CI-red-by-design → promote-the-validated-artifact → re-run loop. Escape: promote the VALIDATED
   `vegetation-structure-derived-*` artifact (never an unvalidated one), push once, don't rapid re-push into
-  `cancel-in-progress`. Durable fix: the flagship's byte-determinism recipe (playbook §6) + a
+  `cancel-in-progress`. Durable fix: the flagship's byte-determinism recipe (canonical playbook §6) + a
   `Regenerate manifest (manual)` workflow adapted to regenerate both derived files.
 
 ## Release boundary (the science is on HOLD — from AGENTS.md)
@@ -60,8 +60,9 @@ tagged tree's diameter, height & growth career, stand size-structure & basal are
 
 - **`.claude/agents/LESSONS.md`** — project-local, one-line lessons; read on cold boot, append after a
   durable run. The canonical cross-cutting log lives in `TG-Data-Apps`; `curator` promotes recurring
-  lessons up (and turns proven patterns into skills — playbook §9).
-- **`docs/neonize-playbook.md`** — methodology (the flagship copy is the reference for §6–9).
+  lessons up (and turns proven patterns into skills: canonical playbook §9).
+- **`docs/neonize-playbook.md`**: pointer to the canonical suite playbook
+  `NEON-Driver-Cascade/docs/neonize-playbook.md` (§1-§9).
 
 ## Working notes
 
