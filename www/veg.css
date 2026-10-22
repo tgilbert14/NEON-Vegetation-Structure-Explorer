@@ -527,3 +527,11 @@ button.podium-card { display: block; }
 .codebook-card { grid-column: 1 / -1; }
 
 @media (max-width: 600px) { .tools-strip .btn { min-height: 44px; } }
+
+/* ---- NEON issue-log chips (beside the estimate they qualify) ------------ */
+.issue-chips { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.issue-chip { display: block; font-size: 12.5px; line-height: 1.45; padding: 5px 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink, #1d2a24); }
+.issue-chip b { color: var(--bark, #8a5a2b); }
+[data-bs-theme="dark"] .issue-chip { background: rgba(255,255,255,0.04); color: #e7efe9; }
+[data-bs-theme="dark"] .issue-chip b { color: #e0b43a; }

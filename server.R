@@ -786,10 +786,20 @@ server <- function(input, output, session) {
         p(class = "dim", "This remains a summary of supported sampled plots, not a wall-to-wall site estimate."))
     }
     support_txt <- stand_support_message(st, rv$plots, sp)
+    # NEON issue-log entries that cover the plot events this estimate uses.
+    issue_notes <- veg_issue_notes(rv$site, st$per_plot$date[st$per_plot$supported %in% TRUE],
+                                   c("structure", "coverage"))
     insight_banner("calculator", tone = "gold",
       HTML(sprintf("%sAcross <b>%d supported sampled plots</b> (%s): <span class='ci-hero'>%s m²/ha</span>%s measured cross-sectional area, <b>%s stems/ha</b>%s, stem-weighted quadratic mean %s <b>%s cm</b>.%s <span class='dim'>Mean ± plot SE. %s This is not a wall-to-wall inventory.</span>",
         pre, st$n_plots, scope, fmt_num(st$ba_ha), se_ba, fmt_count(st$density_ha), se_d, sp$size_lab, fmt_num(st$qmd), dom_txt, support_txt)),
-      design_pop, source_gap_inline())
+      design_pop, source_gap_inline(), veg_issue_chips(issue_notes))
+  })
+
+  # NEON issue-log entries that cover the supported history behind growth and
+  # mortality (change between censuses) at this site.
+  change_issue_notes <- reactive({
+    h <- .supported_history(rv$trees, rv$plots, SP())
+    veg_issue_notes(rv$site, if (is.null(h)) NULL else h$date, "change")
   })
 
   # ---- GROWTH & MORTALITY -------------------------------------------------
@@ -924,8 +934,16 @@ server <- function(input, output, session) {
   qc_modal_rows <- reactiveVal(NULL)
   output$vegQcFlags <- renderUI({
     q <- veg_qc()
-    if (is.null(q) || !q$n_flag) return(div(class = "qc-flag qc-flag-clean", bs_icon("check2-circle"),
-      HTML(" <b>No listed checks triggered.</b> This is not proof that every record is error-free; it means the app's explicit status, measurement-point, and increment rules found no flags.")))
+    # Three honest clean states: no history to check; checks that need two
+    # supported measurements could not run; or every check ran and found none.
+    if (is.null(q)) return(div(class = "qc-flag qc-flag-clean", bs_icon("info-circle"),
+      HTML(" <b>No supported plot history in this channel, so no checks ran.</b> The size screen found no record out of line.")))
+    if (!q$n_flag && !isTRUE(q$n_growth_pairs > 0)) return(div(class = "qc-flag qc-flag-clean", bs_icon("info-circle"),
+      HTML(sprintf(" <b>Status reversals and size screen: none found</b> across %s supported records. Size-change and measuring-point checks could not run here: no plant has two supported measurements in this channel.",
+        fmt_count(q$n_history %||% 0L)))))
+    if (!q$n_flag) return(div(class = "qc-flag qc-flag-clean", bs_icon("check2-circle"),
+      HTML(sprintf(" <b>No listed checks triggered</b> across %s supported records and %s remeasured plants. This is not proof that every record is error-free; it means the status, size, measuring-point and increment rules found no flags.",
+        fmt_count(q$n_history %||% 0L), fmt_count(q$n_growth_pairs %||% 0L)))))
     ic <- c(high = "exclamation-octagon-fill", warn = "exclamation-triangle-fill", info = "info-circle-fill")
     div(class = "qc-flag-list", lapply(q$flags, function(f)
       tags$button(class = paste0("qc-flag qc-flag-", f$level), type = "button",
@@ -939,16 +957,33 @@ server <- function(input, output, session) {
     if (!length(f)) return(); f <- f[[1]]; rows <- f$rows; rows$flag <- NULL
     qc_modal_rows(list(key = f$key, rows = rows))   # rows keep FULL individualID for the CSV (joins to trees_long)
     shown <- utils::head(rows, 60); shown$individualID <- NULL   # on-screen shows the short 'plant' id only
+    keys <- as.character(shown$plant_key %||% rep(NA_character_, nrow(shown)))
     showModal(modalDialog(easyClose = TRUE, size = "l",
       title = tagList(bs_icon("clipboard-check"), sprintf(" %s · %d plants", f$label, f$n)),
       p(class = "qc-why", f$why),
       tags$div(class = "qc-modal-tbl",
         tags$table(class = "inspect-tbl",
-          tags$thead(tags$tr(lapply(names(shown), function(nm) tags$th(nm)))),
+          tags$thead(tags$tr(tags$th(tags$span(class = "visually-hidden", "Open")), lapply(names(shown), function(nm) tags$th(nm)))),
           tags$tbody(lapply(seq_len(nrow(shown)), function(i)
-            tags$tr(lapply(shown[i, ], function(v) tags$td(as.character(v)))))))),
+            tags$tr(
+              tags$td(if (!is.na(keys[i])) tags$button(type = "button", class = "btn btn-link btn-sm qc-open",
+                `aria-label` = paste("Open the career of plant", shown$plant[i]),
+                onclick = sprintf("Shiny.setInputValue('qcPickPlant', %s, {priority:'event'})",
+                                  jsonlite::toJSON(keys[i], auto_unbox = TRUE)),
+                bs_icon("box-arrow-up-right"))),
+              lapply(shown[i, ], function(v) tags$td(as.character(v)))))))),
+      p(class = "dim", "Open a plant to see every measurement in its career."),
       if (nrow(rows) > 60) p(class = "dim", sprintf("Showing 60 of %d. Download for all.", nrow(rows))),
       footer = tagList(downloadButton("vegQcFlagCsv", "Download these (CSV)", class = "btn-outline-dark btn-sm"), modalButton("Close"))))
+  })
+  observeEvent(input$qcPickPlant, {
+    key <- input$qcPickPlant
+    removeModal()
+    if (is.null(rv$snap) || !nrow(plant_rows(rv$snap, key))) {
+      showNotification("That plant is not in the current snapshot (for example a held or older event). Its rows are in the QC download and trees_long.csv.", type = "message", duration = 8)
+      return()
+    }
+    pick_tree(key, navigate = TRUE)
   })
   output$vegQcFlagCsv <- downloadHandler(
     filename = function() sprintf("NEON-veg-%s-QC-%s-%s.csv", rv$site %||% "site",
@@ -963,7 +998,7 @@ server <- function(input, output, session) {
     filename = function() sprintf("NEON-veg-%s-QC-report-%s.csv", rv$site %||% "site", format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
       q <- veg_qc()
-      rows <- with_export_receipt(if (is.null(q)) data.frame() else q$report, rv$meta)
+      rows <- with_export_receipt(qc_report_frame(q), rv$meta)
       utils::write.csv(rows, file, row.names = FALSE, na = "")
     })
 
@@ -1331,7 +1366,7 @@ server <- function(input, output, session) {
       cb <- complete_veg_codebook(veg_codebook(), exports)
       assert_veg_codebook(cb, exports)
       q <- tree_qc_site(rv$trees, sp, rv$plots)
-      qr <- with_export_receipt(if (is.null(q)) data.frame() else q$report, rv$meta)
+      qr <- with_export_receipt(qc_report_frame(q), rv$meta)
       qcb <- qc_dictionary(qr)
       assert_qc_dictionary(qcb, qr)
       st <- stand_site(rv$snap, rv$plots, sp)
