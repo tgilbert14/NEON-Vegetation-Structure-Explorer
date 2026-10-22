@@ -101,7 +101,7 @@ had SHA-256
 The current tracked inspector at
 `scripts/validation/inspect_vegetation_candidate.py` also enforces the retained
 2026-07-15 source provenance, including exact Plotly 4.12.0, and has SHA-256
-`eef5f416a0d167729d5b33acd3f7439e5f4c01ccfc2d4de7eceb7be09f757e02`;
+`b699827a9c3ae95898a04acc9fc300c462be51e28b4fd3364f443c6b5c194d24`;
 CI pins those exact current bytes. Keep its log outside the extracted candidate
 root so the fail-closed 55-file inventory is not changed:
 

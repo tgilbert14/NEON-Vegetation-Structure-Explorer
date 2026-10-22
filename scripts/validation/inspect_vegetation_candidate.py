@@ -105,6 +105,7 @@ EXPECTED_RUNTIME_FILES = frozenset(
     (
         "global.R", "ui.R", "server.R",
         "R/map_picker.R", "R/report_pdf.R", "R/site_metadata.R",
+        "R/build_receipt.R", "R/neon_issue_log.R",
         "R/size_plausibility.R", "R/veg_helpers.R",
         "data/site_index.rds", "data/search_index.rds",
         "data-sample/demo.rds",
