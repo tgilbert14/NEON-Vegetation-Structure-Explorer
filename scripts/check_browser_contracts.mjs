@@ -52,9 +52,39 @@ for (const token of [
 ]) {
   requireText(server, token, `server-backed site picker refresh contract is missing ${token}`);
 }
-if (!/observeEvent\(\s*TRUE\s*,\s*\{\s*refresh_site_picker\(\)/s.test(server)) {
-  throw new Error("session initialization must register the searchable site choices");
+if (!/observeEvent\(\s*TRUE\s*,\s*\{\s*refresh_site_picker\(selected = boot_site\)/s.test(server)) {
+  throw new Error("session initialization must register the searchable site choices with the SRER default");
 }
+const globalR = readFileSync("global.R", "utf8");
+requireText(globalR, 'DEFAULT_SITE <- "SRER"', "the suite default site must be SRER");
+requireText(server, "boot_site <- if (DEFAULT_SITE %in% BUNDLED) DEFAULT_SITE else \"\"",
+  "the boot picker must preselect DEFAULT_SITE only when it is bundled");
+
+// Shell contract (suite audit 2026-10-18): page_fillable() takes title= and
+// lang=; window_title= and fillable= are not arguments and rendered as junk
+// <body> attributes with no <title>.
+requireText(ui, 'title = "NEON Vegetation Structure Explorer", lang = "en"',
+  "ui.R must give page_fillable() a real title and lang");
+for (const forbidden of ["window_title =", "fillable = FALSE"]) {
+  if (ui.includes(forbidden)) throw new Error(`ui.R passes non-argument ${forbidden} to page_fillable()`);
+}
+// A popup that must stay in view fights autoPan on small screens and can
+// trap the map in a pan loop; the suite rule is keepInView = FALSE.
+requireText(mapPicker, "keepInView = FALSE", "map popups must use keepInView = FALSE");
+if (mapPicker.includes("keepInView = TRUE")) throw new Error("map_picker.R still sets keepInView = TRUE");
+// QC flags must be operable from the keyboard: native buttons for the site
+// flags, and one delegated Enter/Space forwarder for role="button" triggers.
+requireText(server, 'tags$button(class = paste0("qc-flag qc-flag-", f$level), type = "button"',
+  "site QC flags must render as native type=button elements");
+requireText(app, 'if (e.key !== "Enter" && e.key !== " ") return;',
+  "role=button triggers need the delegated Enter/Space handler");
+requireText(app, "closest('[role=\"button\"]')", "the Enter/Space handler must delegate from role=button");
+// In-app suite registry: every sibling, with the Response Atlas as the hub.
+for (const token of [".SIBLINGS <- list(", '"Response Atlas"', "NEON-Plant-Diversity", "NEON-My-Little-Inverts"]) {
+  requireText(globalR, token, `in-app suite registry is missing ${token}`);
+}
+requireText(server, 'div(class = "sib-grid", lapply(.SIBLINGS', "About must render the suite registry");
+requireText(vegStyles, ".sib-grid", "the suite registry needs layout styling");
 const resetStart = server.indexOf("reset_to_places <- function()");
 const resetEnd = server.indexOf("observeEvent(input$changeSite", resetStart);
 const resetBlock = resetStart >= 0 && resetEnd > resetStart

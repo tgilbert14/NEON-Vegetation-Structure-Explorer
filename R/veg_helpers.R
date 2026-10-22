@@ -19,6 +19,8 @@
 # ===========================================================================
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+# Shared size-plausibility screen (also sourced by the bundle builder).
+if (!exists("vst_size_screen", mode = "function")) source("R/size_plausibility.R")
 mode_chr <- function(x) { x <- x[!is.na(x)]; if (!length(x)) return(NA_character_); names(sort(table(x), decreasing = TRUE))[1] }
 smax <- function(x) { x <- x[is.finite(x)]; if (!length(x)) NA_real_ else max(x) }   # NA (not -Inf) on empty
 smean <- function(x) { x <- x[is.finite(x)]; if (!length(x)) NA_real_ else mean(x) }
@@ -243,6 +245,31 @@ one_per_tree <- function(snap, spec = SIZE_FOREST) {
   out <- snap %>% dplyr::group_by(.data$.plant_key) %>%
     dplyr::slice_max(.data$.size, n = 1, with_ties = FALSE, na_rm = FALSE) %>% dplyr::ungroup()
   out$.size <- NULL; out$.plant_key <- NULL; out
+}
+# Size EXTREMES (tallest / biggest headlines, podium, compare) use only rows
+# that pass the shared size screen for that measure: "height" for tallest,
+# "diameter" for biggest, "any" for both. Every other summary keeps every row.
+# Screen the full history first (with_size_screen): a frame without the
+# screen columns is screened here from its own rows, which cannot see the
+# plant's other events.
+.size_screen_column <- function(measure) {
+  switch(match.arg(measure, c("any", "height", "diameter")),
+         any = "size_plausible", height = "size_height_ok", diameter = "size_diameter_ok")
+}
+size_ok_vec <- function(d, measure = "any") {
+  if (is.null(d) || !nrow(d)) return(logical())
+  column <- .size_screen_column(measure)
+  if (column %in% names(d)) d[[column]] %in% TRUE else vst_size_screen(d)[[column]] %in% TRUE
+}
+size_screened <- function(d, measure = "any") {
+  if (is.null(d) || !nrow(d)) return(d)
+  d[size_ok_vec(d, measure), , drop = FALSE]
+}
+with_size_screen <- function(trees) {
+  if (is.null(trees) || !nrow(trees)) return(trees)
+  sc <- vst_size_screen(trees)
+  for (column in names(sc)) trees[[column]] <- sc[[column]]
+  trees
 }
 live_only <- function(d) {
   if (is.null(d) || !nrow(d)) return(d)
@@ -606,6 +633,18 @@ tree_trajectory <- function(trees, id, col, plots = NULL) {
 # ---------------------------------------------------------------------------
 tree_qc_flags <- function(hist, spec = SIZE_FOREST, plots = NULL) {
   flags <- list(); add <- function(level, text) flags[[length(flags) + 1L]] <<- list(level = level, text = text)
+  spikes <- .size_spike_rows(hist, spec)
+  if (nrow(spikes)) {
+    add("warn", sprintf(
+      "%s %s out of line with this plant's other records or with physical bounds (%s). %s in every summary but %s left out of the matching tallest or biggest headline; verify, not wrong.",
+      paste(sprintf("The %s record (%s, %s)", ifelse(is.na(spikes$year), "undated", spikes$year),
+                    ifelse(is.na(spikes$height_m), "no height", paste(spikes$height_m, "m")),
+                    ifelse(is.na(spikes$diameter_cm), "no diameter", paste(spikes$diameter_cm, "cm"))), collapse = "; "),
+      if (nrow(spikes) == 1L) "is" else "are",
+      paste(unique(spikes$screen_reason), collapse = "; "),
+      if (nrow(spikes) == 1L) "It stays" else "They stay",
+      if (nrow(spikes) == 1L) "is" else "are"))
+  }
   if (!is.null(hist) && nrow(hist) &&
       "opportunity_source_missing" %in% names(hist)) {
     missing <- hist$opportunity_source_missing %in% TRUE
@@ -686,6 +725,8 @@ species_structure <- function(snap, plots, spec = SIZE_FOREST) {
   one <- one_per_tree(s, spec)
   if (!nrow(one)) return(NULL)
   one$.d <- one[[spec$col]]
+  one$.d_ok <- if ("size_diameter_ok" %in% names(one)) one$size_diameter_ok %in% TRUE else rep(TRUE, nrow(one))
+  one$.h_ok <- if ("size_height_ok" %in% names(one)) one$size_height_ok %in% TRUE else rep(TRUE, nrow(one))
   ba <- s; ba$.d <- ba[[spec$col]]; ba <- ba[is.finite(ba$.d) & ba$.d > 0, ]
   ba$ba_m2 <- pi * (ba$.d / 200)^2
   area <- per[per$supported %in% TRUE, c("plotID", "eventID", "area_ha"), drop = FALSE]
@@ -705,8 +746,8 @@ species_structure <- function(snap, plots, spec = SIZE_FOREST) {
   one %>% dplyr::group_by(.data$.taxon_label) %>%
     dplyr::summarise(plants = dplyr::n_distinct(.data$.plant_key),
                      family = mode_chr(.data$family),
-                     max_dbh = smax(.data$.d),
-                     max_ht = smax(.data$height),
+                     max_dbh = smax(.data$.d[.data$.d_ok]),
+                     max_ht = smax(.data$height[.data$.h_ok]),
                      mean_dbh = smean(.data$.d),
                      .groups = "drop") %>%
     dplyr::left_join(ba %>% dplyr::group_by(.data$.taxon_label) %>%
@@ -731,12 +772,14 @@ plot_summary_veg <- function(snap, plots, spec = SIZE_FOREST) {
     s$.d <- s[[spec$col]]
     s$.taxon_label <- .taxon_name(s)
     s$.is_species <- if ("is_species" %in% names(s)) s$is_species %in% TRUE else FALSE
+    s$.d_ok <- if ("size_diameter_ok" %in% names(s)) s$size_diameter_ok %in% TRUE else rep(TRUE, nrow(s))
+    s$.h_ok <- if ("size_height_ok" %in% names(s)) s$size_height_ok %in% TRUE else rep(TRUE, nrow(s))
     sp <- s %>% dplyr::group_by(.data$plotID, .data$eventID) %>%
       dplyr::summarise(n_taxa = dplyr::n_distinct(.data$.taxon_label[!is.na(.data$.taxon_label) & nzchar(.data$.taxon_label)]),
                        n_species = dplyr::n_distinct(.data$.taxon_label[.data$.is_species & !is.na(.data$.taxon_label) & nzchar(.data$.taxon_label)]),
-                       tallest = smax(.data$height),
-                       biggest = smax(.data$.d),
-                       dominant = { i <- which.max(.data$.d); if (length(i)) .data$.taxon_label[i] else NA_character_ },
+                       tallest = smax(.data$height[.data$.h_ok]),
+                       biggest = smax(.data$.d[.data$.d_ok]),
+                       dominant = { i <- which.max(ifelse(.data$.d_ok, .data$.d, NA_real_)); if (length(i)) .data$.taxon_label[i] else NA_character_ },
                        .groups = "drop")
   }
   out <- per %>% dplyr::left_join(sp, by = c("plotID", "eventID"))
@@ -833,6 +876,11 @@ tidy_trees_export <- function(trees, meta = NULL) {
     permanent = col_or_na(d, "permanent"),
     is_species = col_or_na(d, "is_species"),
     stringsAsFactors = FALSE)
+  # The shared size screen travels with the number: a FALSE row is kept in
+  # every summary but left out of the tallest/biggest extremes.
+  screen <- vst_size_screen(d)
+  out$size_plausible <- screen$size_plausible
+  out$size_screen_reason <- screen$size_screen_reason
   # Preserve source QC/flag fields without guessing their meaning. Exact raw
   # names make them traceable to the NEON table and prevent silent omission.
   qn <- grep("(quality|qualifier|qf$|flag$|status$|condition$|remark)",
@@ -877,6 +925,8 @@ veg_codebook <- function() {
     c("protocol_stem_key","trees_long","character","plotID::eventID::individualID::tempStemID","Plot-scoped display of the protocol stem locator. The published three-field locator should be unique, but plot scoping prevents known cross-plot tag collisions from contaminating another plot; true within-plot anomalies are preserved and flagged."),
     c("protocol_key_group_n","trees_long/plot_opportunity_source","integer","records","Number of published source records sharing the relevant protocol locator."),
     c("protocol_key_conflict","trees_long/plot_opportunity_source","logical","TRUE/FALSE","TRUE when the protocol locator is not unique; affected physical-channel summaries are held."),
+    c("size_plausible","trees_long","logical","TRUE/FALSE","Shared size screen (R/size_plausibility.R, size-screen-v1). FALSE rows are kept in every count, basal-area and growth summary and raise the warn-level size_spike QC flag: verify, not wrong. A failing height is left out of the tallest extremes, a failing diameter out of the biggest extremes, and a height-to-DBH ratio failure out of both; size_screen_reason names the rule."),
+    c("size_screen_reason","trees_long","character","rule labels","Why size_plausible is FALSE: a 3x and 5 m / 5 cm spike against the same plant's other events, a height-to-DBH ratio above 2.5 m per cm on DBH >= 10 cm, a shrub or sapling over 10 m on a basal diameter under 5 cm, or a height above 100 m. Blank when plausible."),
     c("opportunity_source_missing","trees_long/plot_event_contexts_all","logical","TRUE/FALSE","TRUE when this measurement event has no matching published vst_perplotperyear plotID + eventID row. It is always held from absence, area scaling, and derived summaries."),
     c("plant_key","trees_long","character","plotID::individualID","Canonical plant identity in this app. individualID alone is not unique across plots."),
     c("plotID","trees_long/plot_summary_latest/plot_event_contexts_all","character","","NEON plot identifier; part of the plant and plot-event keys."),
@@ -937,8 +987,8 @@ veg_codebook <- function() {
     c("n_live_plants","plots","integer","plants","Count of distinct plotID x individualID plant keys."),
     c("n_taxa","plots","integer","","Count of distinct live explicit/coarse taxon labels in the plot. Supported zeros are 0; held opportunities remain NA."),
     c("n_species","plots","integer","","Count of distinct live species-or-finer labels (`is_species = TRUE`) in the plot. Supported zeros are 0; held opportunities remain NA."),
-    c("tallest_m","plots","numeric","m","Height of the tallest live plant in the plot."),
-    c("biggest_diam_cm","plots","numeric","cm","Largest eligible live stem diameter in the plot: DBH for tree_dbh, basal stem diameter for shrub_sapling_basal."),
+    c("tallest_m","plots","numeric","m","Height of the tallest live plant in the plot among rows that pass the shared size screen."),
+    c("biggest_diam_cm","plots","numeric","cm","Largest eligible live stem diameter in the plot among records whose diameter passes the shared size screen: DBH for tree_dbh, basal stem diameter for shrub_sapling_basal."),
     c("largest_stem_taxon","plot_summary_latest","character","","Taxon label attached to the largest eligible live stem in the selected plot event; not an ecological-dominance estimate."),
     c("date","plot_event_contexts_all","date (ISO)","YYYY-MM-DD","Published vst_perplotperyear date for a source-backed context; NA for a measurement-only context. It is ordering context, not event identity."),
     c("opportunity_source_uid","plot_event_contexts_all","character","published uid","Deterministically selected source row retained only to carry nominal fields when a plot-event has multiple source records; a conflict is always held. NA for measurement-only contexts."),
@@ -1045,7 +1095,7 @@ qc_dictionary <- function(report = NULL) {
     c("contract_id","character",VEG_CONTRACT_ID,"Versioned science contract for the QC derivation."),
     c("level","character","high/warn/info","Review priority: high = incompatible with a registered analysis contract; warn = unusual and worth a second look; info = context retained but excluded from the affected summary."),
     c("issue","character","","Human-readable flag name (e.g. 'Implausible diameter jump (>5 cm/yr)')."),
-    c("flag","character","resurrection/jump/shrink/mh","Stable machine key for the flag type (present on per-flag downloads)."),
+    c("flag","character","resurrection/jump/shrink/mh/size_spike","Stable machine key for the flag type (present on per-flag downloads)."),
     c("plotID","character","","NEON plot identifier; pair with individualID."),
     c("plant_key","character","plotID::individualID","Canonical join key for the flagged plant."),
     c("individualID","character","","FULL NEON tag. It is not a sufficient join key without plotID."),
@@ -1053,6 +1103,12 @@ qc_dictionary <- function(report = NULL) {
     c("species","character","","Identified taxon for the flagged plant (may be NA if unidentified)."),
     c("start_cm","numeric","cm","Earlier supported-bout diameter (DBH for tree_dbh, basal stem diameter for shrub_sapling_basal). NA for the status-reversal flag."),
     c("later_cm","numeric","cm","Later supported-bout diameter, same measure as start_cm. NA for the status-reversal flag."),
+    c("year","integer","","Calendar year of the flagged record (size_spike only)."),
+    c("height_m","numeric","m","Recorded height of the flagged record (size_spike only)."),
+    c("diameter_cm","numeric","cm","Recorded channel diameter of the flagged record: DBH for tree forms, basal stem diameter for shrub and sapling forms (size_spike only)."),
+    c("screen_reason","character","rule labels","Which size-screen rule the record failed (size_spike only)."),
+    c("height_reference_m","numeric","m","Median of the same plant's other intact live heights, one per event, that the height spike rule compared against; NA when there was no other event (size_spike only)."),
+    c("diameter_reference_cm","numeric","cm","Median of the same plant's other diameters, one per event, that the diameter spike rule compared against; NA when there was no other event (size_spike only)."),
     c("cm_per_yr","numeric","cm/yr","Annualized diameter change between the two supported bouts (later_cm − start_cm over the like-for-like interval). Positive = increase, negative = decrease. NA where not applicable (status reversal, measurement-height moved)."))
   out <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
   names(out) <- c("column", "type", "units_or_values", "definition")
@@ -1114,7 +1170,7 @@ status_summary <- function(snap, spec = SIZE_FOREST) {
 # is dead/downed, and censored for lost/removed/unknown. Uncertainty uses a
 # delete-one-plot jackknife, not an independence-assuming plant-level binomial CI.
 # ---------------------------------------------------------------------------
-stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL) {
+stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL, min_n0 = 10L) {
   if (is.null(trees) || !nrow(trees) || !"date" %in% names(trees)) return(NULL)
   d <- .supported_history(trees, plots, spec)
   if (is.null(d) || !nrow(d)) return(NULL)
@@ -1147,9 +1203,10 @@ stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL) {
     dplyr::summarise(plotID = dplyr::first(.data$plotID), individualID = dplyr::first(.data$individualID),
                      first_state = dplyr::first(.data$state), last_state = dplyr::last(.data$state),
                      t = as.numeric(dplyr::last(.data$date) - dplyr::first(.data$date)) / 365.25,
+                     d0 = dplyr::first(.data$date), d1 = dplyr::last(.data$date),
                      .groups = "drop")
   coh <- per[per$first_state == "live" & per$t > 0, , drop = FALSE]
-  n0 <- nrow(coh); if (n0 < 10) return(NULL)
+  n0 <- nrow(coh); if (n0 < max(1L, as.integer(min_n0))) return(NULL)
   coh$death <- coh$last_state == "dead"
   estimate <- function(x) {
     if (!nrow(x)) return(NA_real_)
@@ -1169,8 +1226,119 @@ stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL) {
        lo = if (is.finite(ci[1])) round(ci[1], 2) else NA_real_,
        hi = if (is.finite(ci[2])) round(ci[2], 2) else NA_real_,
        n_plots = length(pl), n_censored_events = sum(ev$state == "censored"),
+       yr0 = as.integer(format(min(coh$d0), "%Y")), yr1 = as.integer(format(max(coh$d1), "%Y")),
        ci_method = if (length(jk) >= 3) "delete-one-plot jackknife" else "not reported (<3 plot clusters)",
        contract_id = VEG_CONTRACT_ID)
+}
+
+# Why annual mortality is or is not reported, in plain words, with the plot
+# count and the real hold reason. NEON added samplingImpractical on 2020-03-10
+# (changelog 16306); earlier events have no value, so the contract holds them
+# as held_opportunity_unknown. That is a schema gap, not missing sampling.
+VEG_SAMPLING_IMPRACTICAL_START <- as.Date("2020-03-10")
+mortality_context <- function(plots, spec = SIZE_FOREST) {
+  out <- list(k2 = 0L, n_supported_plots = 0L, pre2020 = 0L, pre_y0 = NA_integer_, pre_y1 = NA_integer_,
+              other_held = 0L, other_reason = NA_character_)
+  if (is.null(plots) || !nrow(plots) || !(spec$support %in% names(plots))) return(out)
+  rec_col <- if (identical(spec$channel, "shrub_sapling_basal")) "shrub_records" else "tree_records"
+  p <- as.data.frame(plots)
+  rec <- if (rec_col %in% names(p)) .num(p[[rec_col]]) else rep(NA_real_, nrow(p))
+  status <- .chr(p[[spec$support]])
+  reason <- if (spec$support_reason %in% names(p)) .chr(p[[spec$support_reason]]) else rep(NA_character_, nrow(p))
+  when <- if ("date" %in% names(p)) suppressWarnings(as.Date(p$date)) else as.Date(rep(NA_character_, nrow(p)))
+  yr <- if ("year" %in% names(p)) suppressWarnings(as.integer(p$year)) else as.integer(format(when, "%Y"))
+  bearing <- is.finite(rec) & rec > 0
+  sup <- bearing & status %in% "sampled_with_records"
+  per_plot <- table(.chr(p$plotID)[sup])
+  out$k2 <- as.integer(sum(per_plot >= 2L))
+  out$n_supported_plots <- as.integer(length(per_plot))
+  pre <- bearing & status %in% "held_opportunity_unknown" & reason %in% "samplingImpractical is missing" &
+    ((!is.na(when) & when < VEG_SAMPLING_IMPRACTICAL_START) | (is.na(when) & !is.na(yr) & yr < 2020L))
+  out$pre2020 <- as.integer(sum(pre))
+  if (any(pre & !is.na(yr))) { out$pre_y0 <- min(yr[pre], na.rm = TRUE); out$pre_y1 <- max(yr[pre], na.rm = TRUE) }
+  other <- bearing & !sup & !pre
+  out$other_held <- as.integer(sum(other))
+  if (any(other)) {
+    top <- sort(table(status[other]), decreasing = TRUE)
+    label <- gsub("_", " ", sub("^held_", "", names(top)))
+    # Say "mostly" only for a true majority; otherwise give the counts.
+    out$other_reason <- if (length(top) == 1L) label[1] else if (top[[1]] > sum(top) / 2) {
+      paste("mostly", label[1])
+    } else {
+      keep <- seq_len(min(3L, length(top)))
+      paste0(paste(sprintf("%d %s", as.integer(top[keep]), label[keep]), collapse = ", "),
+             if (length(top) > 3L) ", and others" else "")
+    }
+  }
+  out
+}
+.plural <- function(n, one, many = paste0(one, "s")) if (identical(as.integer(n), 1L)) one else many
+.pre2020_sentence <- function(ctx) {
+  if (!ctx$pre2020) return("")
+  span <- if (is.na(ctx$pre_y0)) "" else if (ctx$pre_y0 == ctx$pre_y1) sprintf(" (%d)", ctx$pre_y0) else sprintf(" (%d-%d)", ctx$pre_y0, ctx$pre_y1)
+  sprintf(" %d earlier record-bearing plot-%s%s %s held, not zero, because samplingImpractical is blank on these pre-March-2020 records (NEON added the field on 2020-03-10), so %s sampling opportunity cannot be confirmed.",
+          ctx$pre2020, .plural(ctx$pre2020, "census", "censuses"), span,
+          if (ctx$pre2020 == 1L) "is" else "are", if (ctx$pre2020 == 1L) "its" else "their")
+}
+mortality_unavailable_reason <- function(trees, spec = SIZE_FOREST, plots = NULL, site = "this site") {
+  ctx <- mortality_context(plots, spec)
+  other <- if (ctx$other_held > 0L) sprintf(" %d other record-bearing plot-%s %s held (%s).",
+    ctx$other_held, .plural(ctx$other_held, "census", "censuses"), if (ctx$other_held == 1L) "is" else "are",
+    ctx$other_reason) else ""
+  if (ctx$k2 == 0L) {
+    lead <- if (ctx$n_supported_plots == 0L) {
+      sprintf("Annual mortality is not reported: no supported plot-census at %s has measured plants in this channel.", site)
+    } else {
+      sprintf("Annual mortality is not reported: no plot at %s has two or more supported censuses in this channel (%d %s one).",
+              site, ctx$n_supported_plots, .plural(ctx$n_supported_plots, "plot has", "plots have"))
+    }
+    return(paste0(lead, .pre2020_sentence(ctx), other))
+  }
+  small <- stand_mortality(trees, spec, plots, min_n0 = 1L)
+  n0 <- if (is.null(small)) 0L else small$n0
+  paste0(sprintf("Annual mortality is not reported: %d %s at %s %s at least two supported censuses, but only %d %s live at the first and %s a known later fate; the rate needs at least 10.",
+                 ctx$k2, .plural(ctx$k2, "plot"), site, if (ctx$k2 == 1L) "has" else "have",
+                 n0, .plural(n0, "plant was", "plants were"), if (n0 == 1L) "has" else "have"),
+         .pre2020_sentence(ctx))
+}
+mortality_scope_note <- function(mr, plots, spec = SIZE_FOREST) {
+  ctx <- mortality_context(plots, spec)
+  window <- if (is.na(mr$yr0 %||% NA)) "" else if (mr$yr0 == mr$yr1) sprintf(", %d", mr$yr0) else sprintf(", %d-%d", mr$yr0, mr$yr1)
+  paste0(sprintf(" From %d %s%s.", mr$n_plots, .plural(mr$n_plots, "plot"), window),
+         if (!is.finite(mr$lo %||% NA_real_)) " No interval: fewer than three plots." else "",
+         .pre2020_sentence(ctx))
+}
+
+# Rows that fail the shared size screen in this channel's growth forms, shaped
+# for the QC report (one row per flagged record, full plant key for joins).
+.size_spike_rows <- function(trees, spec = SIZE_FOREST) {
+  empty <- data.frame(plotID = character(), plant_key = character(), individualID = character(),
+                      plant = character(), species = character(), year = integer(),
+                      height_m = numeric(), diameter_cm = numeric(), screen_reason = character(),
+                      height_reference_m = numeric(), diameter_reference_cm = numeric(),
+                      stringsAsFactors = FALSE)
+  if (is.null(trees) || !nrow(trees) || !"growthForm" %in% names(trees)) return(empty)
+  d <- as.data.frame(trees)[trees$growthForm %in% spec$forms, , drop = FALSE]
+  if (!nrow(d)) return(empty)
+  screen_columns <- c("size_plausible", "size_screen_reason",
+                      "size_height_reference_m", "size_diameter_reference_cm")
+  sc <- if (all(screen_columns %in% names(d))) d[, screen_columns, drop = FALSE] else vst_size_screen(d)
+  bad <- !(sc$size_plausible %in% TRUE)
+  if (!any(bad)) return(empty)
+  d <- d[bad, , drop = FALSE]; why <- sc$size_screen_reason[bad]
+  yr <- if ("year" %in% names(d)) suppressWarnings(as.integer(d$year)) else
+    if ("date" %in% names(d)) suppressWarnings(as.integer(format(as.Date(d$date), "%Y"))) else rep(NA_integer_, nrow(d))
+  out <- data.frame(plotID = .chr(d$plotID),
+    plant_key = paste(.chr(d$plotID), .chr(d$individualID), sep = "::"),
+    individualID = .chr(d$individualID),
+    plant = sub("^NEON\\.PLA\\.D[0-9]{2}\\.", "", .chr(d$individualID)),
+    species = if ("scientificName" %in% names(d)) .chr(d$scientificName) else NA_character_,
+    year = yr, height_m = round(.num(d$height), 1), diameter_cm = round(.num(d[[spec$col]]), 1),
+    screen_reason = why,
+    height_reference_m = round(.num(sc$size_height_reference_m[bad]), 1),
+    diameter_reference_cm = round(.num(sc$size_diameter_reference_cm[bad]), 1),
+    stringsAsFactors = FALSE)
+  out[order(out$plotID, out$individualID, out$year), , drop = FALSE]
 }
 
 # ---------------------------------------------------------------------------
@@ -1181,8 +1349,10 @@ stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL) {
 # rows = a tidy data.frame per flag (individualID, species, the evidence columns).
 # ---------------------------------------------------------------------------
 tree_qc_site <- function(trees, spec = SIZE_FOREST, plots = NULL) {
+  size_rows <- .size_spike_rows(trees, spec)
   trees <- .supported_history(trees, plots, spec)
-  if (is.null(trees) || !nrow(trees)) return(NULL)
+  has_history <- !is.null(trees) && nrow(trees) > 0L
+  if (!has_history && !nrow(size_rows)) return(NULL)
   flags <- list()
   add <- function(level, key, label, why, rows) {
     if (is.null(rows) || !nrow(rows)) return(invisible())
@@ -1191,13 +1361,21 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST, plots = NULL) {
       n = nrow(rows), rows = rows) }
   short <- function(x) sub("^NEON\\.PLA\\.D[0-9]{2}\\.", "", as.character(x))
 
+  # 0) Size screen (every event of the channel, held or supported): a size out
+  # of line with the plant's own records or with physical bounds. Kept in every
+  # summary, left out of the tallest/biggest extremes. Verify, not wrong.
+  if (nrow(size_rows)) add("warn", "size_spike", "Size out of line with the plant's records",
+    "A height or diameter more than 3x this plant's other records and over 5 m or 5 cm above them (heights compared on intact live records only), a height above 2.5 m per cm of DBH on DBH 10 cm or more, a shrub or sapling over 10 m on a basal diameter under 5 cm or none, or a height above 100 m. The record stays in every count and basal-area summary; the failing measure is left out of the tallest or biggest headlines. Verify the units, decimal point and tag against the field record.",
+    size_rows)
+  if (!has_history) trees <- NULL
+
   # 1) Recorded Live AFTER an all-dead EVENT — incompatible with this mortality
   # contract; aggregate stems before
   # looking through time so one dead bole beside a live bole is not a false flag.
-  d <- .ensure_event_columns(trees)
-  d <- d[is.finite(.date_num(d$date)) & !is.na(d$plantStatus) & d$growthForm %in% spec$forms, , drop = FALSE]
-  if ("permanent" %in% names(d)) d <- d[d$permanent %in% TRUE, , drop = FALSE]
-  if (nrow(d)) {
+  d <- if (has_history) .ensure_event_columns(trees) else NULL
+  if (!is.null(d)) d <- d[is.finite(.date_num(d$date)) & !is.na(d$plantStatus) & d$growthForm %in% spec$forms, , drop = FALSE]
+  if (!is.null(d) && "permanent" %in% names(d)) d <- d[d$permanent %in% TRUE, , drop = FALSE]
+  if (!is.null(d) && nrow(d)) {
     d$.plant_key <- .plant_key(d); d$.event_date <- .date_num(d$date)
     d$.live <- grepl("^Live", d$plantStatus)
     d$.dead <- grepl("Dead|Downed", d$plantStatus, ignore.case = TRUE)
@@ -1220,7 +1398,7 @@ tree_qc_site <- function(trees, spec = SIZE_FOREST, plots = NULL) {
   }
 
   # growth-derived flags (per permanent individual, like-for-like increments)
-  g <- tree_growth(trees, spec, plots)
+  g <- if (has_history) tree_growth(trees, spec, plots) else NULL
   if (!is.null(g) && nrow(g)) {
     jump <- g[is.finite(g$growth_cm_yr) & g$growth_cm_yr > 5 & !g$mh_change, , drop = FALSE]
     if (nrow(jump)) add("high", "jump", "Implausible diameter jump (>5 cm/yr)",

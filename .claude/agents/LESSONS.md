@@ -33,3 +33,10 @@
   breast height) vs `shrub_sapling_basal` (stem-base cover) are different measurements. Carry channel +
   support on every value; `NA` is not "no woody stand"; never flatten into an unqualified cross-biome
   ranking. Standing structure is a slow sampled-plot state, not productivity or biomass.
+- [2026-10-21] cedar · gap · DP1.10098 heights carry no plausibility screen; a 3x-and-5-m same-plant spike
+  (live heights only), height/DBH > 2.5 m per cm on DBH >= 10 cm, shrub > 10 m on basal < 5 cm and a 100 m
+  cap catch every audited outlier (TALL 85.6, BART 119.8, YELL 122) with no site list. Keep the row,
+  flag it warn, drop it only from the extremes.
+- [2026-10-21] neonize · confirmed · Screen size spikes on live heights only: snapped and standing-dead
+  boles read 1-2 m after a 15 m live record (dozens of false spikes at HARV), and lettered secondary
+  boles under 10 cm legitimately carry the whole tree's height, so the height/DBH rule starts at 10 cm.

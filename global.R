@@ -53,6 +53,7 @@ add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
 }
 
 source("R/site_metadata.R", local = FALSE)
+source("R/size_plausibility.R", local = FALSE)   # shared size screen (also used by the bundle builder)
 source("R/veg_helpers.R", local = FALSE)
 source("R/report_pdf.R", local = FALSE)
 source("R/map_picker.R", local = FALSE)   # reusable national site-picker map (flagship front door)
@@ -64,7 +65,24 @@ LIVE_FETCH <- (Sys.getenv("VST_LIVE", "0") != "0") && requireNamespace(.NEON_PKG
 # ---- bundled per-site data: trees, plots, opportunity source, metadata ----
 SITE_DIR  <- "data/sites"
 DEMO_PATH <- "data-sample/demo.rds"
-DEMO_META <- list(site = "HARV", label = "HARV · Harvard Forest · demo")
+# SRER is the suite-wide default site; the picker preselects it at boot.
+DEFAULT_SITE <- "SRER"
+DEMO_META <- list(site = DEFAULT_SITE, label = "SRER · Santa Rita Experimental Range · demo")
+
+# ---- the NEON-series sibling registry (in-app cross-promo) ------------------
+# Mirrors the suite constellation so the About panel links the WHOLE suite,
+# with the Response Atlas as the hub. Kept as a plain list so the block cannot
+# drift from the covers; the same list shape is used in the sibling apps.
+.SIBLINGS <- list(
+  list(name = "Response Atlas",   prod = "cross-product synthesis", url = "https://tgilbert14.github.io/NEON-Driver-Cascade/"),
+  list(name = "Small Mammals",    prod = "DP1.10072.001",           url = "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/"),
+  list(name = "Breeding Birds",   prod = "DP1.10003.001",           url = "https://tgilbert14.github.io/NEON-Breeding-Birds/"),
+  list(name = "Ground Beetles",   prod = "DP1.10022.001",           url = "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/"),
+  list(name = "Plant Phenology",  prod = "DP1.10055.001",           url = "https://tgilbert14.github.io/NEON-Plant-Phenology-Explorer/"),
+  list(name = "Plant Diversity",  prod = "DP1.10058.001",           url = "https://tgilbert14.github.io/NEON-Plant-Diversity/"),
+  list(name = "Water Chemistry",  prod = "DP1.20093.001",           url = "https://tgilbert14.github.io/NEON-WaterChemistry-Analyte-Viewer-App/"),
+  list(name = "Mosquito Pulse",   prod = "DP1.10043.001",           url = "https://tgilbert14.github.io/NEON-Mosquito-Pulse/"),
+  list(name = "Little Inverts",   prod = "DP1.20120.001",           url = "https://tgilbert14.github.io/NEON-My-Little-Inverts/"))
 
 read_bundle <- function(f) {
   if (!file.exists(f)) return(NULL)

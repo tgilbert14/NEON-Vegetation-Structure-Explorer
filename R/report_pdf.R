@@ -93,7 +93,8 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
   # ---- section: champion plants ------------------------------------------
   graphics::text(3, 26, if (shrub) "Champion shrubs" else "Champion trees", col = P$pine2, cex = 1.0, font = 2, adj = 0)
   champs <- ok({
-    o <- one[is.finite(one[[spec$col]]), ]
+    # Size extremes skip records that fail the shared size screen (kept elsewhere).
+    o <- size_screened(one, "diameter"); o <- o[is.finite(o[[spec$col]]), ]
     o <- woody_only(o, spec); o[order(-o[[spec$col]]), ][seq_len(min(5, nrow(o))), ]
   })
   yL <- 23
