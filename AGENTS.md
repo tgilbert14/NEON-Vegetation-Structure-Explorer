@@ -4,13 +4,13 @@ These instructions apply to the entire repository. User and platform instruction
 take precedence.
 
 This repository is worked by more than one agent — ChatGPT/Codex via this file and Claude
-Code via `CLAUDE.md`. The tool-neutral source of truth is `docs/neonize-playbook.md` (the
-flagship `NEON-Small-Mammal-Tracker-App` copy is the reference for §6–9),
+Code via `CLAUDE.md`. The tool-neutral source of truth is the canonical suite playbook
+`NEON-Driver-Cascade/docs/neonize-playbook.md` (pointer: `docs/neonize-playbook.md`),
 `docs/BUILD-TEST-HANDOFF.md`, `docs/SCIENCE-CONTRACT.md`, and
 `docs/VEGETATION-SOURCE-RECEIPT.md`; read those first and keep tool-specific notes to this
 file. Close every session with a dated `BUILD-TEST-HANDOFF.md` entry tagged with your tool
 (`[Codex]` / `[Claude]`) and a one-line next action. Before coding: plan, question, and
-challenge the work, and always surface at least one improvement — see flagship playbook §9.
+challenge the work, and always surface at least one improvement — see canonical playbook §9.
 Branch defaults are split across the suite: this repo and Small Mammal are `main`;
 Driver-Cascade is `master` — never assume.
 
