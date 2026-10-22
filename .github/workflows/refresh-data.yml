@@ -16,7 +16,7 @@ on:
         required: true
         default: "RELEASE-2026"
       skip_download:
-        description: "Revalidate already-promoted v2 bundles and rebuild derived bytes only"
+        description: "Revalidate already-promoted v3 bundles and rebuild derived bytes only"
         type: boolean
         default: false
   pull_request:
@@ -382,7 +382,7 @@ jobs:
               export VST_SITE_INDEX_OUT=data/site_index.rds
               export VST_SEARCH_INDEX_OUT=data/search_index.rds
               if [[ "$SKIP_DOWNLOAD" == "true" ]]; then
-                Rscript --vanilla -e 'source("scripts/vegetation_inventory.R"); paths <- file.path("data/sites", paste0(VST_EXPECTED_SITES, ".rds")); stopifnot(all(file.exists(paths))); ids <- vapply(paths, function(path) as.character(readRDS(path)$meta$contract_id %||% ""), character(1)); stopifnot(all(ids == "NEON-VST-DP1.10098.001-v2"))'
+                Rscript --vanilla -e 'source("scripts/vegetation_inventory.R"); paths <- file.path("data/sites", paste0(VST_EXPECTED_SITES, ".rds")); stopifnot(all(file.exists(paths))); ids <- vapply(paths, function(path) as.character(readRDS(path)$meta$contract_id %||% ""), character(1)); stopifnot(all(ids == "NEON-VST-DP1.10098.001-v3"))'
               fi
               if [[ "$SKIP_DOWNLOAD" != "true" ]]; then
                 export VST_RAW_DIR="$RAW_DIR"

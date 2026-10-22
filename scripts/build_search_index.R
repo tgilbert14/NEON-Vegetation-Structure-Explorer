@@ -8,7 +8,7 @@
 suppressWarnings(suppressMessages(library(dplyr)))
 source("scripts/vegetation_inventory.R")
 
-VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 SITE_DIR <- Sys.getenv("VST_SITE_DIR", unset = "data/sites")
 SITE_INDEX_PATH <- Sys.getenv("VST_SITE_INDEX", unset = "data/site_index.rds")
 SEARCH_INDEX_OUT <- Sys.getenv("VST_SEARCH_INDEX_OUT", unset = "data/search_index.rds")
@@ -19,7 +19,7 @@ if (!is.data.frame(site_index) ||
     !identical(sort(as.character(site_index$site)), sort(VST_EXPECTED_SITES)) ||
     !identical(attr(site_index, "contract_id"), VST_CONTRACT_ID) ||
     any(site_index$contract_id != VST_CONTRACT_ID)) {
-  stop("site_index is missing, incomplete, or not built from the canonical v2 contract",
+  stop("site_index is missing, incomplete, or not built from the canonical v3 contract",
        call. = FALSE)
 }
 source_receipt <- attr(site_index, "source_receipt")

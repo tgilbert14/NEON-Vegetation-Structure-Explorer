@@ -1,12 +1,12 @@
 #!/usr/bin/env Rscript
 
 # Copy the canonical site rows embedded by bundle_veg_data.R. This script does
-# not own a second stand definition; a missing/mismatched v2 contract is fatal.
+# not own a second stand definition; a missing/mismatched v3 contract is fatal.
 
 suppressWarnings(suppressMessages(library(dplyr)))
 source("scripts/vegetation_inventory.R")
 
-VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 SITE_DIR <- Sys.getenv("VST_SITE_DIR", unset = "data/sites")
 SITE_INDEX_OUT <- Sys.getenv("VST_SITE_INDEX_OUT", unset = "data/site_index.rds")
 sites <- vst_assert_site_inventory(SITE_DIR)

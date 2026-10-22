@@ -9,11 +9,13 @@
 
 suppressWarnings(suppressMessages(library(dplyr)))
 source("scripts/vegetation_inventory.R")
+source("R/size_plausibility.R")
 
-VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 VST_PRODUCT <- "DP1.10098.001"
 VST_RELEASE <- Sys.getenv("VST_NEON_RELEASE", unset = "RELEASE-2026")
 VST_SUPPORTED_STATUS <- c("sampled_with_records", "sampled_absence")
+VST_PERSONNEL_FIELDS <- c("measuredBy", "recordedBy")
 VST_TREE_FORMS <- c("single bole tree", "multi-bole tree")
 VST_SHRUB_FORMS <- c("single shrub", "small shrub", "sapling")
 VST_SMALL_TREE_FORMS <- "small tree"
@@ -486,8 +488,30 @@ vst_count_records <- function(trees, plots, forms) {
   result
 }
 
+# Contract v3 multi-bole rule (NEON.DOC.000987 Table 8): a multi-bole tree needs
+# one bole >= 10 cm DBH; additional boles are tagged 1234a, 1234b ... and are
+# measured down to 2.5 cm. A lettered tree-form row is therefore a valid
+# secondary bole when its parent tag (letter stripped) has a tree-form row in
+# the same plotID x eventID with a finite DBH >= 10 cm, whatever that bole's
+# status. Such a row never holds its plot-event; under Option A it still stays
+# out of basal area, density and QMD, which count boles 10 cm and over only.
+# Unlettered sub-10 rows, lettered rows with no qualifying parent, and missing,
+# zero or negative DBH keep the v2 rule and hold the plot-event.
+vst_tree_secondary_bole_ok <- function(trees) {
+  if (!nrow(trees)) return(logical())
+  form <- tolower(trimws(vst_chr(trees$growthForm))) %in% tolower(VST_TREE_FORMS)
+  id <- vst_chr(trees$individualID)
+  lettered <- !is.na(id) & grepl("[A-Za-z]$", id)
+  parent <- sub("[A-Za-z]$", "", id)
+  dbh <- vst_num(trees$stemDiameter)
+  plot_event <- paste(vst_chr(trees$plotID), vst_chr(trees$eventID), sep = "\r")
+  qualifying <- form & is.finite(dbh) & dbh >= 10
+  parents <- unique(paste(plot_event, id, sep = "\r")[qualifying])
+  form & lettered & paste(plot_event, parent, sep = "\r") %in% parents
+}
+
 vst_count_invalid_metric_records <- function(trees, plots, forms, metric,
-                                             minimum) {
+                                             minimum, secondary_ok = NULL) {
   result <- integer(nrow(plots))
   if (!nrow(trees) || !length(forms)) return(result)
   if (!metric %in% names(trees)) {
@@ -498,6 +522,9 @@ vst_count_invalid_metric_records <- function(trees, plots, forms, metric,
   live_row <- trees$live %in% TRUE
   value <- vst_num(trees[[metric]])
   valid_metric <- is.finite(value) & value > 0 & value >= minimum
+  if (!is.null(secondary_ok)) {
+    valid_metric <- valid_metric | (secondary_ok %in% TRUE & is.finite(value) & value > 0)
+  }
   keep <- channel_row & live_row & !valid_metric
   if (!any(keep)) return(result)
   counts <- as.data.frame(
@@ -687,7 +714,8 @@ vst_opportunity_table <- function(perplot, trees) {
   plots$shrub_records <- vst_count_records(trees, plots, VST_SHRUB_FORMS)
   plots$small_tree_records <- vst_count_records(trees, plots, VST_SMALL_TREE_FORMS)
   plots$tree_invalid_metric_records <- vst_count_invalid_metric_records(
-    trees, plots, VST_TREE_FORMS, "stemDiameter", 10
+    trees, plots, VST_TREE_FORMS, "stemDiameter", 10,
+    secondary_ok = vst_tree_secondary_bole_ok(trees)
   )
   plots$shrub_invalid_metric_records <- vst_count_invalid_metric_records(
     trees, plots, VST_SHRUB_FORMS, "basalStemDiameter", 0
@@ -749,7 +777,7 @@ vst_channel_spec <- function(channel) {
     return(list(
       channel = channel, forms = VST_TREE_FORMS, diameter = "stemDiameter",
       area = "area_trees", support = "tree_support", minimum = 10,
-      metric = "bole-DBH basal area (breast height)"
+      metric = "bole-DBH basal area, boles 10 cm and over (breast height)"
     ))
   }
   list(
@@ -762,6 +790,14 @@ vst_channel_spec <- function(channel) {
 
 vst_channel_snapshot <- function(trees, plots, channel) {
   spec <- vst_channel_spec(channel)
+  # Shared size screen (R/size_plausibility.R) over the plant's full history,
+  # per measure: a failing height leaves only the tallest extreme, a failing
+  # diameter only the biggest. Every other summary keeps every row.
+  if (nrow(trees)) {
+    screen <- vst_size_screen(trees)
+    trees$.size_height_ok <- screen$size_height_ok
+    trees$.size_diameter_ok <- screen$size_diameter_ok
+  }
   opportunities <- vst_latest_supported_events(plots, spec$channel)
   if (!nrow(opportunities)) {
     return(list(spec = spec, opportunities = opportunities,
@@ -800,10 +836,12 @@ vst_taxa_index <- function(snapshot, site) {
   by_plot <- records %>%
     dplyr::group_by(.data$taxon_label, .data$plotID) %>%
     dplyr::summarise(
+      # Row-wise first: a later summarise expression would read the modal
+      # scientificName instead of each row's (neon-suite lint L13).
+      is_species = any(.data$is_species %in% TRUE & vst_nonblank(.data$scientificName)),
       scientificName = vst_mode_chr(.data$scientificName),
       taxonID = vst_mode_chr(.data$taxonID),
       taxonRank = vst_mode_chr(.data$taxonRank),
-      is_species = any(.data$is_species %in% TRUE & vst_nonblank(.data$scientificName)),
       family = vst_mode_chr(.data$family),
       stems = dplyr::n(),
       individuals = dplyr::n_distinct(.data$plant_key),
@@ -913,8 +951,8 @@ vst_channel_summary <- function(snapshot) {
     density_ha = mean(per_plot$density_ha),
     qmd_cm = if (total_stems > 0) sqrt(sum(per_plot$sum_d2) / total_stems) else NA_real_,
     metric_kind = spec$metric,
-    tallest_m = vst_safe_max(records$height),
-    biggest_diam_cm = vst_safe_max(records$.diameter_cm)
+    tallest_m = vst_safe_max(records$height[records$.size_height_ok %in% TRUE]),
+    biggest_diam_cm = vst_safe_max(records$.diameter_cm[records$.size_diameter_ok %in% TRUE])
   )
 }
 
@@ -997,7 +1035,7 @@ vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
   )
   list(
     id = VST_CONTRACT_ID,
-    version = 2L,
+    version = 3L,
     product = VST_PRODUCT,
     release = VST_RELEASE,
     plant_key = c("plotID", "individualID"),
@@ -1084,7 +1122,11 @@ vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
   list(
     trees = trees,
     plots = plots,
-    opportunity_source = opportunity$source,
+    # NEON publishes field-staff identities in measuredBy/recordedBy; the app
+    # never uses them, so contract v3 does not republish them.
+    opportunity_source = opportunity$source[
+      , setdiff(names(opportunity$source), VST_PERSONNEL_FIELDS), drop = FALSE
+    ],
     meta = meta,
     contract = contract
   )
@@ -1097,7 +1139,7 @@ vst_bundle_main <- function() {
   site_index_out <- Sys.getenv("VST_SITE_INDEX_OUT", unset = "data/site_index.rds")
   sites <- vst_assert_site_inventory(raw_dir, suffix = "_raw.rds", label = "raw source")
   source_receipt <- vst_source_receipt_from_env()
-  demo <- "HARV"
+  demo <- "SRER"
 
   dir.create(site_dir, showWarnings = FALSE, recursive = TRUE)
   dir.create(sample_dir, showWarnings = FALSE, recursive = TRUE)

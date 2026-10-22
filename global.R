@@ -95,7 +95,7 @@ read_bundle <- function(f) {
 load_site_bundle <- function(site) read_bundle(file.path(SITE_DIR, paste0(site, ".rds")))
 load_demo <- function() { b <- load_site_bundle(DEMO_META$site); if (!is.null(b)) b else read_bundle(DEMO_PATH) }
 
-# ---- exact v2 front-door and bundle release gate -------------------------
+# ---- exact v3 front-door and bundle release gate -------------------------
 # Keep this runtime gate independent of the build scripts: those scripts are not
 # part of the deployed app surface, and an index is not trusted merely because it
 # can be read. A partial, legacy, or receipt-mismatched family must expose no
@@ -615,11 +615,11 @@ site_index_check <- function(index) {
     reason <- c(reason, "site index does not contain the exact registered 42-site family")
   }
   if (!identical(attr(index, "contract_id"), VEG_CONTRACT_ID)) {
-    reason <- c(reason, "site index contract attribute is not the exact v2 contract")
+    reason <- c(reason, "site index contract attribute is not the exact v3 contract")
   }
   if (!"contract_id" %in% names(index) ||
       any(is.na(index$contract_id)) || any(as.character(index$contract_id) != VEG_CONTRACT_ID)) {
-    reason <- c(reason, "site index contains a non-v2 contract row")
+    reason <- c(reason, "site index contains a non-v3 contract row")
   }
   if ("primary_channel" %in% names(index) &&
       any(is.na(index$primary_channel) |
@@ -670,7 +670,7 @@ search_index_check <- function(index, site_index, source_receipt) {
   missing <- setdiff(required, names(index))
   if (length(missing)) reason <- c(reason, paste0("search index lacks ", paste(missing, collapse = ", ")))
   if (!identical(.veg_scalar_chr(index$contract_id), VEG_CONTRACT_ID)) {
-    reason <- c(reason, "search index is not the exact v2 contract")
+    reason <- c(reason, "search index is not the exact v3 contract")
   }
   if (!is.data.frame(index$taxa) || !is.data.frame(index$sites) ||
       !is.data.frame(index$channel_sites)) {
@@ -691,7 +691,7 @@ search_index_check <- function(index, site_index, source_receipt) {
     } else {
       if (any(is.na(index$taxa$contract_id)) ||
           any(as.character(index$taxa$contract_id) != VEG_CONTRACT_ID)) {
-        reason <- c(reason, "search index contains a non-v2 taxon row")
+        reason <- c(reason, "search index contains a non-v3 taxon row")
       }
       if (any(!as.character(index$taxa$site) %in% VEG_EXPECTED_SITES)) {
         reason <- c(reason, "search index contains a taxon row outside the registered site family")
@@ -730,7 +730,7 @@ search_index_check <- function(index, site_index, source_receipt) {
       }
       if (any(is.na(index$channel_sites$contract_id)) ||
           any(as.character(index$channel_sites$contract_id) != VEG_CONTRACT_ID)) {
-        reason <- c(reason, "search channel sites contain a non-v2 contract row")
+        reason <- c(reason, "search channel sites contain a non-v3 contract row")
       }
       if (any(is.na(index$channel_sites$is_default_channel))) {
         reason <- c(reason, "search channel sites contain an unknown default-channel state")
@@ -780,7 +780,7 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
                                   require_family = TRUE) {
   reason <- character(0)
   if (isTRUE(require_family) && !isTRUE(VEG_FAMILY_READY)) {
-    reason <- c(reason, "the exact v2 index family is on hold")
+    reason <- c(reason, "the exact v3 index family is on hold")
   }
   if (!is.list(bundle) || !is.data.frame(bundle$trees) ||
       !is.data.frame(bundle$plots) || !is.data.frame(bundle$opportunity_source) ||
@@ -799,8 +799,8 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
   }
   if (!identical(.veg_scalar_chr(meta$contract_id), VEG_CONTRACT_ID) ||
       !identical(.veg_scalar_chr(contract$id), VEG_CONTRACT_ID) ||
-      !identical(suppressWarnings(as.integer(contract$version)), 2L)) {
-    reason <- c(reason, "bundle does not carry the exact embedded v2 contract")
+      !identical(suppressWarnings(as.integer(contract$version)), 3L)) {
+    reason <- c(reason, "bundle does not carry the exact embedded v3 contract")
   }
   if (!identical(as.character(contract$plant_key), VEG_CONTRACT$plant_key) ||
       !identical(as.character(contract$event_key), VEG_CONTRACT$event_key) ||
@@ -814,13 +814,13 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
       !identical(.veg_scalar_chr(contract$support_status$zero), VEG_CONTRACT$zero_status) ||
       !setequal(as.character(contract$support_status$held),
                 setdiff(VEG_CONTRACT$held_status, "held_snapshot_event_mismatch"))) {
-    reason <- c(reason, "bundle identity keys or support vocabulary differ from the v2 contract")
+    reason <- c(reason, "bundle identity keys or support vocabulary differ from the v3 contract")
   }
   if (!identical(.veg_scalar_chr(meta$product), VEG_CONTRACT$product) ||
       !identical(.veg_scalar_chr(contract$product), VEG_CONTRACT$product) ||
       !identical(.veg_scalar_chr(meta$release), VEG_CONTRACT$release) ||
       !identical(.veg_scalar_chr(contract$release), VEG_CONTRACT$release)) {
-    reason <- c(reason, "bundle product or official release differs from the v2 contract")
+    reason <- c(reason, "bundle product or official release differs from the v3 contract")
   }
   channel <- .veg_scalar_chr(meta$primary_channel)
   if (is.na(channel) || !channel %in% c("tree_dbh", "shrub_sapling_basal", "unavailable")) {
@@ -1027,10 +1027,24 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
     expected_shrub_records <- .veg_event_counts(
       bundle$trees, bundle$plots, shrub_form
     )
+    # Contract v3 multi-bole rule (independent runtime copy): a lettered
+    # tree-form bole is valid at any positive DBH when its parent tag has a
+    # tree-form bole >= 10 cm in the same plotID x eventID.
+    tree_id <- as.character(bundle$trees$individualID)
+    tree_plot_event <- paste(as.character(bundle$trees$plotID),
+                             as.character(bundle$trees$eventID), sep = "\r")
+    tree_parents <- unique(paste(tree_plot_event, tree_id, sep = "\r")[
+      tree_form & is.finite(tree_diameter) & tree_diameter >= 10
+    ])
+    tree_secondary_ok <- tree_form & !is.na(tree_id) &
+      grepl("[A-Za-z]$", tree_id) &
+      paste(tree_plot_event, sub("[A-Za-z]$", "", tree_id), sep = "\r") %in%
+        tree_parents
     expected_tree_invalid <- .veg_event_counts(
       bundle$trees, bundle$plots,
       tree_form & live &
-        !(is.finite(tree_diameter) & tree_diameter > 0 & tree_diameter >= 10)
+        !((is.finite(tree_diameter) & tree_diameter > 0 & tree_diameter >= 10) |
+          (tree_secondary_ok & is.finite(tree_diameter) & tree_diameter > 0))
     )
     expected_shrub_invalid <- .veg_event_counts(
       bundle$trees, bundle$plots,

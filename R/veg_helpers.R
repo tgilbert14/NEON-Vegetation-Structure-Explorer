@@ -27,7 +27,7 @@ smean <- function(x) { x <- x[is.finite(x)]; if (!length(x)) NA_real_ else mean(
 short_tree <- function(id) sub("^NEON\\.PLA\\.D[0-9]{2}\\.", "", as.character(id))   # NEON.PLA.D01.000123 -> 000123
 short_plot <- function(p) sub("^[A-Z]{4}_", "", as.character(p))
 
-VEG_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VEG_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 VEG_CONTRACT <- list(
   id = VEG_CONTRACT_ID,
   product = "DP1.10098.001",
@@ -69,7 +69,7 @@ TREE_DBH_MIN <- 10
 SIZE_FOREST <- list(
   type = "forest", col = "stemDiameter", min = TREE_DBH_MIN, area = "area_trees",
   forms = TREE_FORMS, support = "tree_support", support_reason = "tree_support_reason",
-  channel = "tree_dbh", metric_kind = "bole-DBH basal area (breast height)",
+  channel = "tree_dbh", metric_kind = "bole-DBH basal area, boles 10 cm and over (breast height)",
   channel_label = "Tree DBH channel", noun = "tree", nouns = "trees", Noun = "Tree", Nouns = "Trees",
   size_lab = "DBH", size_full = "diameter at breast height (DBH)", emoji = "\U0001F333",
   unit = "cm", lab_title = "Size Lab",
@@ -90,7 +90,7 @@ size_spec <- function(type) {
   NULL
 }
 
-# Compatibility fallback only. A v2 bundle supplies its display channel in meta;
+# Compatibility fallback only. A v3 bundle supplies its display channel in meta;
 # this function no longer compares unlike DBH area and basal cover. If both
 # channels occur and no metadata is available, prefer the established full-plot
 # tree channel, while keeping the shrub channel available as a separate view.
@@ -118,7 +118,7 @@ classify_structure <- function(snap) {
   if (!"plotID" %in% names(d)) d$plotID <- NA_character_
   if (!"eventID" %in% names(d)) {
     # Legacy bundles predate event preservation. Date is only a compatibility
-    # token here; opportunity-aware stand estimates require a v2 eventID.
+    # token here; opportunity-aware stand estimates require a v3 eventID.
     tok <- if ("date" %in% names(d)) .chr(d$date) else if ("year" %in% names(d)) .chr(d$year) else rep(NA_character_, nrow(d))
     d$eventID <- paste0("LEGACY-DATE-", tok)
     attr(d, "event_key_quality") <- "legacy_date_fallback"
@@ -345,8 +345,21 @@ live_only <- function(d) {
     !is.na(p$plotID) & nzchar(.chr(p$plotID)) & !is.na(p$eventID) & nzchar(.chr(p$eventID))
   keys <- unique(.event_key(p[keep, , drop = FALSE]))
   if (!length(keys)) return(NULL)
-  out <- t[.event_key(t) %in% keys, , drop = FALSE]
-  if (!nrow(out)) NULL else out
+  out <- .option_a_tree_rows(t[.event_key(t) %in% keys, , drop = FALSE], spec)
+  if (is.null(out) || !nrow(out)) NULL else out
+}
+
+# Contract v3, Option A: the tree channel's population is boles >= 10 cm DBH.
+# A lettered secondary bole under 10 cm no longer holds its plot-event, but it
+# stays out of every tree-channel estimand: basal area, density and QMD (via
+# woody_only) and growth, mortality and the status snapshot (here). The rows
+# remain in the bundle, the long export and the size QC.
+.option_a_tree_rows <- function(d, spec = SIZE_FOREST) {
+  if (is.null(d) || !nrow(d) || !identical(spec$channel, "tree_dbh") ||
+      !all(c("individualID", "stemDiameter") %in% names(d))) return(d)
+  dbh <- .num(d$stemDiameter)
+  small_secondary <- grepl("[A-Za-z]$", .chr(d$individualID)) & is.finite(dbh) & dbh < TREE_DBH_MIN
+  d[!small_secondary, , drop = FALSE]
 }
 
 .selected_stems <- function(snap, selected, spec = SIZE_FOREST, live = TRUE) {
@@ -965,7 +978,7 @@ veg_codebook <- function() {
     c("permanent","trees_long","logical","TRUE/FALSE","Derived = id starts with 'NEON'; growth metrics use permanent ids only."),
     c("is_species","trees_long","logical","TRUE/FALSE","Derived = identified to species or finer (unambiguous)."),
     c("channel","plot_summary_latest","character","tree_dbh/shrub_sapling_basal","Sampling and measurement channel. Never pool or rank ba_m2_ha across these physically different channels."),
-    c("size_metric","plots","character","bole-DBH basal area (breast height)/basal-diameter cover (stem base)","Physical meaning of ba_m2_ha on this row."),
+    c("size_metric","plots","character","bole-DBH basal area, boles 10 cm and over (breast height)/basal-diameter cover (stem base)","Physical meaning of ba_m2_ha on this row."),
     c("event_date","plots","date (ISO)","YYYY-MM-DD","Date of the selected latest supported plot event."),
     c("plotType","plots","character","distributed/tower","NEON plot design class. The app reports a sampled-plot summary; restrict to distributed plots for the spatially balanced design stratum."),
     c("nlcdClass","plots","character","","NEON land-cover class (NLCD) at the plot."),
@@ -1140,7 +1153,7 @@ assert_qc_dictionary <- function(dictionary, report) {
 status_summary <- function(snap, spec = SIZE_FOREST) {
   if (is.null(snap) || !nrow(snap)) return(NULL)
   forms <- spec$forms %||% TREE_FORMS
-  s <- snap[snap$growthForm %in% forms, , drop = FALSE]
+  s <- .option_a_tree_rows(snap[snap$growthForm %in% forms, , drop = FALSE], spec)
   if (!nrow(s)) return(NULL)
   s$.plant_key <- .plant_key(s)
   st <- .chr(s$plantStatus)
@@ -1233,7 +1246,7 @@ stand_mortality <- function(trees, spec = SIZE_FOREST, plots = NULL, min_n0 = 10
 
 # Why annual mortality is or is not reported, in plain words, with the plot
 # count and the real hold reason. NEON added samplingImpractical on 2020-03-10
-# (changelog 16306); earlier events have no value, so the contract holds them
+# (changelog 16306); earlier events have no value, so the v3 contract holds them
 # as held_opportunity_unknown. That is a schema gap, not missing sampling.
 VEG_SAMPLING_IMPRACTICAL_START <- as.Date("2020-03-10")
 mortality_context <- function(plots, spec = SIZE_FOREST) {

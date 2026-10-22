@@ -102,7 +102,7 @@ if (nrow(audit) != expected_audit_rows ||
     anyDuplicated(actual_audit_keys) ||
     !identical(actual_audit_keys, expected_audit_keys) ||
     any(audit$audit_schema != "NEON-VST-data-quality-audit-v2") ||
-    any(audit$contract_id != "NEON-VST-DP1.10098.001-v2") ||
+    any(audit$contract_id != "NEON-VST-DP1.10098.001-v3") ||
     any(audit$raw_source_digest != receipt$raw_source_digest) ||
     any(audit$source_normalization != receipt$source_normalization)) {
   stop("deterministic data-quality audit is incomplete or has mixed provenance",
@@ -187,7 +187,7 @@ lines <- c(
   "",
   "Promotion requires all 42 bundles, `data/site_index.rds`, `data/search_index.rds`, the source ledgers, science contract, user-facing claims, Driver package, suite handoff, and manifest to agree on this candidate. Bundles must preserve every published source `uid`, audit the plot-scoped event × individual × temporary-stem locator without choosing a winner, and preserve every plot-opportunity source row needed to review the denominator. Measurement-only contexts remain visible but carry no invented effort, absence, sampled area, or opportunity metadata; both analytical channels must hold them as `held_opportunity_source_missing`. Any missing site, mixed receipt, unmatched source digest, changed 49/4,365/11 linkage inventory, unreviewed identity or denominator condition, dropped support field, or stale empirical claim blocks promotion.",
   "",
-  "`skip_download=true` accepts only an already-promoted v2 family and revalidates its committed inputs. It must not change this receipt, stamp a new build date, invent a NEON release, or treat a repository/manifest time as upstream vintage."
+  "`skip_download=true` accepts only an already-promoted v3 family and revalidates its committed inputs. It must not change this receipt, stamp a new build date, invent a NEON release, or treat a repository/manifest time as upstream vintage."
 )
 writeLines(lines, OUT, useBytes = TRUE)
 cat(sprintf("wrote %s; bundle family SHA-256 %s\n", OUT, bundle_family))

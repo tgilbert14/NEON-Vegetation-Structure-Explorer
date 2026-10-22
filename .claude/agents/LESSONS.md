@@ -40,3 +40,7 @@
 - [2026-10-21] neonize · confirmed · Screen size spikes on live heights only: snapped and standing-dead
   boles read 1-2 m after a 15 m live record (dozens of false spikes at HARV), and lettered secondary
   boles under 10 cm legitimately carry the whole tree's height, so the height/DBH rule starts at 10 cm.
+- [2026-10-21] neonize · confirmed · A support-rule change can be smoke-tested without the raw fetch by
+  re-deriving plot support and the contract payload from a committed family's preserved rows with the
+  branch's builder functions; only the receipt ledgers then differ, and the official candidate stays the
+  authority. Lifting a hold also widens the app-side estimands, so check growth and mortality cohorts too.

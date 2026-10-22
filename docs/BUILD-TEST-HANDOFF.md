@@ -1055,3 +1055,32 @@ BYTES PENDING / NO SCIENCE OR DRIVER DATA BYTE CHANGE.**
   bundled index (TALL 85.6 m first) while the TALL hero shows 37.0 m.
 - **Next action:** Tim reviews and merges this branch after exact-head CI is green; then the stacked
   `claude/veg-contract-v3` PR, once its official v3 candidate is promoted.
+
+### 2026-10-21 MST - contract v3: multi-bole Option A, size screen in bundles, no personnel fields / [Claude]
+
+- **Scope:** branch `claude/veg-contract-v3`, stacked on #18 (`claude/veg-shell-wave2`). Contract
+  `NEON-VST-DP1.10098.001-v3`: a lettered tree-form bole whose parent tag has a bole >= 10 cm DBH in
+  the same plotID x eventID no longer holds the plot-event (independent copies in the builder,
+  `global.R`, `verify_bundle.R`, `write_data_quality_audit.R`). Option A keeps every tree-channel
+  estimand on boles >= 10 cm (basal area, density, QMD, growth, mortality cohort, status snapshot).
+  The shared size screen sets `tallest_m` / `biggest_diam_cm` per measure in the builder and
+  `derived_parity.R`; `opportunity_source` drops measuredBy/recordedBy; the demo sample is SRER; the
+  taxa index tests `is_species` row-wise (lint L13).
+- **Code only.** The committed family is still v2, so CI on this branch is red by design and it must
+  not merge before an official v3 candidate is promoted onto it (the runtime gate would HOLD production).
+- **Local smoke:** a v3 family re-derived from the committed v2 rows passes every gate except the
+  three checksum ledgers only the official build writes. Before -> after: STEI tree BA 8.18 (n=5) ->
+  17.49 (n=17), mortality 0.00 %/yr (2 plots) -> 0.44 [0, 0.90] (7 plots); GUAN held_metric_invalid
+  46 -> 1, sampled 10 -> 55, BA 2.81 -> 5.06; HARV tree mortality 1.29 %/yr (2 plots) -> 3.70
+  [0.50, 6.89] (5 plots); TALL tallest 85.6 -> 37.2 m, network top WREF 60.5 m; tree_supported
+  plot-events 1163 -> 1580.
+- **Review:** independent review on Opus 5.5 at max (Fable limit reached); its findings are applied
+  here and in #18.
+- **Rebuild route:** owner labels the PR `build-vegetation-candidate`; run
+  `scripts/validation/inspect_vegetation_candidate.py` on the `vegetation-release-candidate-<sha>-<run>`
+  artifact; promote its allowlisted payload byte-for-byte with the CI-required review surfaces (cover,
+  social card, og-image, receipts, science docs) in one push; exact-head CI; Tim merges after #18.
+- **Owner decisions left open:** Option B (2.5-10 cm secondary boles in basal area);
+  `supported_legacy_schema` for pre-2020 events (growth and mortality only); rewriting git history to
+  remove the committed measuredBy/recordedBy values.
+- **Next action:** label this PR, inspect and promote the validated v3 candidate, merge after #18.
