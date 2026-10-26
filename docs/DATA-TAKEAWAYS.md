@@ -1,4 +1,4 @@
-# Vegetation structure — current data takeaways and disposition
+# Vegetation structure: current data takeaways and disposition
 
 _Pass 4 production closeout · 2026-07-19 MST / 2026-07-20 UTC · NEON DP1.10098.001 · supersedes the June 2026 certification_
 
@@ -42,6 +42,33 @@ change Driver.
 The earlier claim that Driver imported this app's `stand_site()` was also incorrect. Driver currently
 uses an independently implemented, stricter vegetation path and already holds WOOD. That separation is
 why this audit does not trigger a Driver data change.
+
+## Contract v3 family (2026-10-26, PR #19)
+
+The v3 family is rebuilt from the same RELEASE-2026 raw tables (raw digest
+`e8d78dd7...3e29`); only the rules change. Measured on the local v3 candidate
+built from the official raw staging; the official candidate is authoritative.
+
+| Site | Before (v2, on `main`) | After (v3) |
+|---|---|---|
+| TALL | tallest 85.6 m (an entry error, first in the network) | tallest 37.2 m; network top WREF 60.5 m; tree BA 24.84 ± 1.84 m²/ha (40 plots); tree mortality 1.90 %/yr (95% interval 1.38 to 2.53, 38 plots) |
+| GUAN | 46 tree plot-events held as metric-invalid; BA 2.81 m²/ha (10 plots) | BA 5.06 ± 0.58 m²/ha (38 plots); tree growth median 0.079 cm/yr (520 plants, 35 plots); tree mortality 1.51 %/yr (0.80 to 2.58) |
+| STEI | BA 8.18 ± 3.69 m²/ha (5 plots); mortality 0.00 %/yr on 2 plots | BA 17.49 ± 3.07 m²/ha (17 plots); tree mortality 0.95 %/yr (0.48 to 1.69, 25 plots) |
+| SRER | mortality banner "needs at least 2 censuses" | shrub mortality 0.69 %/yr (0.05 to 2.86, 11 plots); basal cover from 17 of 38 plots, the other 21 held for 47 conflicting stem records |
+| HARV | tree mortality 1.29 %/yr on 2 plots | tree mortality 2.47 %/yr (1.79 to 3.31, 40 plots); BA 34.01 ± 2.21 m²/ha (38 plots) |
+
+- Supported tree plot-events: 1,163 (v2) to 1,621. Legacy-schema events, used
+  for change only: 2,071 tree and 2,454 shrub.
+- Default channels: 19 tree / 18 shrub / 5 unavailable (v2) to 31 / 6 / 5.
+- Reviewed partial events lift JERC tree plots from 10 to 20 and OSBS from 20
+  to 30.
+- Plant counts follow the parent tag: SJER 111 to 51 plants.
+- TALL shrub mortality reads high: 35.8 %/yr (95% interval 26.4 to 46.1; 445 plants in 30 plots). Most deaths are NEON's own
+  "Standing dead" rows in the 2015 to 2018 legacy-schema censuses, a plant is
+  dead only when every observed row is dead, and plants recorded alive again
+  leave the cohort. Read it as tagged-plant mortality, not a stand-wide
+  die-off. JERC shrubs read 9.6 %/yr (4.3 to 18.0, 16 plots); JERC's burns are labelled in
+  `disturbance_classes`.
 
 ## What the promoted RELEASE-2026 family verifies
 

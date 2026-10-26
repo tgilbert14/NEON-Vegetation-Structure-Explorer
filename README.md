@@ -16,7 +16,11 @@ measure what changed.
 (Option A: basal area still counts boles 10 cm and over), adds a shared size
 screen for the tallest/biggest extremes with a warn-level `size_spike` QC flag,
 drops `measuredBy`/`recordedBy`, and gives the mortality banner its plot count
-and real hold reason. The v3 code and the v3 42-site family ship together: the
+and real hold reason. It also admits pre-2020 legacy-schema censuses to change
+history only, reads 57 reviewed partial events per channel
+(`scripts/curation/`), labels disturbance remarks, skips superseded and
+duplicate rows, counts a multi-bole tree as one plant, and defaults to the tree
+channel where trees are recorded. The v3 code and the v3 42-site family ship together: the
 code PR is labelled `build-vegetation-candidate`, the validated candidate
 artifact is promoted onto that same PR, and only then is it merged. Merging the
 code alone would put production on HOLD, because the runtime gate refuses a v2
