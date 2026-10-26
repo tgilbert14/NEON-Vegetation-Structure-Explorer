@@ -44,3 +44,7 @@
   re-deriving plot support and the contract payload from a committed family's preserved rows with the
   branch's builder functions; only the receipt ledgers then differ, and the official candidate stays the
   authority. Lifting a hold also widens the app-side estimands, so check growth and mortality cohorts too.
+- [2026-10-21] hk · confirmed · VST mortality cohorts are mostly NEON's 5 annual tower plots; gate a rate at
+  K >= 5 plot clusters and n0 >= 30, put a Korn-Graubard cluster beta interval on every printed rate (a plot
+  jackknife printed 0.00 lower bounds beside observed deaths), end time at risk at the first dead census, and
+  count only NEON's three dead states as deaths ("Lost, presumed dead" is censored).
