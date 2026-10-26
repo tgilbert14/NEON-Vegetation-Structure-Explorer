@@ -542,7 +542,7 @@ VEG_HELD_REASON <- c(
   held_opportunity_unknown = "the sampling opportunity is unknown",
   held_opportunity_source_missing = "NEON published no sampling record for the visit",
   held_snapshot_event_mismatch = "the visit does not match the snapshot",
-  supported_legacy_schema = "their censuses use the pre-2020 schema, used for change only")
+  supported_legacy_schema = "only pre-2020 censuses exist, and those feed change only")
 held_plot_disclosure <- function(snap, plots, spec = SIZE_FOREST, site = NULL) {
   if (is.null(plots) || !nrow(plots) || !"plotID" %in% names(plots)) return("")
   all_plots <- unique(stats::na.omit(.chr(plots$plotID)))
