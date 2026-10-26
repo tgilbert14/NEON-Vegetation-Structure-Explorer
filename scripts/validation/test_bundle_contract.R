@@ -1005,6 +1005,17 @@ assert_equal(s1$plots$tree_support_reason,
 assert_true(isTRUE(s1$plots$tree_channel_complete) && isFALSE(s1$plots$shrub_channel_complete) &&
               identical(s1$plots$partial_event_rule_id, "VST-PARTIAL-02"),
             "S1 flags are carried on plots")
+# A reviewed partial event before 2020-03-10 with a blank samplingImpractical
+# keeps today's path: its published value is "partial", so it is never legacy.
+early_partial <- partial_events
+early_partial$date <- as.Date("2019-06-01"); early_partial$samplingImpractical <- NA
+early_trees <- partial_trees; early_trees$date <- as.Date("2019-06-01")
+s1_early <- v3_site(early_trees, early_partial, curated)
+assert_equal(s1_early$plots$tree_support, "held_opportunity_unknown",
+             "a reviewed partial event is never supported_legacy_schema")
+assert_equal(s1_early$plots$tree_support_reason,
+             "samplingImpractical is missing; dataCollected=partial reviewed as complete for this channel (VST-PARTIAL-02)",
+             "the early partial event keeps today's reason plus the curation note")
 assert_error(v3_site(partial_trees, partial_events), "has no reviewed row",
              "S1: an unreviewed partial event stops the build")
 stale <- curated

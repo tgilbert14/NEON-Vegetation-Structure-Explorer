@@ -502,7 +502,8 @@ VEG_LEGACY_SCHEMA_REASON <-
   no_collected <- is.na(collected) | !nzchar(collected)
   legacy <- .veg_date_number(event_date) <= as.numeric(VEG_LEGACY_SCHEMA_END) &
     (no_sampling | sampling %in% "ok") &
-    (no_collected | collected %in% "allgrowthforms") & (no_sampling | no_collected)
+    (no_collected | collected %in% "allgrowthforms") & (no_sampling | no_collected) &
+    is.na(curation_note)  # a reviewed partial event keeps today's path
   legacy[is.na(legacy)] <- FALSE
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {

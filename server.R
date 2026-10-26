@@ -1162,8 +1162,14 @@ server <- function(input, output, session) {
         out[is.na(out)] <- "Not used · comparison unavailable"
         out
       }
+      # Superseded and duplicate rows stay in the career table but never enter
+      # the change history (contract v3).
+      excluded_row <- (if ("superseded_in_event" %in% names(hist)) hist$superseded_in_event %in% TRUE else FALSE) |
+        (if ("duplicate_of_uid" %in% names(hist)) !is.na(hist$duplicate_of_uid) else FALSE)
       ifelse(
         source_gap, "Not used · missing sampling record",
+        ifelse(
+          excluded_row, "Not used · superseded or duplicate record",
         ifelse(
           comparable & basal_unaligned, "Measured · stems not aligned for change",
           ifelse(
@@ -1177,6 +1183,7 @@ server <- function(input, output, session) {
           )
           )
           )
+        )
         )
       )
     }
@@ -1206,7 +1213,7 @@ server <- function(input, output, session) {
             tags$td(ifelse(is.na(hist$date[i]), "–", format(hist$date[i], "%Y-%m-%d"))), tags$td(fnum(dvals[i])),
             tags$td(fnum(hist$height[i])), tags$td(ifelse(is.na(hist$plantStatus[i]),"–",hist$plantStatus[i])),
             tags$td(span(
-              class = if (identical(hist_evidence[[i]], "Comparable for change"))
+              class = if (startsWith(hist_evidence[[i]], "Comparable for change"))
                 "evidence-chip comparable" else "evidence-chip held",
               hist_evidence[[i]]
             ))))))))

@@ -673,7 +673,10 @@ vst_support_status <- function(area, sampling_impractical, data_collected,
   # at least one of the two blank.
   legacy <- is.finite(day) & day <= as.numeric(VST_LEGACY_SCHEMA_END) &
     sampling %in% c("", "ok") & collected %in% c("", "allgrowthforms") &
-    (sampling == "" | collected == "")
+    (sampling == "" | collected == "") &
+    # A reviewed partial event keeps today's path: its published value is
+    # "partial", whatever the curation reads for this channel.
+    is.na(curation_note)
   identity_reason <- function(n) sprintf(
     "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
     n, if (n == 1L) "" else "s", if (n == 1L) "s" else ""

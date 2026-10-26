@@ -457,8 +457,16 @@ check(identical(held_line, "Basal cover is from 17 of SRER's 38 plots; the other
       "the SRER-style held-plot disclosure")
 mixed <- srer_states; mixed[33:38] <- "held_missing_area"
 check(identical(held_plot_disclosure(NULL, held_fx(mixed, srer_keys), SIZE_SHRUB, "SRER"),
-  "Basal cover is from 17 of SRER's 38 plots; the other 21 are held: 15 because NEON published two different records for one stem, at 30 stems, 6 because the sampled area is missing. Held plots are not zeros."),
-      "several held states are listed with their counts")
+  "Basal cover is from 17 of SRER's 38 plots; the other 21 are held: 15 because NEON published two different records for one stem, at 30 stems; 6 because the sampled area is missing. Held plots are not zeros."),
+      "several held states are listed with their counts, separated by semicolons")
+check(identical(held_plot_disclosure(NULL, held_fx(rep("held_sampling_impractical", 3)), SIZE_SHRUB, "SRER"),
+  "Basal cover is from none of SRER's 3 plots; all 3 are held because NEON marked sampling impractical. Held plots are not zeros."),
+      "when no plot feeds the number the copy says none, not 0 of")
+visit_fx <- held_fx(c("sampled_absence", "held_identity_conflict"))
+visit_fx$opportunity_key_conflict <- c(FALSE, TRUE)
+check(identical(held_plot_disclosure(NULL, visit_fx, SIZE_SHRUB, "DEJU"),
+  "Basal cover is from 1 of DEJU's 2 plots; the other 1 is held because NEON published two sampling records for one visit. Held plots are not zeros."),
+      "two plot-level sampling records are not described as a stem conflict")
 check(identical(held_plot_disclosure(NULL, held_fx(rep("sampled_absence", 4)), SIZE_SHRUB, "SRER"), ""),
       "no held plots, no disclosure")
 
@@ -470,5 +478,25 @@ check(identical(separate_table_line(cacti_fx, "SRER"),
       "the cacti line counts plots per group and skips groups never recorded")
 check(identical(separate_table_line(transform(cacti_fx, cactiPresent = "N", ocotillosPresent = "N"), "SRER"), ""),
       "no recorded cacti, yucca or ocotillo, no line")
+early_yucca <- cacti_fx; early_yucca$yuccasPresent[1:2] <- "Y"
+check(identical(separate_table_line(early_yucca, "SRER"),
+                "Cacti recorded in 38 of 38 SRER plots, ocotillo in 3, measured in a NEON table this app does not load."),
+      "the cacti line reads each plot's latest visit, so an early-only yucca is not counted")
+
+# A plant-event is dead only when every observed row is an explicit dead state;
+# "Standing dead" plus "No longer qualifies" is censored (hk, SCIENCE-CONTRACT).
+dead_rule_trees <- data.frame(
+  plotID = "P1", eventID = c("e1", "e1", "e2", "e2", "e2"),
+  individualID = c("A", "B", "A", "A", "B"), tempStemID = c("1", "1", "1", "2", "1"),
+  date = as.Date(c("2021-06-01", "2021-06-01", "2023-06-01", "2023-06-01", "2023-06-01")),
+  growthForm = "single bole tree",
+  plantStatus = c("Live", "Live", "Standing dead", "No longer qualifies", "Standing dead"),
+  stemDiameter = 20, stringsAsFactors = FALSE)
+dead_rule_plots <- data.frame(plotID = "P1", eventID = c("e1", "e2"), date = as.Date(c("2021-06-01", "2023-06-01")),
+  year = c(2021L, 2023L), tree_support = "sampled_with_records", area_trees = 400, plotType = "tower",
+  stringsAsFactors = FALSE)
+dead_rule <- stand_mortality(dead_rule_trees, SIZE_FOREST, dead_rule_plots)
+check(identical(as.integer(dead_rule$deaths), 1L),
+      "a plant-event with a dead row and a No longer qualifies row is censored, not a death")
 
 cat("\nALL TESTS PASSED\n")

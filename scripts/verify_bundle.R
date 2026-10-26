@@ -220,7 +220,8 @@ expected_support_decision <- function(area, sampling_impractical, data_collected
   legacy_event <- date_number(event_date) <= as.numeric(VST_LEGACY_END) &
     (sampling_blank | sampling %in% "ok") &
     (collected_blank | collected %in% "allgrowthforms") &
-    (sampling_blank | collected_blank)
+    (sampling_blank | collected_blank) &
+    is.na(curation_note)  # published dataCollected = partial is never legacy
   legacy_event[is.na(legacy_event)] <- FALSE
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
@@ -436,7 +437,7 @@ read_curation_csv <- function(name, fields) {
     note(sprintf("curation file %s has unexpected columns", path))
     return(NULL)
   }
-  table$sha_file <- digest::digest(path, algo = "sha256", file = TRUE)
+  attr(table, "sha_file") <- digest::digest(path, algo = "sha256", file = TRUE)
   table
 }
 partial_curation <- read_curation_csv("vst_partial_event_completeness.csv", c(
@@ -451,7 +452,7 @@ disturbance_curation <- read_curation_csv("vst_event_disturbance.csv", c(
 remark_sha <- function(remarks) {
   remarks <- as.character(remarks)
   remarks[is.na(remarks)] <- ""
-  vapply(remarks, digest::digest, character(1), algo = "sha256",
+  vapply(enc2utf8(remarks), digest::digest, character(1), algo = "sha256",
          serialize = FALSE, USE.NAMES = FALSE)
 }
 
@@ -641,9 +642,9 @@ for (path in site_files) {
         note(sprintf("%s contract plant key or legacy-schema terms differ from v3", site))
       if (is.null(partial_curation) || is.null(disturbance_curation) ||
           !identical(as.character(contract$curation$partial_event_completeness$sha256),
-                     partial_curation$sha_file[[1L]]) ||
+                     attr(partial_curation, "sha_file")) ||
           !identical(as.character(contract$curation$event_disturbance$sha256),
-                     disturbance_curation$sha_file[[1L]]))
+                     attr(disturbance_curation, "sha_file")))
         note(sprintf("%s was not built from the committed curation files", site))
       embedded_site <- contract$index$site %||% NULL
       if (!is.data.frame(embedded_site) || nrow(embedded_site) != 1L ||

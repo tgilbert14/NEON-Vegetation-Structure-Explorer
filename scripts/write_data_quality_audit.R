@@ -241,7 +241,8 @@ vst_dqa_support_decision <- function(area, sampling_impractical, data_collected,
   legacy <- is.finite(event_day) & event_day <= as.numeric(VST_DQA_LEGACY_END) &
     (blank_sampling | sampling %in% "ok") &
     (blank_collected | collected %in% "allgrowthforms") &
-    (blank_sampling | blank_collected)
+    (blank_sampling | blank_collected) &
+    is.na(as.character(curation_note))  # reviewed partial events keep today's path
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
     if (isTRUE(opportunity_source_missing[[i]])) {

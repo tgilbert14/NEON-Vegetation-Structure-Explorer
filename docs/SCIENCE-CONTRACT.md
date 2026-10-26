@@ -81,8 +81,9 @@ v3 changes the rules below. Every other rule in this contract is unchanged.
 
 7. **Legacy schema, change history only.** An event on or before 2020-03-10
    (the end of NEON changelog 16306's range, inclusive) whose
-   `samplingImpractical` is blank or OK, whose `dataCollected` is blank or
-   `allGrowthForms`, and where at least one of the two is blank, keeps the
+   `samplingImpractical` is blank or OK, whose published `dataCollected` is
+   blank or `allGrowthForms` (a reviewed partial event keeps today's path), and
+   where at least one of the two is blank, keeps the
    area, presence-record, identity and metric checks in that order. If it has
    records and passes them it becomes `supported_legacy_schema`, reason
    "legacy schema before 2020-03-10: sampling opportunity assumed (NEON
@@ -128,8 +129,10 @@ v3 changes the rules below. Every other rule in this contract is unchanged.
     same plot; otherwise the individualID. Plant counts (`n_individuals`,
     `n_trees`, taxon individuals, live plants), status and mortality use
     plotID + `plant_id`; growth stays per bole (`plant_key`). For mortality a
-    plant is live at an event if any of its rows is live, and dead if none is
-    live and at least one is an explicit dead state.
+    plant is live at an event if any of its rows is live and dead only if every
+    observed row is an explicit dead state (unchanged from the hk rule; a dead
+    row beside a "No longer qualifies" row is censored). Species tables count a
+    plant under every taxon its stems carry, as the taxa index does.
 12. **Measuring point (C2).** For each consecutive pair of a bole's events the
     point moved if the later row's `changedMeasurementLocation` is present and
     not `noChange`; with no code, if the measurement height changed by more
@@ -140,12 +143,14 @@ v3 changes the rules below. Every other rule in this contract is unchanged.
     half of the supported tree plots; otherwise the earlier rule applies. The
     builder and the parity mirror apply the same rule; channels stay separate.
 14. **Held plots and cacti (C5, C6).** The density banner says how many of the
-    site's plots feed the number and why the rest are held, for example
+    site's plots feed the number and why the rest are held (a visit with two
+    plot-level sampling records is named as such, not as a stem conflict), for
+    example
     "Basal cover is from 17 of SRER's 38 plots; the other 21 are held because
     NEON published two different records for one stem, at 47 stems. Held
     plots are not zeros." Sites whose plots record cacti, yuccas or ocotillos
-    get one line with those plot counts and the note that NEON measures them
-    in a table this app does not load.
+    at their latest published visit get one line with those plot counts and
+    the note that NEON measures them in a table this app does not load.
 15. **Status-only rows (C7).** Rows that carry only a status have no
     growthForm (about 90% of `Downed` rows), so a channel filter dropped those
     deaths. Change history and the snapshot fill a blank growthForm from the
