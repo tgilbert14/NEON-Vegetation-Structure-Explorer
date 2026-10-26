@@ -1084,3 +1084,34 @@ BYTES PENDING / NO SCIENCE OR DRIVER DATA BYTE CHANGE.**
   `supported_legacy_schema` for pre-2020 events (growth and mortality only); rewriting git history to
   remove the committed measuredBy/recordedBy values.
 - **Next action:** label this PR, inspect and promote the validated v3 candidate, merge after #18.
+
+### 2026-10-26 MST - contract v3 complete: cedar's rulings, official candidate promoted / [Claude]
+
+- **Scope:** PR #19 (`claude/veg-contract-v3` to `main`, rebased after #18 merged). Adds cedar's
+  2026-10-26 rulings to v3: `supported_legacy_schema` (pre-2020-03-10 blank-field events, change
+  history only), 57 reviewed partial events and 47 reviewed disturbance remarks
+  (`scripts/curation/`, build stops on a missing, stale or orphan row), superseded and duplicate rows
+  skipped by every estimate, `plant_id` parent-tag plant identity, the 5 cm measuring-point rule, the
+  tree-first default channel, held-plot and cacti disclosures, and growthForm carried forward to
+  status-only rows. Independent copies: `global.R`, `verify_bundle.R` (also plant_id, S4, curation
+  cross-checks and a size-extremes oracle), the audit (schema v3, `n_supported_legacy_schema`), the
+  inspector (re-pinned) and `derived_parity.R`.
+- **Candidate:** refresh run `40360523712` on `99fd0a2` (probe_token, fetch_raw and build_candidate green;
+  the two isolated candidates byte-identical). Artifact
+  `vegetation-release-candidate-99fd0a29b18a4db9e2908257e66e9a0fc374a919-40360523712` passed
+  `inspect_vegetation_candidate.py` (55 files, 54 payload paths, audit schema v3, manifest R 4.5.2 with
+  91 packages and 71 runtime files, terra 1.8-50). Its 54 payload paths are promoted byte for byte:
+  bundle family SHA-256 `6e538d472b43e949911d5775a665f4fc1993dfd82a2f06f0da3db83167462fa1`, raw
+  digest `e8d78dd7...3e29` unchanged.
+- **Numbers (official family):** default channels 31 tree / 6 shrub / 5 unavailable (v2: 19 / 18 / 5);
+  supported tree plot-events 1,621 (v2: 1,163); legacy-schema events 2,071 tree and 2,454 shrub; TALL
+  tallest 37.2 m (network top WREF 60.5 m); GUAN tree BA 5.06 ± 0.58 m²/ha (38 plots); STEI 17.49 ± 3.07
+  (17 plots); HARV tree mortality 2.47 %/yr (95% interval 1.79 to 3.31, 40 plots); SRER shrub mortality
+  0.69 %/yr (0.05 to 2.86, 11 plots); JERC tree plots 10 to 20, OSBS 20 to 30; SJER 111 to 51 plants.
+- **Review:** one final review on Opus 5.5 at max (Fable limit); nine findings, all applied in `648bc66`: mortality back to every-row-dead,
+  reviewed partial events never legacy, cacti counted at each plot's latest visit, held-plot copy and
+  visit-conflict wording, species plants per taxon, plant-card chips, the verifier's empty-CSV crash,
+  and two codebook rows. JERC shrub mortality reads 9.6 %/yr after the first fix (36.96 before).
+- **Merge order:** after the Atlas adds v3 adapter support (note left for cass); normal merge commit.
+- **Next action:** Tim merges #19 after the Atlas v3 support lands; then confirm the post-deploy
+  revision check and the SRER, TALL and HARV live numbers.
