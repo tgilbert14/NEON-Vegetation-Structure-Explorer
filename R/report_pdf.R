@@ -2,7 +2,7 @@
 # NEON Vegetation Structure Explorer — stand report PDF (base graphics).
 # A one-page, printable stand report streamed by output$reportPdf. No LaTeX,
 # no Chrome — grDevices::cairo_pdf + base plotting only. Forest-themed from the
-# DDL palette. Every section is defensive (draws "—" rather than erroring), so
+# DDL palette. Every section is defensive (draws "–" rather than erroring), so
 # it can never break the downloadHandler.
 # ===========================================================================
 
@@ -11,8 +11,8 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
             goldink = "#8a6310", ink = "#1d2a24", muted = "#5c6b62", paper = "#fdfcf7",
             line = "#e1ddcf", dead = "#9a5a3a")
   ok <- function(expr) tryCatch(expr, error = function(e) NULL)
-  f1 <- function(x) if (length(x) && is.finite(x[[1]])) formatC(x[[1]], format = "f", digits = 1) else "—"
-  f0 <- function(x) if (length(x) && is.finite(x[[1]])) format(round(x[[1]]), big.mark = ",", scientific = FALSE) else "—"
+  f1 <- function(x) if (length(x) && is.finite(x[[1]])) formatC(x[[1]], format = "f", digits = 1) else "–"
+  f0 <- function(x) if (length(x) && is.finite(x[[1]])) format(round(x[[1]]), big.mark = ",", scientific = FALSE) else "–"
   shrub <- identical(spec$type, "shrubland")
   SL <- spec$size_lab
 
@@ -69,7 +69,7 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
       graphics::text(x0 + w + 1, yc[i], sprintf("%.1f m²/ha (%d%%)", topn$ba_m2_ha[i], pc),
                      col = P$muted, cex = 0.55, adj = 0)
     }
-  } else graphics::text(50, 67, "—", col = P$muted)
+  } else graphics::text(50, 67, "–", col = P$muted)
 
   # ---- section: descriptive diameter size-class distribution -------------
   graphics::text(3, 52, if (shrub) "Basal-diameter size-class distribution (live shrubs & saplings)" else "Diameter size-class distribution (live trees ≥ 10 cm DBH)", col = P$pine2, cex = 1.0, font = 2, adj = 0)
@@ -84,11 +84,11 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
                      col = P$pine, border = NA)
       graphics::text(x0 + (i - 0.5) * bw, ybot - 1.6, as.character(sc$cls[i]), col = P$muted, cex = 0.55)
       graphics::text(x0 + (i - 0.5) * bw, ybot + h + 1.2,
-                     if (is.finite(metric[i])) format(round(metric[i]), big.mark = ",", scientific = FALSE) else "—",
+                     if (is.finite(metric[i])) format(round(metric[i]), big.mark = ",", scientific = FALSE) else "–",
                      col = P$ink, cex = 0.55)
     }
     graphics::text(3, ytop + 1.5, paste0("stems/ha by cm ", SL, " class"), col = P$muted, cex = 0.55, adj = 0)
-  } else graphics::text(50, 40, "—", col = P$muted)
+  } else graphics::text(50, 40, "–", col = P$muted)
 
   # ---- section: champion plants ------------------------------------------
   graphics::text(3, 26, if (shrub) "Champion shrubs" else "Champion trees", col = P$pine2, cex = 1.0, font = 2, adj = 0)
@@ -103,7 +103,7 @@ build_stand_report <- function(file, snap, trees, plots, one, label = "site", sp
     for (i in seq_len(nrow(champs))) {
       graphics::text(3, yL - 1.8 * i,
         sprintf("%d.  %s  ·  %s  ·  %.1f cm %s%s", i, short_tree(champs$individualID[i]),
-                ifelse(is.na(champs$scientificName[i]), "—", champs$scientificName[i]),
+                ifelse(is.na(champs$scientificName[i]), "–", champs$scientificName[i]),
                 champs[[spec$col]][i], SL,
                 if (is.finite(champs$height[i])) sprintf("  ·  %.1f m", champs$height[i]) else ""),
         col = P$ink, cex = 0.62, adj = 0)

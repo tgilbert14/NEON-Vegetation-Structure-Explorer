@@ -42,15 +42,9 @@ if (!identical(manifest$locale, EXPECTED_LOCALE))
                manifest$locale %||% "missing", EXPECTED_LOCALE))
 if (!identical(manifest$metadata$appmode, "shiny")) note("manifest appmode is not shiny")
 
-expected_files <- unique(c(
-  "global.R", "ui.R", "server.R",
-  list.files("R", pattern = "[.]R$", full.names = TRUE),
-  list.files("www", recursive = TRUE, full.names = TRUE),
-  Sys.glob("data/*.rds"),
-  list.files("data/sites", pattern = "[.]rds$", full.names = TRUE),
-  list.files("data-sample", pattern = "[.]rds$", full.names = TRUE)
-))
-expected_files <- sort(expected_files[file.exists(expected_files)])
+# The same file set write_manifest.R passes as appFiles (R/build_receipt.R).
+source("R/build_receipt.R", local = TRUE)
+expected_files <- sort(veg_app_files())
 actual_files <- sort(names(manifest$files))
 if (!identical(actual_files, expected_files)) {
   note(sprintf("manifest file closure differs: missing=[%s] extra=[%s]",

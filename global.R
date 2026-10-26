@@ -54,9 +54,11 @@ add_suite_basemap <- function(map, basemap = "light_all", noWrap = FALSE) {
 
 source("R/site_metadata.R", local = FALSE)
 source("R/size_plausibility.R", local = FALSE)   # shared size screen (also used by the bundle builder)
+source("R/neon_issue_log.R", local = FALSE)      # curated NEON issue-log notes
 source("R/veg_helpers.R", local = FALSE)
 source("R/report_pdf.R", local = FALSE)
 source("R/map_picker.R", local = FALSE)   # reusable national site-picker map (flagship front door)
+source("R/build_receipt.R", local = FALSE)   # deployed file set + ddl-build-digest meta tag
 
 NEON_DPID <- "DP1.10098.001"   # Vegetation structure
 .NEON_PKG <- paste0("neon", "Utilities")
@@ -74,7 +76,7 @@ DEMO_META <- list(site = DEFAULT_SITE, label = "SRER · Santa Rita Experimental 
 # with the Response Atlas as the hub. Kept as a plain list so the block cannot
 # drift from the covers; the same list shape is used in the sibling apps.
 .SIBLINGS <- list(
-  list(name = "Response Atlas",   prod = "cross-product synthesis", url = "https://tgilbert14.github.io/NEON-Driver-Cascade/"),
+  list(name = "Cross-Product Response Atlas", prod = "cross-product synthesis", url = "https://tgilbert14.github.io/NEON-Driver-Cascade/"),
   list(name = "Small Mammals",    prod = "DP1.10072.001",           url = "https://tgilbert14.github.io/NEON-Small-Mammal-Tracker-App/"),
   list(name = "Breeding Birds",   prod = "DP1.10003.001",           url = "https://tgilbert14.github.io/NEON-Breeding-Birds/"),
   list(name = "Ground Beetles",   prod = "DP1.10022.001",           url = "https://tgilbert14.github.io/NEON-Ground-Beetle-Tracker/"),
@@ -95,7 +97,7 @@ read_bundle <- function(f) {
 load_site_bundle <- function(site) read_bundle(file.path(SITE_DIR, paste0(site, ".rds")))
 load_demo <- function() { b <- load_site_bundle(DEMO_META$site); if (!is.null(b)) b else read_bundle(DEMO_PATH) }
 
-# ---- exact v2 front-door and bundle release gate -------------------------
+# ---- exact v3 front-door and bundle release gate -------------------------
 # Keep this runtime gate independent of the build scripts: those scripts are not
 # part of the deployed app surface, and an index is not trusted merely because it
 # can be read. A partial, legacy, or receipt-mismatched family must expose no
@@ -125,8 +127,14 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
   "shrub_invalid_metric_records", "tree_identity_conflict_keys",
   "shrub_identity_conflict_keys", "tree_support", "tree_support_reason",
   "shrub_support", "shrub_support_reason", "tree_supported",
-  "shrub_supported", "event_key"
+  "shrub_supported", "event_key", "partial_event_rule_id",
+  "tree_channel_complete", "shrub_channel_complete", "disturbance_classes",
+  "disturbance_curation_id", "n_status_lost_burned", "n_status_removed"
 )
+# Contract v3 legacy-schema state (cedar A; NEON changelog 16306): history only.
+VEG_LEGACY_SCHEMA_END <- as.Date("2020-03-10")
+VEG_LEGACY_SCHEMA_REASON <-
+  "legacy schema before 2020-03-10: sampling opportunity assumed (NEON changelog 16306)"
 
 .veg_scalar_chr <- function(x) {
   if (length(x) != 1L || is.na(x)) return(NA_character_)
@@ -187,7 +195,8 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
     "date", "year", "plotID", "eventID", "individualID", "plantStatus",
     "live", "permanent", "plant_key", "event_key", "mapping_source_uid",
     "mappingMatched", "scientificName", "taxonID", "taxonRank",
-    "is_species", "taxon_label", "taxon_resolution"
+    "is_species", "taxon_label", "taxon_resolution", "growthForm",
+    "source_uid", "plant_id", "superseded_in_event", "duplicate_of_uid"
   )
   missing <- setdiff(required, names(trees))
   if (length(missing)) {
@@ -234,7 +243,27 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
       identical(trees$taxon_label, expected_label),
     taxon_resolution = is.character(trees$taxon_resolution) && identical(
       trees$taxon_resolution, expected_resolution
-    )
+    ),
+    # Contract v3 C1, recomputed here: a lettered individual with a tree-form
+    # row whose parent tag exists in the same plot counts with that parent.
+    plant_id = is.character(trees$plant_id) && {
+      id <- as.character(trees$individualID)
+      bole <- paste(trees$plotID, id, sep = "\r")
+      parent <- sub("[A-Za-z]$", "", id)
+      tree_like <- tolower(trimws(as.character(trees$growthForm))) %in%
+        c("single bole tree", "multi-bole tree")
+      promote <- !is.na(id) & grepl("[A-Za-z]$", id) &
+        bole %in% bole[tree_like] & paste(trees$plotID, parent, sep = "\r") %in% bole
+      identical(trees$plant_id, ifelse(promote, parent, id))
+    },
+    # S4 exclusion flags: present, typed, and pointing at a real other row.
+    superseded_in_event = is.logical(trees$superseded_in_event) &&
+      !anyNA(trees$superseded_in_event),
+    duplicate_of_uid = is.character(trees$duplicate_of_uid) && {
+      dup <- !is.na(trees$duplicate_of_uid)
+      all(trees$duplicate_of_uid[dup] %in% as.character(trees$source_uid)) &&
+        !any(trees$duplicate_of_uid[dup] == as.character(trees$source_uid[dup]))
+    }
   )
   problems <- names(checks)[!checks]
   mapping_uid <- as.character(trees$mapping_source_uid[mapping_matched])
@@ -461,15 +490,24 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
 .veg_support_decision <- function(area, sampling_impractical, data_collected,
                                   presence, records, invalid_metric,
                                   identity_conflicts, opportunity_conflict,
-                                  opportunity_source_missing) {
+                                  opportunity_source_missing, event_date,
+                                  curation_note) {
   sampling <- gsub(
     "[^a-z]", "", tolower(trimws(as.character(sampling_impractical)))
   )
   collected <- gsub(
     "[^a-z]", "", tolower(trimws(as.character(data_collected)))
   )
+  no_sampling <- is.na(sampling) | !nzchar(sampling)
+  no_collected <- is.na(collected) | !nzchar(collected)
+  legacy <- .veg_date_number(event_date) <= as.numeric(VEG_LEGACY_SCHEMA_END) &
+    (no_sampling | sampling %in% "ok") &
+    (no_collected | collected %in% "allgrowthforms") & (no_sampling | no_collected) &
+    is.na(curation_note)  # a reviewed partial event keeps today's path
+  legacy[is.na(legacy)] <- FALSE
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
+    legacy_records <- legacy[[i]] && records[[i]] > 0L
     if (isTRUE(opportunity_source_missing[[i]])) {
       status[[i]] <- "held_opportunity_source_missing"
       reason[[i]] <- paste(
@@ -480,6 +518,30 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
       status[[i]] <- "held_identity_conflict"
       reason[[i]] <-
         "multiple published vst_perplotperyear rows share this plot-event key"
+    } else if (legacy_records && (!is.finite(area[[i]]) || area[[i]] <= 0)) {
+      status[[i]] <- "held_missing_area"
+      reason[[i]] <- "event-specific total sampled area is missing or non-positive"
+    } else if (legacy_records && identical(presence[[i]], "absent")) {
+      status[[i]] <- "held_presence_record_conflict"
+      reason[[i]] <- "presence says absent but measurement records exist"
+    } else if (legacy_records && is.finite(identity_conflicts[[i]]) &&
+               identity_conflicts[[i]] > 0L) {
+      status[[i]] <- "held_identity_conflict"
+      reason[[i]] <- sprintf(
+        "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
+        identity_conflicts[[i]], if (identity_conflicts[[i]] == 1L) "" else "s",
+        if (identity_conflicts[[i]] == 1L) "s" else ""
+      )
+    } else if (legacy_records && invalid_metric[[i]] > 0L) {
+      status[[i]] <- "held_metric_invalid"
+      reason[[i]] <- sprintf(
+        "%d live channel record%s lack%s a finite positive threshold-compatible diameter",
+        invalid_metric[[i]], if (invalid_metric[[i]] == 1L) "" else "s",
+        if (invalid_metric[[i]] == 1L) "s" else ""
+      )
+    } else if (legacy_records) {
+      status[[i]] <- "supported_legacy_schema"
+      reason[[i]] <- VEG_LEGACY_SCHEMA_REASON
     } else if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "samplingImpractical is missing"
@@ -533,6 +595,8 @@ VEG_CONTEXT_DERIVED_FIELDS <- c(
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "no records and presence does not establish sampled absence"
     }
+    note <- as.character(curation_note[[i]])
+    if (!is.na(note)) reason[[i]] <- paste0(reason[[i]], "; ", note)
   }
   data.frame(status = status, reason = reason, stringsAsFactors = FALSE)
 }
@@ -615,11 +679,11 @@ site_index_check <- function(index) {
     reason <- c(reason, "site index does not contain the exact registered 42-site family")
   }
   if (!identical(attr(index, "contract_id"), VEG_CONTRACT_ID)) {
-    reason <- c(reason, "site index contract attribute is not the exact v2 contract")
+    reason <- c(reason, "site index contract attribute is not the exact v3 contract")
   }
   if (!"contract_id" %in% names(index) ||
       any(is.na(index$contract_id)) || any(as.character(index$contract_id) != VEG_CONTRACT_ID)) {
-    reason <- c(reason, "site index contains a non-v2 contract row")
+    reason <- c(reason, "site index contains a non-v3 contract row")
   }
   if ("primary_channel" %in% names(index) &&
       any(is.na(index$primary_channel) |
@@ -670,7 +734,7 @@ search_index_check <- function(index, site_index, source_receipt) {
   missing <- setdiff(required, names(index))
   if (length(missing)) reason <- c(reason, paste0("search index lacks ", paste(missing, collapse = ", ")))
   if (!identical(.veg_scalar_chr(index$contract_id), VEG_CONTRACT_ID)) {
-    reason <- c(reason, "search index is not the exact v2 contract")
+    reason <- c(reason, "search index is not the exact v3 contract")
   }
   if (!is.data.frame(index$taxa) || !is.data.frame(index$sites) ||
       !is.data.frame(index$channel_sites)) {
@@ -691,7 +755,7 @@ search_index_check <- function(index, site_index, source_receipt) {
     } else {
       if (any(is.na(index$taxa$contract_id)) ||
           any(as.character(index$taxa$contract_id) != VEG_CONTRACT_ID)) {
-        reason <- c(reason, "search index contains a non-v2 taxon row")
+        reason <- c(reason, "search index contains a non-v3 taxon row")
       }
       if (any(!as.character(index$taxa$site) %in% VEG_EXPECTED_SITES)) {
         reason <- c(reason, "search index contains a taxon row outside the registered site family")
@@ -730,7 +794,7 @@ search_index_check <- function(index, site_index, source_receipt) {
       }
       if (any(is.na(index$channel_sites$contract_id)) ||
           any(as.character(index$channel_sites$contract_id) != VEG_CONTRACT_ID)) {
-        reason <- c(reason, "search channel sites contain a non-v2 contract row")
+        reason <- c(reason, "search channel sites contain a non-v3 contract row")
       }
       if (any(is.na(index$channel_sites$is_default_channel))) {
         reason <- c(reason, "search channel sites contain an unknown default-channel state")
@@ -772,6 +836,9 @@ SEARCH_INDEX_CHECK <- if (SITE_INDEX_CHECK$ok) {
 VEG_FAMILY_READY <- isTRUE(SITE_INDEX_CHECK$ok) && isTRUE(SEARCH_INDEX_CHECK$ok)
 VEG_FAMILY_HOLD_REASON <- unique(c(SITE_INDEX_CHECK$reason, SEARCH_INDEX_CHECK$reason))
 SITE_INDEX <- if (VEG_FAMILY_READY) SITE_INDEX_CANDIDATE else NULL
+# Newest measurement date in the validated family (written by the index
+# builders from contract v3 on); NULL on an older family or a held family.
+SITE_DATA_THROUGH <- if (!is.null(SITE_INDEX)) attr(SITE_INDEX, "data_through") else NULL
 SEARCH_INDEX <- if (VEG_FAMILY_READY) SEARCH_INDEX_CANDIDATE else NULL
 BUNDLED <- if (VEG_FAMILY_READY) as.character(SITE_INDEX$site) else character(0)
 
@@ -780,7 +847,7 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
                                   require_family = TRUE) {
   reason <- character(0)
   if (isTRUE(require_family) && !isTRUE(VEG_FAMILY_READY)) {
-    reason <- c(reason, "the exact v2 index family is on hold")
+    reason <- c(reason, "the exact v3 index family is on hold")
   }
   if (!is.list(bundle) || !is.data.frame(bundle$trees) ||
       !is.data.frame(bundle$plots) || !is.data.frame(bundle$opportunity_source) ||
@@ -799,10 +866,11 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
   }
   if (!identical(.veg_scalar_chr(meta$contract_id), VEG_CONTRACT_ID) ||
       !identical(.veg_scalar_chr(contract$id), VEG_CONTRACT_ID) ||
-      !identical(suppressWarnings(as.integer(contract$version)), 2L)) {
-    reason <- c(reason, "bundle does not carry the exact embedded v2 contract")
+      !identical(suppressWarnings(as.integer(contract$version)), 3L)) {
+    reason <- c(reason, "bundle does not carry the exact embedded v3 contract")
   }
   if (!identical(as.character(contract$plant_key), VEG_CONTRACT$plant_key) ||
+      !identical(as.character(contract$plant_id_key), VEG_CONTRACT$plant_id_key) ||
       !identical(as.character(contract$event_key), VEG_CONTRACT$event_key) ||
       !identical(.veg_scalar_chr(contract$source_record_key), VEG_CONTRACT$source_record_key) ||
       !identical(.veg_scalar_chr(contract$mapping_source_record_key),
@@ -814,13 +882,13 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
       !identical(.veg_scalar_chr(contract$support_status$zero), VEG_CONTRACT$zero_status) ||
       !setequal(as.character(contract$support_status$held),
                 setdiff(VEG_CONTRACT$held_status, "held_snapshot_event_mismatch"))) {
-    reason <- c(reason, "bundle identity keys or support vocabulary differ from the v2 contract")
+    reason <- c(reason, "bundle identity keys or support vocabulary differ from the v3 contract")
   }
   if (!identical(.veg_scalar_chr(meta$product), VEG_CONTRACT$product) ||
       !identical(.veg_scalar_chr(contract$product), VEG_CONTRACT$product) ||
       !identical(.veg_scalar_chr(meta$release), VEG_CONTRACT$release) ||
       !identical(.veg_scalar_chr(contract$release), VEG_CONTRACT$release)) {
-    reason <- c(reason, "bundle product or official release differs from the v2 contract")
+    reason <- c(reason, "bundle product or official release differs from the v3 contract")
   }
   channel <- .veg_scalar_chr(meta$primary_channel)
   if (is.na(channel) || !channel %in% c("tree_dbh", "shrub_sapling_basal", "unavailable")) {
@@ -860,7 +928,8 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
     "opportunity_source_missing", "growthForm", "plantStatus", "live",
     "stemDiameter", "basalStemDiameter", "year", "permanent", "plant_key",
     "event_key", "mapping_source_uid", "mappingMatched", "scientificName",
-    "taxonID", "taxonRank", "is_species", "taxon_label", "taxon_resolution"
+    "taxonID", "taxonRank", "is_species", "taxon_label", "taxon_resolution",
+    "plant_id", "superseded_in_event", "duplicate_of_uid"
   )
   tree_ready <- all(tree_identity %in% names(bundle$trees))
   if (!tree_ready ||
@@ -1027,10 +1096,24 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
     expected_shrub_records <- .veg_event_counts(
       bundle$trees, bundle$plots, shrub_form
     )
+    # Contract v3 multi-bole rule (independent runtime copy): a lettered
+    # tree-form bole is valid at any positive DBH when its parent tag has a
+    # tree-form bole >= 10 cm in the same plotID x eventID.
+    tree_id <- as.character(bundle$trees$individualID)
+    tree_plot_event <- paste(as.character(bundle$trees$plotID),
+                             as.character(bundle$trees$eventID), sep = "\r")
+    tree_parents <- unique(paste(tree_plot_event, tree_id, sep = "\r")[
+      tree_form & is.finite(tree_diameter) & tree_diameter >= 10
+    ])
+    tree_secondary_ok <- tree_form & !is.na(tree_id) &
+      grepl("[A-Za-z]$", tree_id) &
+      paste(tree_plot_event, sub("[A-Za-z]$", "", tree_id), sep = "\r") %in%
+        tree_parents
     expected_tree_invalid <- .veg_event_counts(
       bundle$trees, bundle$plots,
       tree_form & live &
-        !(is.finite(tree_diameter) & tree_diameter > 0 & tree_diameter >= 10)
+        !((is.finite(tree_diameter) & tree_diameter > 0 & tree_diameter >= 10) |
+          (tree_secondary_ok & is.finite(tree_diameter) & tree_diameter > 0))
     )
     expected_shrub_invalid <- .veg_event_counts(
       bundle$trees, bundle$plots,
@@ -1042,19 +1125,45 @@ bundle_contract_check <- function(bundle, expected_site = NULL,
     expected_shrub_conflicts <- .veg_identity_conflict_counts(
       bundle$trees, bundle$plots, shrub_form
     )
+    # S1 (contract v3): a reviewed partial event reads as all-growth-forms for
+    # a channel the curation marked complete; the rule id rides on the reason.
+    rule_id <- if (is.null(bundle$plots$partial_event_rule_id)) NULL else
+      as.character(bundle$plots$partial_event_rule_id)
+    tree_complete <- bundle$plots$tree_channel_complete
+    shrub_complete <- bundle$plots$shrub_channel_complete
+    partial_flags_ok <- !is.null(rule_id) && is.logical(tree_complete) &&
+      is.logical(shrub_complete) && length(tree_complete) == nrow(bundle$plots) &&
+      length(shrub_complete) == nrow(bundle$plots) &&
+      !anyNA(tree_complete) && !anyNA(shrub_complete) &&
+      !any((tree_complete | shrub_complete) & is.na(rule_id)) &&
+      !any(!is.na(rule_id) &
+             !tolower(trimws(as.character(bundle$plots$dataCollected))) %in% "partial")
+    if (!partial_flags_ok) {
+      reason <- c(reason, "bundle partial-event curation flags are missing or inconsistent")
+      rule_id <- rep(NA_character_, nrow(bundle$plots))
+      tree_complete <- shrub_complete <- rep(FALSE, nrow(bundle$plots))
+    }
+    curation_note <- function(complete) ifelse(
+      is.na(rule_id), NA_character_,
+      sprintf("dataCollected=partial reviewed as %s for this channel (%s)",
+              ifelse(complete, "complete", "incomplete"), rule_id)
+    )
+    collected <- as.character(bundle$plots$dataCollected)
     expected_tree_support <- .veg_support_decision(
       suppressWarnings(as.numeric(bundle$plots$area_trees)),
-      bundle$plots$samplingImpractical, bundle$plots$dataCollected,
+      bundle$plots$samplingImpractical,
+      ifelse(tree_complete, "allGrowthForms", collected),
       expected_tree_presence, expected_tree_records, expected_tree_invalid,
       expected_tree_conflicts, as.logical(bundle$plots$opportunity_key_conflict),
-      source_missing
+      source_missing, bundle$plots$date, curation_note(tree_complete)
     )
     expected_shrub_support <- .veg_support_decision(
       suppressWarnings(as.numeric(bundle$plots$area_shrub)),
-      bundle$plots$samplingImpractical, bundle$plots$dataCollected,
+      bundle$plots$samplingImpractical,
+      ifelse(shrub_complete, "allGrowthForms", collected),
       expected_shrub_presence, expected_shrub_records, expected_shrub_invalid,
       expected_shrub_conflicts, as.logical(bundle$plots$opportunity_key_conflict),
-      source_missing
+      source_missing, bundle$plots$date, curation_note(shrub_complete)
     )
     stored_tree_records <- .veg_exact_integer(bundle$plots$tree_records)
     stored_shrub_records <- .veg_exact_integer(bundle$plots$shrub_records)

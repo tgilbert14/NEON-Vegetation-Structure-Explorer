@@ -53,15 +53,10 @@ SNAPSHOT_SOURCE_URLS <- c(
   plotly = "https://packagemanager.posit.co/cran/2026-07-15/src/contrib/plotly_4.12.0.tar.gz"
 )
 
-appFiles <- c(
-  "global.R", "ui.R", "server.R",
-  list.files("R", pattern = "\\.R$", full.names = TRUE),
-  list.files("www", recursive = TRUE, full.names = TRUE),
-  Sys.glob("data/*.rds"),                                       # precomputed indexes
-  list.files("data/sites", pattern = "\\.rds$", full.names = TRUE),
-  list.files("data-sample", pattern = "\\.rds$", full.names = TRUE)
-)
-appFiles <- unique(appFiles[file.exists(appFiles)])
+# One definition of the deployed file set (also used by verify_manifest.R and
+# the live build digest): R/build_receipt.R veg_app_files().
+source("R/build_receipt.R", local = TRUE)
+appFiles <- veg_app_files()
 
 cat(sprintf("Writing manifest for %d files (%d site bundles)...\n",
             length(appFiles), length(list.files("data/sites", pattern = "\\.rds$"))))

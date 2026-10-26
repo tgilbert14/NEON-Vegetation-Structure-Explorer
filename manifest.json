@@ -3101,148 +3101,154 @@
   },
   "files": {
     "data-sample/demo.rds": {
-      "checksum": "80331c39f1a918310ec70d014ba53c8f"
+      "checksum": "e65eb797d9e0569519d02b1e80208887"
     },
     "data/search_index.rds": {
-      "checksum": "12b87948921b6dfcf3a4d49132ba4369"
+      "checksum": "6b1eeab3f919fce1ee0eaaf38a896c60"
     },
     "data/site_index.rds": {
-      "checksum": "b43bf29198b71f4ec105a84e1c761b48"
+      "checksum": "37992e9806d2c3fe10f7d94a2e5ff13c"
     },
     "data/sites/ABBY.rds": {
-      "checksum": "e15b35dad4174899261cd839a9d61a40"
+      "checksum": "5890d6b7f8eb110f0b1469e7c067f252"
     },
     "data/sites/BART.rds": {
-      "checksum": "4e0f4d00eeddba839f21bc947ad99c61"
+      "checksum": "5b5945f35d3be3631ed742e1cea25d9a"
     },
     "data/sites/BLAN.rds": {
-      "checksum": "9862a2cce9ac0a8280ad7ab20d83bd09"
+      "checksum": "bbb15f585ef41999e8c21e5aeabe8388"
     },
     "data/sites/BONA.rds": {
-      "checksum": "8628fc054ea39651a7976ebbd7f561a6"
+      "checksum": "f7e3554c2342b4b47aa5b4605471c3ac"
     },
     "data/sites/CLBJ.rds": {
-      "checksum": "6f0ec478d83383849dba9a494e384df6"
+      "checksum": "32e5505bf2d777f3fe7afad5fcc7cb3f"
     },
     "data/sites/CPER.rds": {
-      "checksum": "d8adef7dbdd3dc8b3ac962a06b584f56"
+      "checksum": "f9817aa18bb7d263584d2056479b8716"
     },
     "data/sites/DCFS.rds": {
-      "checksum": "aacfe5ed27ab5760730935a86a750589"
+      "checksum": "98d8b0c6c0111e25897ae4f5f3c18757"
     },
     "data/sites/DEJU.rds": {
-      "checksum": "4ac16ced748eac617d8952729a9b5884"
+      "checksum": "aec1aa77b256caa0e501fd46213c3ada"
     },
     "data/sites/DELA.rds": {
-      "checksum": "5127d294a1b90bbf2a20058ff3857b0c"
+      "checksum": "6e7d4c53fc9de83a7ef2f25447c4ae0c"
     },
     "data/sites/DSNY.rds": {
-      "checksum": "baa5a1d15be1fe963e5b88d9b5c6272e"
+      "checksum": "a7e86d73675ddba1808778a9a2cc793c"
     },
     "data/sites/GRSM.rds": {
-      "checksum": "585e7bd57284af72b95e4f97c63a9863"
+      "checksum": "9f0f593c38b1463c1ccc19c6747294d4"
     },
     "data/sites/GUAN.rds": {
-      "checksum": "c0871326b9c26955f2e31c2204d39458"
+      "checksum": "ded5624fcc1c2334279de134eedb7023"
     },
     "data/sites/HARV.rds": {
-      "checksum": "80331c39f1a918310ec70d014ba53c8f"
+      "checksum": "d0c000d10d40514dedc5ddd3155e212a"
     },
     "data/sites/HEAL.rds": {
-      "checksum": "6638195e81fac3e480bedf4055ef0a80"
+      "checksum": "787a9a9c0104f54746262cf8f77fd28a"
     },
     "data/sites/JERC.rds": {
-      "checksum": "b0263e53dbd61db0ce8422f2eb9303e8"
+      "checksum": "225d3a96fec89a893a5ffeab872c9809"
     },
     "data/sites/JORN.rds": {
-      "checksum": "6f707e48b78d61fdfbc571f3c0cf51a0"
+      "checksum": "1f2ee7dab3f598d6e2b6ffa32ee6f4d5"
     },
     "data/sites/KONZ.rds": {
-      "checksum": "bcc2c202fff46d78ffddd3a6a459603b"
+      "checksum": "238d5450b3375634191474eafa02f12c"
     },
     "data/sites/LAJA.rds": {
-      "checksum": "7ba5aadfc54cbf1deef1f19bf59e21cf"
+      "checksum": "b4b10a264fbb685712bd6662f70f425f"
     },
     "data/sites/LENO.rds": {
-      "checksum": "d837d531f8ce8df31d37893039b6ffea"
+      "checksum": "ab41e16d4dea538423af97680ac80bd0"
     },
     "data/sites/MLBS.rds": {
-      "checksum": "2db4dce51a80717e5385d299f596f2ae"
+      "checksum": "ad3b1f57b7a585182daa64b007c38cfa"
     },
     "data/sites/MOAB.rds": {
-      "checksum": "114e0189b586ef98704739452e6e1107"
+      "checksum": "0580c2e397beb1372d6d050262909f8b"
     },
     "data/sites/NIWO.rds": {
-      "checksum": "d928a0faae38a01b574dbfaa5ffe5c43"
+      "checksum": "0c0feaec35463c53444a59de14e6846c"
     },
     "data/sites/NOGP.rds": {
-      "checksum": "2831d4475dddfaa29b8e375709039d60"
+      "checksum": "521a1dfa31fcff709dc02e0bf1476303"
     },
     "data/sites/ONAQ.rds": {
-      "checksum": "a40d6af78c43b303477dc6d441981efc"
+      "checksum": "e7283dbb4bdec3f8c3ea5eb2c3ba4709"
     },
     "data/sites/ORNL.rds": {
-      "checksum": "a51a71dfeb04e2e108716d988d78692d"
+      "checksum": "67b85fcc3dc28720d0960d881776a2b2"
     },
     "data/sites/OSBS.rds": {
-      "checksum": "6f9ef685e5b2942a5d962384f01b9d91"
+      "checksum": "5c409b4e9159f3dc35a624a7feff8f6f"
     },
     "data/sites/PUUM.rds": {
-      "checksum": "8458c31366e79976c86df29de66f06ff"
+      "checksum": "ab2573f8fb41d03180c7e150862e889f"
     },
     "data/sites/RMNP.rds": {
-      "checksum": "cf3e4de426af3e71622fd9ef8d89fe40"
+      "checksum": "c87d064eafeeec3e97d7f87ba57e9451"
     },
     "data/sites/SCBI.rds": {
-      "checksum": "7929786b61d95934d67091fa1ab7afb4"
+      "checksum": "978ddc6083d09154078724f18d0d695c"
     },
     "data/sites/SERC.rds": {
-      "checksum": "4b2fd6c277662a15e815d976329d1460"
+      "checksum": "f82d8f677bbe25590ba79558c794a957"
     },
     "data/sites/SJER.rds": {
-      "checksum": "46a340f66ffa0489814ad6694c06a82f"
+      "checksum": "975f622fed36c1a67a50968d92a08222"
     },
     "data/sites/SOAP.rds": {
-      "checksum": "5418ca4d4752ddf240c437f9912f2d4b"
+      "checksum": "062e9efe039ac5c433b22246456f3f9d"
     },
     "data/sites/SRER.rds": {
-      "checksum": "97299d81380d8093b24aec047312c272"
+      "checksum": "e65eb797d9e0569519d02b1e80208887"
     },
     "data/sites/STEI.rds": {
-      "checksum": "cf7cf3f9f65271b9ca64467daeaba7b2"
+      "checksum": "85f6a7fd64187f6c8716fb1169c02351"
     },
     "data/sites/TALL.rds": {
-      "checksum": "3a7c76160d210145c19c2c05b1a1a315"
+      "checksum": "804734575e273933756033c09e8a4949"
     },
     "data/sites/TEAK.rds": {
-      "checksum": "ae16acf1eff4923997eda1393b7a7557"
+      "checksum": "e06cedc879e24443a2f468913236368b"
     },
     "data/sites/TREE.rds": {
-      "checksum": "7f52d26ff2dd9884d884b2a3b6010f74"
+      "checksum": "d1e1ef17c576b85cff70bce7725e1386"
     },
     "data/sites/UKFS.rds": {
-      "checksum": "b790641f215e009113ea21e12947df11"
+      "checksum": "6656da0653cfaeea6f6cd89e95bdffe0"
     },
     "data/sites/UNDE.rds": {
-      "checksum": "b75847d691e3795d01560643a09e0d94"
+      "checksum": "b77b30b1f2ed68616810065ded22dda9"
     },
     "data/sites/WOOD.rds": {
-      "checksum": "4047428919bc085160efd43e9b7c4a62"
+      "checksum": "46047a92e7f5b4c05949512b4eb2fbb0"
     },
     "data/sites/WREF.rds": {
-      "checksum": "54839d3602aa0f74abc67d4eb772f244"
+      "checksum": "b764cb91a8121c4db3c3dc69999c4790"
     },
     "data/sites/YELL.rds": {
-      "checksum": "f6e7ed96b49d12b274153371348e51e3"
+      "checksum": "f1724cfbdaea2c252f9dba1c9dd5c042"
     },
     "global.R": {
-      "checksum": "27ed13a28eecee72bfaf4af6c7c1637d"
+      "checksum": "fc6e960ca23b33b7d8a924338c804953"
+    },
+    "R/build_receipt.R": {
+      "checksum": "d4155698bc2389ce721b32af090c847c"
     },
     "R/map_picker.R": {
       "checksum": "c86379a3c534368a8e579bc0db03907f"
     },
+    "R/neon_issue_log.R": {
+      "checksum": "7777a7ba810c0de9e19e71f49b8368f7"
+    },
     "R/report_pdf.R": {
-      "checksum": "9a56b1011c3234b946db9458305fb79a"
+      "checksum": "3be33718165525e8847f5b1cb7afe0c4"
     },
     "R/site_metadata.R": {
       "checksum": "94b992239dd8e82983f9689704ac1dda"
@@ -3251,16 +3257,16 @@
       "checksum": "a3abe8ae63e9a2420e77c484516de396"
     },
     "R/veg_helpers.R": {
-      "checksum": "6fb1da609b6be99470278c198d40b1b4"
+      "checksum": "9e088a72b3b7ba379d4f6a0daa10e4e4"
     },
     "server.R": {
-      "checksum": "f0cb9676d58463d7af341f8bba9c5c4f"
+      "checksum": "a49ee5ae23cd0def101c201bde93cc49"
     },
     "ui.R": {
-      "checksum": "003382a4d13defce825432d2ab5afc30"
+      "checksum": "1ff241d47ea3b7d765fb00678f16ac07"
     },
     "www/app.js": {
-      "checksum": "d2f6eb714093f3c53a7095fad47dea41"
+      "checksum": "1c47bad48977a50265352fa905b83360"
     },
     "www/assets/vegetation-living-poster-840.webp": {
       "checksum": "bb9ba65433b1c0aee8a0563b3fbd4b57"
@@ -3272,13 +3278,13 @@
       "checksum": "54f13c4d0df1517c99f6cfbd790aeaf1"
     },
     "www/pincards.js": {
-      "checksum": "49ddc33a4369fd7cb28f519c03f06d73"
+      "checksum": "2e01dcbf3ffab9dad143154e0258e51d"
     },
     "www/styles.css": {
-      "checksum": "8ddbacfa1e1485c598150ecb85ec2c54"
+      "checksum": "9ab19bd59c29ee70aaeff0e1df59aff6"
     },
     "www/veg.css": {
-      "checksum": "547940cb7654d09aa2396863d9a67e1d"
+      "checksum": "b81f1e7e95305b2e2705d5462be8b95a"
     },
     "www/vendor/driver/driver.css": {
       "checksum": "9a7949052a7f506e86cc0fe3b6bf1733"

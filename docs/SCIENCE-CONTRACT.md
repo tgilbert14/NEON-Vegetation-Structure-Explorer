@@ -1,9 +1,170 @@
 # Vegetation Structure science contract
 
-Contract: `NEON-VST-DP1.10098.001-v2`  
+Contract: `NEON-VST-DP1.10098.001-v3`  
 Source target: NEON `DP1.10098.001`, official `RELEASE-2026`, provisional data excluded  
 App status: **PRODUCTION VERIFIED at PR #8 merge `d566b30` / Connect #59; science, reset, responsive, repeated-click, and split-log proof passed**<br>
 Driver status: **HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE**
+
+## Contract v3 (2026-10-21, suite audit 2026-10-18 item 14)
+
+v3 changes the rules below. Every other rule in this contract is unchanged.
+
+1. **Multi-bole secondary boles (Option A).** NEON.DOC.000987 Table 8 tags a
+   multi-bole tree as `1234` (largest bole), `1234a`, `1234b` and measures
+   additional boles down to 2.5 cm. Under v2 every live tree-form row under
+   10 cm DBH held its whole plot-event as `held_metric_invalid`, so GUAN held
+   46 tree plot-events against 10 sampled and STEI's basal area came from 5
+   plots. Under v3 a lettered tree-form row is valid at any positive DBH when
+   its parent tag (letter stripped) has a tree-form row with finite DBH ≥10 cm
+   in the same `plotID × eventID`, whatever that bole's status. Unlettered
+   sub-10 rows, lettered rows without a qualifying parent, and missing, zero
+   or negative DBH still hold. The rule is computed independently in the
+   builder, the runtime gate (`global.R`), `verify_bundle.R` and the
+   data-quality audit writer.
+   - **Option A (implemented):** every tree-channel estimand counts boles
+     ≥10 cm only: basal area, density and QMD over `totalSampledAreaTrees`
+     (metric label "bole-DBH basal area, boles 10 cm and over (breast
+     height)"), and growth, the mortality cohort and the status snapshot. A
+     lettered secondary bole under 10 cm no longer holds its plot-event but
+     stays out of those estimands; its rows remain in the bundle, the long
+     export and the size QC. Option A slightly underestimates whole-tree bole
+     area on multi-bole trees but stays comparable across sites, releases and
+     the Atlas's `veg_ba_ha`. Because more plot-events are supported, sites
+     with multi-bole trees gain plots and their estimates move (STEI tree
+     basal area 8.18 m²/ha on 5 plots becomes about 17.5 on 17).
+   - **Option B (not implemented, owner may overrule):** admit qualifying
+     2.5-10 cm secondary boles into basal area. It is the protocol-faithful
+     total and area-consistent, but it changes every forest basal area and the
+     Atlas bundle would have to be regenerated against it.
+2. **Size extremes screen.** `R/size_plausibility.R` (`size-screen-v1`) is one
+   shared, base-R screen used by the builder, `derived_parity.R` and the app.
+   A measure fails when (a) its height or diameter is more than 3x the median
+   of the same plant's other events (each event reduced to its largest stem;
+   heights compared on intact live records only, because broken, physically
+   damaged and standing-dead stems are legitimately shorter) and more than
+   5 m / 5 cm above it; (b) a tree-form height exceeds 2.5 m per cm of DBH on
+   DBH ≥10 cm (both measures fail, since the rule cannot tell which is wrong);
+   (c) a shrub or sapling exceeds 10 m on a basal diameter under 5 cm or none
+   (the height fails); or (d) any height exceeds 100 m (the height fails). A
+   failing row is kept in every count, basal-area, growth and mortality
+   summary and in the export (`size_plausible`, `size_screen_reason`); a
+   failing height is left out of the tallest extremes and a failing diameter
+   out of the biggest extremes (site index, hero, podium, compare, network
+   ranking, PDF), and the row raises a warn-level `size_spike` QC flag with
+   the reference median it was compared against, "verify, not wrong". No site
+   list is kept. The ratio floor is 10 cm, not cedar's proposed 2.5 cm: 71 of
+   78 live ratio flags under 10 cm were secondary boles that carry the whole
+   tree's height. On RELEASE-2026 the screen flags 297 of 527,000 rows (244
+   live).
+3. **Personnel fields.** `measuredBy` and `recordedBy` (NEON field-staff
+   identities, about 430 unique values) are dropped from `opportunity_source`
+   and from the app's zip export. The app never used them.
+4. **Mortality copy.** When annual mortality is unavailable the banner states
+   the plot count and the real reason: how many plots have one usable census
+   and how many are held for other reasons ("mostly" only for a true
+   majority). Under item 7 it also says how many pre-March-2020 plot-censuses
+   with records feed change under NEON's legacy-schema assumption (changelog
+   16306) and how many without records stay held.
+5. **Statistics (hk, 2026-10-21).** Mortality, growth, size classes, QMD and
+   the compare highlight follow the rules in "Snapshot and sampled-plot
+   estimator" and "Change and status" below: explicit dead states, time at risk
+   to the first all-dead census, a 5-plot and 30-plant gate with a
+   Korn-Graubard interval on every printed rate, a 20-plant and 3-plot gate for
+   growth medians, equal-plot size classes that sum to the headline density,
+   QMD from the plot means, and a Welch test for the compare highlight.
+6. **QC evidence and NEON issue log.** QC rows carry the dates and values that
+   triggered them, a clean QC message says which checks could run, and the
+   curated NEON issue-log entries (`R/neon_issue_log.R`) appear beside the
+   estimates they qualify and in the plot export (`issue_ids`).
+
+### Contract v3 additions (cedar's rulings, 2026-10-26)
+
+7. **Legacy schema, change history only.** An event on or before 2020-03-10
+   (the end of NEON changelog 16306's range, inclusive) whose
+   `samplingImpractical` is blank or OK, whose published `dataCollected` is
+   blank or `allGrowthForms` (a reviewed partial event keeps today's path), and
+   where at least one of the two is blank, keeps the
+   area, presence-record, identity and metric checks in that order. If it has
+   records and passes them it becomes `supported_legacy_schema`, reason
+   "legacy schema before 2020-03-10: sampling opportunity assumed (NEON
+   changelog 16306)". An event with no records keeps today's
+   `held_opportunity_unknown` state and reason: no legacy absences. The state
+   is not in the supported set. Only `.supported_history(allow_legacy = TRUE)`
+   admits it, in growth, mortality, plant careers and the QC checks; the
+   snapshot, stand, size classes, species, exports, `status_summary`, the
+   indexes and the default channel never do. The audit counts it in
+   `n_supported_legacy_schema` (audit schema v3).
+8. **Reviewed partial events (S1).** `scripts/curation/vst_partial_event_completeness.csv`
+   holds one reviewed row for each of the 57 `dataCollected = partial` events,
+   with a per-channel verdict read from the event remark (rules
+   `VST-PARTIAL-01` to `-04` in `scripts/curation/vst_curation.R`): 50
+   JERC/OSBS events that skipped only ferns, palms, cacti or yucca are complete
+   for both woody channels; YELL_045/046/047 (snow) for trees only; UNDE_050
+   for shrubs only; HEAL_045, TREE_043 and WREF_010 for neither. A complete
+   channel reads the event as all-growth-forms and its reason cites the rule.
+   Plots carry `partial_event_rule_id`, `tree_channel_complete` and
+   `shrub_channel_complete`. Each row pins the source uid and a SHA-256 of the
+   remark; the build stops on a missing, stale or orphan row.
+9. **Disturbance labels (S2).** `scripts/curation/vst_event_disturbance.csv`
+   labels 40 of the 47 events whose remark matches the disturbance regex; the
+   other 7 are reviewed exclusions (`none`: six SOAP access remarks and
+   JERC_048 2020, "not yet burned"). Classes: `fire_wild`, `burn_prescribed`,
+   `fire_unspecified` (a fire with no word on whether it was prescribed, a
+   lead addition to cedar's six), `wind_hurricane`, `flood`,
+   `harvest_logging`, `brush_mowing`. Plots carry `disturbance_classes`,
+   `disturbance_curation_id`, `n_status_lost_burned` and `n_status_removed`.
+   A label never changes support; an unreviewed regex hit only warns.
+10. **Row exclusions (S4).** `superseded_in_event`: within plotID x eventID x
+    individualID, a row dated before the individual's latest date in the event
+    (per individual, because tempStemIDs are reassigned each visit), except a
+    small-tree, sapling or shrub row whose tempStemID is absent from the latest
+    date and is at most 3 days earlier (one measurement spread over days).
+    `duplicate_of_uid`: tree-form copies of one individual, event and date that
+    repeat growthForm, plantStatus, stemDiameter and height (missing equals
+    missing) point at the copy first in uid byte order. The rows stay in the
+    bundle and exports and in every support count; the snapshot and the change
+    history skip them.
+11. **Plant identity (C1).** `plant_id` is the parent tag of a lettered
+    individual that has a tree-form row and whose parent tag exists in the
+    same plot; otherwise the individualID. Plant counts (`n_individuals`,
+    `n_trees`, taxon individuals, live plants), status and mortality use
+    plotID + `plant_id`; growth stays per bole (`plant_key`). For mortality a
+    plant is live at an event if any of its rows is live and dead only if every
+    observed row is an explicit dead state (unchanged from the hk rule; a dead
+    row beside a "No longer qualifies" row is censored). Species tables count a
+    plant under every taxon its stems carry, as the taxa index does.
+12. **Measuring point (C2).** For each consecutive pair of a bole's events the
+    point moved if the later row's `changedMeasurementLocation` is present and
+    not `noChange`; with no code, if the measurement height changed by more
+    than 5 cm. The shrub channel uses `basalStemDiameterMsrmntHeight` the same
+    way. Moved pairs stay out of growth.
+13. **Default channel (C4).** Tree DBH is the presentation default whenever
+    trees are recorded in at least 5 latest supported plots and in at least
+    half of the supported tree plots; otherwise the earlier rule applies. The
+    builder and the parity mirror apply the same rule; channels stay separate.
+14. **Held plots and cacti (C5, C6).** The density banner says how many of the
+    site's plots feed the number and why the rest are held (a visit with two
+    plot-level sampling records is named as such, not as a stem conflict), for
+    example
+    "Basal cover is from 17 of SRER's 38 plots; the other 21 are held because
+    NEON published two different records for one stem, at 47 stems. Held
+    plots are not zeros." Sites whose plots record cacti, yuccas or ocotillos
+    at their latest published visit get one line with those plot counts and
+    the note that NEON measures them in a table this app does not load.
+15. **Status-only rows (C7).** Rows that carry only a status have no
+    growthForm (about 90% of `Downed` rows), so a channel filter dropped those
+    deaths. Change history and the snapshot fill a blank growthForm from the
+    same bole's most recent earlier row; never from a later one.
+
+**Deferred, with the unblocker.** S3 (a woody "below 10% cover" state): no
+woody field records it, `targetTaxaPresent = N` events are already held, and
+the app never reads that field; it waits for NEON to publish a woody "criteria
+not met" option or the SVY cover-survey records (NEON.DOC.005023). S5 (a
+`small_tree_dbh` channel: form "small tree", `stemDiameter` > 0, area
+`totalSampledAreaShrubSapling`, the shrub channel's joint presence rule,
+records from `small_tree_records`): the spec is ready and waits for the owner
+to approve a third channel in the picker, the search grid (126 rows) and the
+Atlas.
 
 This is the exact Pass 4 implementation contract. Candidate artifact
 `vegetation-release-candidate-a8ccb56e95f643ba9343ca13d176782ebc050017-29715249829`
@@ -82,7 +243,8 @@ fresh-worker-log receipts passed.
   `held_presence_record_conflict`; only absence with no records can contribute
   an observed zero.
 - `held_metric_invalid` fails the entire plot event closed when even one eligible
-  live tree row lacks valid DBH (finite and ≥10 cm) or one eligible live
+  live tree row lacks valid DBH (finite and ≥10 cm, or, from v3, a finite
+  positive DBH on a lettered secondary bole whose parent bole is ≥10 cm) or one eligible live
   shrub/sapling row lacks valid positive basal stem diameter. A protocol or
   presence-record conflict takes precedence and remains visible when both occur.
 - Published `dataQF` and related qualifier fields are preserved and quantified
@@ -126,8 +288,18 @@ or are missing. From the matching snapshot it:
    valid areas, including 40 m² nested areas;
 5. treats explicit sampled absence as zero and held opportunities as `NA`;
 6. reports the equal-plot mean and `sd(plot values) / sqrt(n plots)`;
-7. reports stem-weighted QMD as
-   `sqrt(sum(diameter_cm²) / number_of_live_stem_rows)`.
+7. reports QMD from the same equal-plot means as basal area and density,
+   `sqrt(40000 × BA / (π × density))` (Curtis & Marshall 2000), so the three
+   headline numbers agree (from v3; v2 pooled `sqrt(sum(d²) / stems)`);
+8. reports size classes as the equal-plot mean of each plot's class count over
+   that plot's own area (zero-filled), so the bars sum to the headline density;
+   the plot-to-plot SE is shown in the hover only.
+
+The compare tab highlights a difference only for basal area and density, only
+within one physical channel, only when both stands have at least 6 supported
+plots, and only when a Welch t test on the per-plot values (95%, plots treated
+as independent) separates them. QMD, record sizes and plot counts are never
+highlighted.
 
 The estimator describes supported sampled plots. It is not a wall-to-wall site
 inventory and is not annual productivity, biomass, or carbon.
@@ -144,7 +316,10 @@ ecological-dominance estimates.
 Growth uses permanent `plotID × individualID` plants with at least two ordered
 events. Tree events use equivalent diameter `sqrt(sum(d²))`; annual change is
 the first-to-last difference divided by elapsed days/365.25. A changed point of
-measurement is flagged and excluded from displayed growth summaries. Multi-stem
+measurement is flagged and excluded from displayed growth summaries, as are
+pairs remeasured less than 0.9 years apart (kept for QC). A growth median is
+printed only from at least 20 comparable plants in at least 3 plots; otherwise
+the app says how many plants and plots it has. Multi-stem
 basal trajectories are withheld because `tempStemID` is not stable enough across
 years to align shrub/sapling stems. Dead-to-live “resurrections” are held from
 growth and flagged for review. Diameter decreases remain preserved and flagged;
@@ -156,12 +331,17 @@ alias accepted only for compatibility). It is not inferred from diameter or
 another measurement-height field.
 
 Status is reduced once per composite plant and event: any live stem means Live;
-all observed stems dead/downed means Dead; lost, removed, and unknown states are
-not deaths. The compound mortality cohort starts live, requires at least two
-known events and `n ≥ 10`, censors after the first censored event, and excludes
-resurrection histories. It reports
-`100 × [1 − (1 − deaths/n)^(1/mean_years)]`; its interval is a delete-one-plot
-jackknife and is withheld with fewer than three usable plot clusters.
+all observed stems in one of NEON's three dead states ("Standing dead", "Dead,
+broken bole", "Downed") means Dead; every "Lost, ..." state (including "Lost,
+presumed dead"), "Removed" and "No longer qualifies" is a censored fate, never
+a death. The compound mortality cohort starts live, requires at least two known
+events, censors after the first censored event, ends time at risk at the first
+all-dead event, and excludes resurrection histories. It reports
+`100 × [1 − (1 − deaths/n)^(1/mean_years)]` only with at least 5 plot clusters
+and 30 trackable plants (most cohorts are NEON's 5 annual tower plots), and
+every printed rate carries a 95% Korn-Graubard cluster beta interval (Korn &
+Graubard 1998) with plots as clusters. A cohort with no deaths reports its
+upper bound; a withheld rate says which gate it missed.
 
 A single census can support a current sampled-plot snapshot but cannot support a
 growth or mortality estimand.

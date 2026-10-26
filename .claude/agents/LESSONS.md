@@ -40,3 +40,16 @@
 - [2026-10-21] neonize · confirmed · Screen size spikes on live heights only: snapped and standing-dead
   boles read 1-2 m after a 15 m live record (dozens of false spikes at HARV), and lettered secondary
   boles under 10 cm legitimately carry the whole tree's height, so the height/DBH rule starts at 10 cm.
+- [2026-10-21] neonize · confirmed · A support-rule change can be smoke-tested without the raw fetch by
+  re-deriving plot support and the contract payload from a committed family's preserved rows with the
+  branch's builder functions; only the receipt ledgers then differ, and the official candidate stays the
+  authority. Lifting a hold also widens the app-side estimands, so check growth and mortality cohorts too.
+- [2026-10-21] hk · confirmed · VST mortality cohorts are mostly NEON's 5 annual tower plots; gate a rate at
+  K >= 5 plot clusters and n0 >= 30, put a Korn-Graubard cluster beta interval on every printed rate (a plot
+  jackknife printed 0.00 lower bounds beside observed deaths), end time at risk at the first dead census, and
+  count only NEON's three dead states as deaths ("Lost, presumed dead" is censored).
+- [2026-10-26] cedar · gap · status-only DP1.10098 rows carry no growthForm; a growthForm channel filter drops deaths.
+  Carry the last form forward.
+- [2026-10-26] lead · confirmed · reviewed curation (partial events, disturbance remarks) belongs in a committed CSV
+  that pins the source uid and a SHA-256 of the remark, so a NEON re-publication stops the build instead of
+  silently changing support.

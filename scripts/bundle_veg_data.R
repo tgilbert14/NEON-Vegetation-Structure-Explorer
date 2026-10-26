@@ -9,14 +9,39 @@
 
 suppressWarnings(suppressMessages(library(dplyr)))
 source("scripts/vegetation_inventory.R")
+source("R/size_plausibility.R")
+source("scripts/curation/vst_curation.R")
 
-VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
+VST_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
 VST_PRODUCT <- "DP1.10098.001"
 VST_RELEASE <- Sys.getenv("VST_NEON_RELEASE", unset = "RELEASE-2026")
 VST_SUPPORTED_STATUS <- c("sampled_with_records", "sampled_absence")
+# Pre-2020-03-10 events whose samplingImpractical / dataCollected fields are
+# blank (NEON changelog 16306 added them). With records and every other check
+# passing they are admitted to change history only; never to the latest
+# supported snapshot, the indexes or the default channel.
+VST_LEGACY_STATUS <- "supported_legacy_schema"
+VST_LEGACY_SCHEMA_END <- as.Date("2020-03-10")
+VST_LEGACY_REASON <-
+  "legacy schema before 2020-03-10: sampling opportunity assumed (NEON changelog 16306)"
+VST_HELD_STATUS <- c(
+  "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
+  "held_opportunity_unknown", "held_presence_record_conflict",
+  "held_metric_invalid", "held_identity_conflict",
+  "held_opportunity_source_missing", VST_LEGACY_STATUS
+)
+VST_PERSONNEL_FIELDS <- c("measuredBy", "recordedBy")
 VST_TREE_FORMS <- c("single bole tree", "multi-bole tree")
 VST_SHRUB_FORMS <- c("single shrub", "small shrub", "sapling")
 VST_SMALL_TREE_FORMS <- "small tree"
+# S4 row exclusions (snapshot and history; rows stay in the bundle).
+VST_SPLIT_VISIT_FORMS <- c("small tree", "sapling", "single shrub", "small shrub")
+VST_SPLIT_VISIT_DAYS <- 3
+VST_DUPLICATE_FIELDS <- c("growthForm", "plantStatus", "stemDiameter", "height")
+# C4 default channel: trees recorded in at least 5 plots and in at least half
+# of the supported tree plots.
+VST_PRIMARY_TREE_MIN_PLOTS <- 5L
+VST_PRIMARY_TREE_MIN_SHARE <- 0.5
 
 vst_field <- function(data, candidates, default = NA, required = FALSE) {
   found <- intersect(candidates, names(data))
@@ -246,7 +271,11 @@ vst_assert_measurement_derivations <- function(table) {
       identical(table$taxon_label, expected_label),
     taxon_resolution = is.character(table$taxon_resolution) && identical(
       table$taxon_resolution, expected_resolution
-    )
+    ),
+    plant_id = is.character(table$plant_id) && !anyNA(table$plant_id),
+    superseded_in_event = is.logical(table$superseded_in_event) &&
+      !anyNA(table$superseded_in_event),
+    duplicate_of_uid = is.character(table$duplicate_of_uid)
   )
   if (!all(unlist(checks, use.names = FALSE))) {
     stop(
@@ -256,6 +285,68 @@ vst_assert_measurement_derivations <- function(table) {
     )
   }
   invisible(TRUE)
+}
+
+# C1 plant identity. NEON tags each additional bole of a multi-bole tree with
+# the parent tag plus one letter (1234a, 1234b; NEON.DOC.000987 Table 8).
+# plant_id is that parent tag for a lettered individual with at least one
+# tree-form row whose parent tag exists in the same plot; otherwise it is the
+# individualID. Growth stays per bole (plant_key); plant counts, status and
+# mortality use plotID + plant_id.
+vst_plant_id <- function(table) {
+  id <- vst_chr(table$individualID)
+  if (!length(id)) return(character())
+  plot <- vst_chr(table$plotID)
+  plant <- paste(plot, id, sep = "\r")
+  tree_form <- tolower(trimws(vst_chr(table$growthForm))) %in% tolower(VST_TREE_FORMS)
+  parent <- sub("[A-Za-z]$", "", id)
+  promote <- !is.na(id) & grepl("[A-Za-z]$", id) &
+    plant %in% unique(plant[tree_form]) &
+    paste(plot, parent, sep = "\r") %in% unique(plant)
+  ifelse(promote, parent, id)
+}
+
+# S4 (a). Within plotID x eventID x individualID, a row dated before that
+# individual's latest date in the event is superseded (per individual, not per
+# stem: tempStemIDs are reassigned each visit). Exception: a small-tree,
+# sapling or shrub row whose tempStemID is absent from the latest date and is
+# dated at most 3 days earlier, a measurement that spanned more than one day.
+vst_superseded_in_event <- function(table) {
+  if (!nrow(table)) return(logical())
+  individual <- vst_key(table, c("plotID", "eventID", "individualID"))
+  day <- as.numeric(vst_date(table$date))
+  dated <- is.finite(day)
+  latest <- rep(NA_real_, length(day))
+  if (any(dated)) {
+    by_individual <- tapply(day[dated], individual[dated], max)
+    latest <- unname(as.numeric(by_individual[individual]))
+  }
+  earlier <- dated & is.finite(latest) & day < latest
+  stem <- paste(individual, vst_chr(table$tempStemID), sep = "\r")
+  latest_stems <- unique(stem[dated & is.finite(latest) & day == latest])
+  split_visit <- tolower(trimws(vst_chr(table$growthForm))) %in% VST_SPLIT_VISIT_FORMS &
+    !stem %in% latest_stems & (latest - day) <= VST_SPLIT_VISIT_DAYS
+  earlier & !split_visit
+}
+
+# S4 (b). Tree-form rows of one individual, event and date that repeat the
+# same growthForm, plantStatus, DBH and height (missing equals missing) count
+# once. The copy first in source_uid byte order is kept; every other copy
+# carries the kept uid in duplicate_of_uid (NA otherwise).
+vst_duplicate_of_uid <- function(table) {
+  out <- rep(NA_character_, nrow(table))
+  tree_form <- tolower(trimws(vst_chr(table$growthForm))) %in% tolower(VST_TREE_FORMS)
+  if (!any(tree_form)) return(out)
+  rows <- which(tree_form)
+  part <- table[rows, , drop = FALSE]
+  key <- vst_key(part, c("plotID", "eventID", "individualID", "date", VST_DUPLICATE_FIELDS))
+  uid <- vst_chr(part$source_uid)
+  ordered <- order(vst_utf8_byte_key(key), vst_utf8_byte_key(uid), method = "radix")
+  first <- !duplicated(key[ordered])
+  kept <- stats::setNames(uid[ordered][first], key[ordered][first])[key]
+  copy <- uid != kept
+  out[rows[copy]] <- unname(kept[copy])
+  out
 }
 
 vst_measurement_table <- function(apparent, identity) {
@@ -321,6 +412,9 @@ vst_measurement_table <- function(apparent, identity) {
   table$permanent <- grepl("^NEON", table$individualID)
   table$plant_key <- paste(table$plotID, table$individualID, sep = "\r")
   table$event_key <- paste(table$plotID, table$eventID, sep = "\r")
+  table$plant_id <- vst_plant_id(table)
+  table$superseded_in_event <- vst_superseded_in_event(table)
+  table$duplicate_of_uid <- vst_duplicate_of_uid(table)
 
   # Preserve any additional published QC/qualifier/status columns verbatim.
   qc_names <- grep("(QF$|Qualifier$|Status$|Condition$|quality|flag)",
@@ -486,8 +580,30 @@ vst_count_records <- function(trees, plots, forms) {
   result
 }
 
+# Contract v3 multi-bole rule (NEON.DOC.000987 Table 8): a multi-bole tree needs
+# one bole >= 10 cm DBH; additional boles are tagged 1234a, 1234b ... and are
+# measured down to 2.5 cm. A lettered tree-form row is therefore a valid
+# secondary bole when its parent tag (letter stripped) has a tree-form row in
+# the same plotID x eventID with a finite DBH >= 10 cm, whatever that bole's
+# status. Such a row never holds its plot-event; under Option A it still stays
+# out of basal area, density and QMD, which count boles 10 cm and over only.
+# Unlettered sub-10 rows, lettered rows with no qualifying parent, and missing,
+# zero or negative DBH keep the v2 rule and hold the plot-event.
+vst_tree_secondary_bole_ok <- function(trees) {
+  if (!nrow(trees)) return(logical())
+  form <- tolower(trimws(vst_chr(trees$growthForm))) %in% tolower(VST_TREE_FORMS)
+  id <- vst_chr(trees$individualID)
+  lettered <- !is.na(id) & grepl("[A-Za-z]$", id)
+  parent <- sub("[A-Za-z]$", "", id)
+  dbh <- vst_num(trees$stemDiameter)
+  plot_event <- paste(vst_chr(trees$plotID), vst_chr(trees$eventID), sep = "\r")
+  qualifying <- form & is.finite(dbh) & dbh >= 10
+  parents <- unique(paste(plot_event, id, sep = "\r")[qualifying])
+  form & lettered & paste(plot_event, parent, sep = "\r") %in% parents
+}
+
 vst_count_invalid_metric_records <- function(trees, plots, forms, metric,
-                                             minimum) {
+                                             minimum, secondary_ok = NULL) {
   result <- integer(nrow(plots))
   if (!nrow(trees) || !length(forms)) return(result)
   if (!metric %in% names(trees)) {
@@ -498,6 +614,9 @@ vst_count_invalid_metric_records <- function(trees, plots, forms, metric,
   live_row <- trees$live %in% TRUE
   value <- vst_num(trees[[metric]])
   valid_metric <- is.finite(value) & value > 0 & value >= minimum
+  if (!is.null(secondary_ok)) {
+    valid_metric <- valid_metric | (secondary_ok %in% TRUE & is.finite(value) & value > 0)
+  }
   keep <- channel_row & live_row & !valid_metric
   if (!any(keep)) return(result)
   counts <- as.data.frame(
@@ -529,13 +648,43 @@ vst_count_identity_conflict_keys <- function(trees, plots, forms) {
   result
 }
 
+# Per-channel note for an event the partial-event curation reviewed (S1).
+vst_curation_note <- function(rule_id, complete) {
+  ifelse(is.na(rule_id), NA_character_, sprintf(
+    "dataCollected=partial reviewed as %s for this channel (%s)",
+    ifelse(complete %in% TRUE, "complete", "incomplete"), rule_id
+  ))
+}
+
 vst_support_status <- function(area, sampling_impractical, data_collected,
                                presence, records, invalid_metric,
                                identity_conflicts = integer(length(area)),
                                opportunity_conflict = logical(length(area)),
-                               opportunity_source_missing = logical(length(area))) {
+                               opportunity_source_missing = logical(length(area)),
+                               event_date = rep(as.Date(NA), length(area)),
+                               curation_note = rep(NA_character_, length(area))) {
   sampling <- gsub("[^a-z]", "", tolower(trimws(vst_chr(sampling_impractical))))
   collected <- gsub("[^a-z]", "", tolower(trimws(vst_chr(data_collected))))
+  sampling[is.na(sampling)] <- ""
+  collected[is.na(collected)] <- ""
+  day <- as.numeric(vst_date(event_date))
+  # Legacy schema (contract v3, cedar A): on or before 2020-03-10, with
+  # samplingImpractical blank or OK, dataCollected blank or allGrowthForms, and
+  # at least one of the two blank.
+  legacy <- is.finite(day) & day <= as.numeric(VST_LEGACY_SCHEMA_END) &
+    sampling %in% c("", "ok") & collected %in% c("", "allgrowthforms") &
+    (sampling == "" | collected == "") &
+    # A reviewed partial event keeps today's path: its published value is
+    # "partial", whatever the curation reads for this channel.
+    is.na(curation_note)
+  identity_reason <- function(n) sprintf(
+    "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
+    n, if (n == 1L) "" else "s", if (n == 1L) "s" else ""
+  )
+  metric_reason <- function(n) sprintf(
+    "%d live channel record%s lack%s a finite positive threshold-compatible diameter",
+    n, if (n == 1L) "" else "s", if (n == 1L) "s" else ""
+  )
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
     if (isTRUE(opportunity_source_missing[[i]])) {
@@ -547,7 +696,24 @@ vst_support_status <- function(area, sampling_impractical, data_collected,
     } else if (isTRUE(opportunity_conflict[[i]])) {
       status[[i]] <- "held_identity_conflict"
       reason[[i]] <- "multiple published vst_perplotperyear rows share this plot-event key"
-    } else if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
+    } else if (legacy[[i]] && records[[i]] > 0L) {
+      if (!is.finite(area[[i]]) || area[[i]] <= 0) {
+        status[[i]] <- "held_missing_area"
+        reason[[i]] <- "event-specific total sampled area is missing or non-positive"
+      } else if (identical(presence[[i]], "absent")) {
+        status[[i]] <- "held_presence_record_conflict"
+        reason[[i]] <- "presence says absent but measurement records exist"
+      } else if (is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
+        status[[i]] <- "held_identity_conflict"
+        reason[[i]] <- identity_reason(identity_conflicts[[i]])
+      } else if (invalid_metric[[i]] > 0L) {
+        status[[i]] <- "held_metric_invalid"
+        reason[[i]] <- metric_reason(invalid_metric[[i]])
+      } else {
+        status[[i]] <- VST_LEGACY_STATUS
+        reason[[i]] <- VST_LEGACY_REASON
+      }
+    } else if (!nzchar(sampling[[i]])) {
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "samplingImpractical is missing"
     } else if (!identical(sampling[[i]], "ok")) {
@@ -568,18 +734,10 @@ vst_support_status <- function(area, sampling_impractical, data_collected,
       reason[[i]] <- "presence says absent but measurement records exist"
     } else if (is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
       status[[i]] <- "held_identity_conflict"
-      reason[[i]] <- sprintf(
-        "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
-        identity_conflicts[[i]], if (identity_conflicts[[i]] == 1L) "" else "s",
-        if (identity_conflicts[[i]] == 1L) "s" else ""
-      )
+      reason[[i]] <- identity_reason(identity_conflicts[[i]])
     } else if (invalid_metric[[i]] > 0L) {
       status[[i]] <- "held_metric_invalid"
-      reason[[i]] <- sprintf(
-        "%d live channel record%s lack%s a finite positive threshold-compatible diameter",
-        invalid_metric[[i]], if (invalid_metric[[i]] == 1L) "" else "s",
-        if (invalid_metric[[i]] == 1L) "s" else ""
-      )
+      reason[[i]] <- metric_reason(invalid_metric[[i]])
     } else if (records[[i]] > 0L) {
       status[[i]] <- "sampled_with_records"
       reason[[i]] <- "supported all-growth-forms event with measurement records"
@@ -593,11 +751,25 @@ vst_support_status <- function(area, sampling_impractical, data_collected,
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "no records and presence does not establish sampled absence"
     }
+    if (!is.na(curation_note[[i]])) reason[[i]] <- paste0(reason[[i]], "; ", curation_note[[i]])
   }
   data.frame(status = status, reason = reason, stringsAsFactors = FALSE)
 }
 
-vst_opportunity_table <- function(perplot, trees) {
+# Rows per plot-event whose plantStatus is exactly `status` (case-insensitive).
+vst_count_status <- function(trees, plots, status) {
+  result <- integer(nrow(plots))
+  if (!nrow(trees)) return(result)
+  keep <- tolower(trimws(vst_chr(trees$plantStatus))) %in% status
+  if (!any(keep)) return(result)
+  counts <- table(vst_key(trees[keep, , drop = FALSE], c("plotID", "eventID")))
+  matched <- match(vst_key(plots, c("plotID", "eventID")), names(counts))
+  result[!is.na(matched)] <- as.integer(counts[matched[!is.na(matched)]])
+  result
+}
+
+vst_opportunity_table <- function(perplot, trees, site = NA_character_,
+                                  curation = vst_empty_curation()) {
   perplot <- as.data.frame(perplot, stringsAsFactors = FALSE)
   required <- c(
     "eventID", "plotID", "opportunity_source_uid",
@@ -687,7 +859,8 @@ vst_opportunity_table <- function(perplot, trees) {
   plots$shrub_records <- vst_count_records(trees, plots, VST_SHRUB_FORMS)
   plots$small_tree_records <- vst_count_records(trees, plots, VST_SMALL_TREE_FORMS)
   plots$tree_invalid_metric_records <- vst_count_invalid_metric_records(
-    trees, plots, VST_TREE_FORMS, "stemDiameter", 10
+    trees, plots, VST_TREE_FORMS, "stemDiameter", 10,
+    secondary_ok = vst_tree_secondary_bole_ok(trees)
   )
   plots$shrub_invalid_metric_records <- vst_count_invalid_metric_records(
     trees, plots, VST_SHRUB_FORMS, "basalStemDiameter", 0
@@ -699,17 +872,26 @@ vst_opportunity_table <- function(perplot, trees) {
     trees, plots, VST_SHRUB_FORMS
   )
 
+  # S1: a reviewed partial event reads as all-growth-forms for each woody
+  # channel the remark shows was measured in full; the other channel stays held.
+  partial <- vst_match_partial_curation(perplot, site, curation$partial)
+  tree_collected <- ifelse(partial$tree_channel_complete, "allGrowthForms",
+                           plots$dataCollected)
+  shrub_collected <- ifelse(partial$shrub_channel_complete, "allGrowthForms",
+                            plots$dataCollected)
   tree_support <- vst_support_status(
-    plots$area_trees, plots$samplingImpractical, plots$dataCollected,
+    plots$area_trees, plots$samplingImpractical, tree_collected,
     plots$treePresence, plots$tree_records, plots$tree_invalid_metric_records,
     plots$tree_identity_conflict_keys, plots$opportunity_key_conflict,
-    plots$opportunity_source_missing
+    plots$opportunity_source_missing, plots$date,
+    vst_curation_note(partial$partial_event_rule_id, partial$tree_channel_complete)
   )
   shrub_support <- vst_support_status(
-    plots$area_shrub, plots$samplingImpractical, plots$dataCollected,
+    plots$area_shrub, plots$samplingImpractical, shrub_collected,
     plots$shrubSaplingPresence, plots$shrub_records,
     plots$shrub_invalid_metric_records, plots$shrub_identity_conflict_keys,
-    plots$opportunity_key_conflict, plots$opportunity_source_missing
+    plots$opportunity_key_conflict, plots$opportunity_source_missing, plots$date,
+    vst_curation_note(partial$partial_event_rule_id, partial$shrub_channel_complete)
   )
   plots$tree_support <- tree_support$status
   plots$tree_support_reason <- tree_support$reason
@@ -718,6 +900,15 @@ vst_opportunity_table <- function(perplot, trees) {
   plots$tree_supported <- plots$tree_support %in% VST_SUPPORTED_STATUS
   plots$shrub_supported <- plots$shrub_support %in% VST_SUPPORTED_STATUS
   plots$event_key <- paste(plots$plotID, plots$eventID, sep = "\r")
+  plots$partial_event_rule_id <- partial$partial_event_rule_id
+  plots$tree_channel_complete <- partial$tree_channel_complete
+  plots$shrub_channel_complete <- partial$shrub_channel_complete
+  # S2: a reviewed disturbance label; it never changes support.
+  disturbance <- vst_match_disturbance_curation(perplot, site, curation$disturbance)
+  plots$disturbance_classes <- disturbance$disturbance_classes
+  plots$disturbance_curation_id <- disturbance$disturbance_curation_id
+  plots$n_status_lost_burned <- vst_count_status(trees, plots, "lost, burned")
+  plots$n_status_removed <- vst_count_status(trees, plots, "removed")
 
   # Keep every additional opportunity/status/area field with its published name.
   opportunity_names <- grep(
@@ -749,7 +940,7 @@ vst_channel_spec <- function(channel) {
     return(list(
       channel = channel, forms = VST_TREE_FORMS, diameter = "stemDiameter",
       area = "area_trees", support = "tree_support", minimum = 10,
-      metric = "bole-DBH basal area (breast height)"
+      metric = "bole-DBH basal area, boles 10 cm and over (breast height)"
     ))
   }
   list(
@@ -762,15 +953,25 @@ vst_channel_spec <- function(channel) {
 
 vst_channel_snapshot <- function(trees, plots, channel) {
   spec <- vst_channel_spec(channel)
+  # Shared size screen (R/size_plausibility.R) over the plant's full history,
+  # per measure: a failing height leaves only the tallest extreme, a failing
+  # diameter only the biggest. Every other summary keeps every row.
+  if (nrow(trees)) {
+    screen <- vst_size_screen(trees)
+    trees$.size_height_ok <- screen$size_height_ok
+    trees$.size_diameter_ok <- screen$size_diameter_ok
+  }
   opportunities <- vst_latest_supported_events(plots, spec$channel)
   if (!nrow(opportunities)) {
     return(list(spec = spec, opportunities = opportunities,
                 records = trees[0, , drop = FALSE]))
   }
   event_keys <- vst_key(opportunities, c("plotID", "eventID"))
+  # S4: superseded and duplicate rows stay in the bundle but never count.
   records <- trees[
     vst_key(trees, c("plotID", "eventID")) %in% event_keys &
-      tolower(trimws(trees$growthForm)) %in% tolower(spec$forms), , drop = FALSE
+      tolower(trimws(trees$growthForm)) %in% tolower(spec$forms) &
+      !(trees$superseded_in_event %in% TRUE) & is.na(trees$duplicate_of_uid), , drop = FALSE
   ]
   records$.diameter_cm <- vst_num(records[[spec$diameter]])
   records <- records[
@@ -800,13 +1001,15 @@ vst_taxa_index <- function(snapshot, site) {
   by_plot <- records %>%
     dplyr::group_by(.data$taxon_label, .data$plotID) %>%
     dplyr::summarise(
+      # Row-wise first: a later summarise expression would read the modal
+      # scientificName instead of each row's (neon-suite lint L13).
+      is_species = any(.data$is_species %in% TRUE & vst_nonblank(.data$scientificName)),
       scientificName = vst_mode_chr(.data$scientificName),
       taxonID = vst_mode_chr(.data$taxonID),
       taxonRank = vst_mode_chr(.data$taxonRank),
-      is_species = any(.data$is_species %in% TRUE & vst_nonblank(.data$scientificName)),
       family = vst_mode_chr(.data$family),
       stems = dplyr::n(),
-      individuals = dplyr::n_distinct(.data$plant_key),
+      individuals = dplyr::n_distinct(paste(.data$plotID, .data$plant_id, sep = "\r")),
       basal_m2 = sum(.data$.basal_cross_section_m2, na.rm = TRUE),
       area_m2 = dplyr::first(.data$.sampled_area_m2),
       .groups = "drop"
@@ -903,7 +1106,8 @@ vst_channel_summary <- function(snapshot) {
     n_supported_plots = dplyr::n_distinct(opportunities$plotID),
     n_record_plots = dplyr::n_distinct(records$plotID),
     n_stems = nrow(records),
-    n_individuals = dplyr::n_distinct(records$plant_key),
+    # C1: plants, not boles: a lettered secondary bole counts with its parent.
+    n_individuals = dplyr::n_distinct(paste(records$plotID, records$plant_id, sep = "\r")),
     n_species = dplyr::n_distinct(records$scientificName[
       records$is_species %in% TRUE & vst_nonblank(records$scientificName)
     ]),
@@ -911,14 +1115,18 @@ vst_channel_summary <- function(snapshot) {
     n_sampled_absence = sum(per_plot$.support_status == "sampled_absence"),
     ba_ha = mean(per_plot$ba_ha),
     density_ha = mean(per_plot$density_ha),
-    qmd_cm = if (total_stems > 0) sqrt(sum(per_plot$sum_d2) / total_stems) else NA_real_,
+    # Quadratic mean diameter from the equal-plot means of basal area and
+    # density (Curtis & Marshall 2000), the same rule the app uses.
+    qmd_cm = if (total_stems > 0 && mean(per_plot$density_ha) > 0)
+      sqrt(40000 * mean(per_plot$ba_ha) / (pi * mean(per_plot$density_ha))) else NA_real_,
     metric_kind = spec$metric,
-    tallest_m = vst_safe_max(records$height),
-    biggest_diam_cm = vst_safe_max(records$.diameter_cm)
+    tallest_m = vst_safe_max(records$height[records$.size_height_ok %in% TRUE]),
+    biggest_diam_cm = vst_safe_max(records$.diameter_cm[records$.size_diameter_ok %in% TRUE])
   )
 }
 
-vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
+vst_contract_payload <- function(site, trees, plots, latitude, longitude,
+                                 curation = vst_empty_curation()) {
   snapshots <- list(
     tree_dbh = vst_channel_snapshot(trees, plots, "tree_dbh"),
     shrub_sapling_basal = vst_channel_snapshot(trees, plots, "shrub_sapling_basal")
@@ -926,8 +1134,13 @@ vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
   summaries <- lapply(snapshots, vst_channel_summary)
   record_plots <- vapply(summaries, `[[`, integer(1), "n_record_plots")
   supported_plots <- vapply(summaries, `[[`, integer(1), "n_supported_plots")
+  tree <- summaries$tree_dbh
+  tree_default <- tree$n_record_plots >= VST_PRIMARY_TREE_MIN_PLOTS &&
+    tree$n_record_plots >= VST_PRIMARY_TREE_MIN_SHARE * tree$n_supported_plots
   primary <- if (all(record_plots == 0L) && all(supported_plots == 0L)) {
     "unavailable"
+  } else if (tree_default) {
+    "tree_dbh"
   } else if (all(record_plots == 0L) &&
              supported_plots[["shrub_sapling_basal"]] > supported_plots[["tree_dbh"]]) {
     "shrub_sapling_basal"
@@ -997,10 +1210,11 @@ vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
   )
   list(
     id = VST_CONTRACT_ID,
-    version = 2L,
+    version = 3L,
     product = VST_PRODUCT,
     release = VST_RELEASE,
     plant_key = c("plotID", "individualID"),
+    plant_id_key = c("plotID", "plant_id"),
     event_key = c("plotID", "eventID"),
     source_record_key = "source_uid",
     mapping_source_record_key = "mapping_source_uid",
@@ -1009,13 +1223,22 @@ vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
     support_status = list(
       supported = VST_SUPPORTED_STATUS,
       zero = "sampled_absence",
-      held = c("held_sampling_impractical", "held_dendrometer_only",
-               "held_missing_area", "held_opportunity_unknown",
-               "held_presence_record_conflict", "held_metric_invalid",
-               "held_identity_conflict", "held_opportunity_source_missing")
+      held = VST_HELD_STATUS,
+      history_only = VST_LEGACY_STATUS
     ),
+    legacy_schema = list(
+      status = VST_LEGACY_STATUS, on_or_before = format(VST_LEGACY_SCHEMA_END),
+      reason = VST_LEGACY_REASON,
+      admitted_by = "change history only (growth, mortality, plant careers, QC); never the latest supported snapshot, indexes or default channel"
+    ),
+    row_exclusions = list(
+      superseded_in_event = "an earlier-dated row of the same individual in the same event; small-tree, sapling and shrub rows of a stem absent from the latest date and at most 3 days earlier are kept",
+      duplicate_of_uid = "a tree-form row repeating growthForm, plantStatus, stemDiameter and height for the same individual, event and date; the copy first in source_uid byte order is kept",
+      scope = "rows stay in trees and exports; snapshot and history summaries skip them; support counts include them"
+    ),
+    curation = vst_curation_receipt(curation),
     channel_summary = summaries,
-    primary_channel_reason = "presentation default uses the channel represented in more latest supported record-bearing plots; if neither has records, it uses supported opportunity count with tree DBH as the deterministic tie-break; channels remain separate",
+    primary_channel_reason = "presentation default is tree DBH when trees are recorded in at least 5 latest supported plots and in at least half of the supported tree plots; otherwise the channel represented in more latest supported record-bearing plots; if neither has records, supported opportunity count with tree DBH as the deterministic tie-break; channels remain separate",
     excluded_from_channel_summaries = list(
       small_tree = "preserved in trees; nested-area DBH needs its own physical channel and is not pooled with full-plot tree DBH or basal-diameter cover"
     ),
@@ -1024,7 +1247,8 @@ vst_contract_payload <- function(site, trees, plots, latitude, longitude) {
   )
 }
 
-vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
+vst_build_site_from_tables <- function(site, raw, source_receipt = NULL,
+                                       curation = vst_read_curation()) {
   required_tables <- c(
     "vst_mappingandtagging", "vst_apparentindividual", "vst_perplotperyear"
   )
@@ -1044,7 +1268,7 @@ vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
   trees$opportunity_source_missing <- vst_key(
     trees, c("plotID", "eventID")
   ) %in% measurement_only_keys
-  plots <- vst_opportunity_table(contexts, trees)
+  plots <- vst_opportunity_table(contexts, trees, site, curation)
   orphan_events <- setdiff(
     unique(vst_key(trees, c("plotID", "eventID"))),
     unique(vst_key(plots, c("plotID", "eventID")))
@@ -1057,7 +1281,7 @@ vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
   }
   latitude <- vst_safe_median(plots$lat)
   longitude <- vst_safe_median(plots$lng)
-  contract <- vst_contract_payload(site, trees, plots, latitude, longitude)
+  contract <- vst_contract_payload(site, trees, plots, latitude, longitude, curation)
   meta <- list(
     site = site,
     product = VST_PRODUCT,
@@ -1084,7 +1308,11 @@ vst_build_site_from_tables <- function(site, raw, source_receipt = NULL) {
   list(
     trees = trees,
     plots = plots,
-    opportunity_source = opportunity$source,
+    # NEON publishes field-staff identities in measuredBy/recordedBy; the app
+    # never uses them, so contract v3 does not republish them.
+    opportunity_source = opportunity$source[
+      , setdiff(names(opportunity$source), VST_PERSONNEL_FIELDS), drop = FALSE
+    ],
     meta = meta,
     contract = contract
   )
@@ -1097,7 +1325,13 @@ vst_bundle_main <- function() {
   site_index_out <- Sys.getenv("VST_SITE_INDEX_OUT", unset = "data/site_index.rds")
   sites <- vst_assert_site_inventory(raw_dir, suffix = "_raw.rds", label = "raw source")
   source_receipt <- vst_source_receipt_from_env()
-  demo <- "HARV"
+  curation <- vst_read_curation()
+  stray <- setdiff(c(curation$partial$site, curation$disturbance$site), sites)
+  if (length(stray)) {
+    stop("curation rows name sites outside the build: ", paste(sort(unique(stray)), collapse = ", "),
+         call. = FALSE)
+  }
+  demo <- "SRER"
 
   dir.create(site_dir, showWarnings = FALSE, recursive = TRUE)
   dir.create(sample_dir, showWarnings = FALSE, recursive = TRUE)
@@ -1112,16 +1346,19 @@ vst_bundle_main <- function() {
   }
 
   index_rows <- list()
+  latest_dates <- character()
   for (site in sites) {
     cat("=== bundling", site, "===\n")
     raw <- readRDS(file.path(raw_dir, paste0(site, "_raw.rds")))
-    bundle <- vst_build_site_from_tables(site, raw, source_receipt)
+    bundle <- vst_build_site_from_tables(site, raw, source_receipt, curation)
     path <- file.path(site_dir, paste0(site, ".rds"))
     saveRDS(bundle, path, compress = "xz")
     if (identical(site, demo)) {
       saveRDS(bundle, file.path(sample_dir, "demo.rds"), compress = "xz")
     }
     index_rows[[site]] <- bundle$contract$index$site
+    dates <- suppressWarnings(as.Date(bundle$trees$date))
+    if (any(!is.na(dates))) latest_dates <- c(latest_dates, as.character(max(dates, na.rm = TRUE)))
     cat(sprintf(
       "  %s: %d measurement rows; %d plot-event contexts; primary=%s; size=%s\n",
       site, nrow(bundle$trees), nrow(bundle$plots), bundle$meta$primary_channel,
@@ -1135,6 +1372,7 @@ vst_bundle_main <- function() {
     stop("candidate index does not cover the registered site family", call. = FALSE)
   }
   attr(index, "contract_id") <- VST_CONTRACT_ID
+  if (length(latest_dates)) attr(index, "data_through") <- max(latest_dates)
   if (!is.null(source_receipt)) attr(index, "source_receipt") <- source_receipt
   saveRDS(index, site_index_out, compress = "xz")
   vst_assert_site_inventory(site_dir)

@@ -1,6 +1,22 @@
 # ===========================================================================
 # NEON Vegetation Structure Explorer — ui.R
 # ===========================================================================
+
+# Landing "data through" line, read from the validated family only: the
+# release from the site-index receipt, and the newest measurement date the
+# index builders record (SITE_DATA_THROUGH). A dated query_end is the fallback;
+# a missing or held receipt shows nothing.
+DATA_THROUGH_LINE <- local({
+  rc <- if (exists("SITE_SOURCE_RECEIPT")) SITE_SOURCE_RECEIPT else NULL
+  rel <- if (is.list(rc) && length(rc$neon_release)) as.character(rc$neon_release[[1]]) else NA_character_
+  qe  <- if (is.list(rc) && length(rc$query_end)) as.character(rc$query_end[[1]]) else NA_character_
+  dt  <- if (exists("SITE_DATA_THROUGH") && length(SITE_DATA_THROUGH)) as.character(SITE_DATA_THROUGH[[1]]) else NA_character_
+  through <- if (!is.na(dt) && grepl("^[0-9]{4}-[0-9]{2}", dt)) substr(dt, 1, 7) else
+    if (!is.na(qe) && grepl("^[0-9]{4}-[0-9]{2}", qe)) substr(qe, 1, 7) else NA_character_
+  if (is.na(rel) || !nzchar(rel)) "" else
+    if (!is.na(through)) paste0("NEON ", rel, " · data through ", through) else paste0("NEON ", rel)
+})
+
 ui <- bslib::page_fillable(
   theme = app_theme,
   # page_fillable() has title= and lang=; window_title= / fillable= were not
@@ -8,6 +24,7 @@ ui <- bslib::page_fillable(
   title = "NEON Vegetation Structure Explorer", lang = "en",
 
   tags$head(
+    veg_build_meta_tag(),
     tags$link(rel = "stylesheet", href = asset_url("vendor/sweetalert2/sweetalert2.min.css")),
     tags$script(src = asset_url("vendor/sweetalert2/sweetalert2.all.min.js")),
     tags$script(src = asset_url("vendor/html-to-image/html-to-image.js")),
@@ -29,9 +46,9 @@ ui <- bslib::page_fillable(
       tags$span(class = "tb-title", "Vegetation Structure")),
     div(class = "top-bar-actions",
       actionButton("browsePlaces", tagList(bs_icon("geo-alt"), tags$span(class = "tb-action-text", " Places")),
-                   class = "btn-outline-dark btn-sm tb-places"),
+                   class = "btn-outline-dark btn-sm tb-places", `aria-label` = "Places"),
       actionButton("help", tagList(bs_icon("question-circle"), tags$span(class = "tb-action-text", " How it works")),
-                   class = "btn-outline-dark btn-sm tb-help"),
+                   class = "btn-outline-dark btn-sm tb-help", `aria-label` = "How it works"),
       div(class = "tb-theme",
         tags$span(class = "tb-theme-lab", bs_icon("circle-half")),
         input_dark_mode(id = "colorMode", mode = "light")))
@@ -73,7 +90,9 @@ ui <- bslib::page_fillable(
         div(class = "lpa-kicker", "NEON VEGETATION STRUCTURE", span("unofficial")),
         h1("Tagged. Measured. ", em("Still changing.")),
         p(class = "lpa-promise", "Follow real trees and shrubs through years of change."),
-        tags$a(class = "lpa-skip", href = "#placeGateway", "Pick a place ", bs_icon("arrow-down"))),
+        tags$a(class = "lpa-skip", href = "#placeGateway", "Pick a place ", bs_icon("arrow-down")),
+        if (length(DATA_THROUGH_LINE) && nzchar(DATA_THROUGH_LINE))
+          p(class = "lpa-through", DATA_THROUGH_LINE)),
       tags$figure(class = "lpa-art",
         tags$picture(
           tags$source(
@@ -92,14 +111,13 @@ ui <- bslib::page_fillable(
       div(class = "pg-head",
         div(
           div(class = "pg-kicker", "START HERE"),
-          h2("Pick a place"),
-          p("Tap the map, choose by name, or search all 42 places first.")),
+          h2("Pick a place")),
         div(class = "pg-actions",
           actionButton("searchNetworkBtn", tagList(bs_icon("search"), " Search every place"),
                        class = "btn-outline-dark"),
           actionLink("tourBtn", tagList(bs_icon("signpost-2"), " Quick tour")))),
       div(class = "splash-map-hint", bs_icon("hand-index-thumb"),
-        " Dot size reflects supported live plants. The map key separates solid tree-DBH rings, dashed shrub/sapling rings, and dotted grey held places. Held means unknown—not zero."),
+        " Dot size reflects supported live plants. The map key separates solid tree-DBH rings, dashed shrub/sapling rings, and dotted grey held places. Held means unknown, not zero."),
       mapPickerUI("picker", height = "500px", spinner = DDL$green),
       div(class = "select-panel select-panel-compact",
         div(class = "sp-field",
@@ -122,21 +140,23 @@ ui <- bslib::page_fillable(
         div(class = "tools-strip",
           actionButton("compareBtn", tagList(bs_icon("layout-split"), " Compare two places"), class = "btn-outline-dark btn-sm"),
           actionButton("goSearch", tagList(bs_icon("search"), " Search the network"), class = "btn-outline-dark btn-sm"),
-          downloadButton("plotSummaryCsv", tagList(bs_icon("table"), " Plot summary (CSV)"), class = "btn-outline-dark btn-sm"),
-          downloadButton("allDataZip", "Download all data (CSV)", class = "btn-outline-dark btn-sm")),
+          downloadButton("plotSummaryCsv", tagList(bs_icon("table"), " Plot summary (CSV)"), icon = NULL, class = "btn-outline-dark btn-sm"),
+          downloadButton("allDataZip", "Download all data (zip of CSVs and codebook)", class = "btn-outline-dark btn-sm")),
         card(full_screen = TRUE,
           card_head("bar-chart-steps", "Which identifications contribute to the measured structure?",
+            span(class = "scope-chip scope-site", bs_icon("geo-alt-fill"), " This place only"),
             info_pop("Composition",
               p("Each taxon or field identification's equal-plot contribution to measured stem cross-section within this site's active, supported physical channel."),
               p("Each supported plot contributes equally after its exact sampled area is applied. Detection and identification effort still affect what is represented."),
-              p("Tree DBH area and shrub basal-cover area are kept separate. This is sampled contribution—not proof of ecological dominance."))),
+              p("Tree DBH area and shrub basal-cover area are kept separate. This is sampled contribution, not proof of ecological dominance."))),
           uiOutput("overviewInsight"),
           spin(plotlyOutput("baBar", height = "440px"))),
-        card(card_head("stars", "The story so far",
-            info_pop("Story", p("Written from this site's live data, the same numbers the rest of the app uses."))),
-          uiOutput("siteInsights")),
+        card(card_head("stars", "The story so far", span(class = "scope-chip scope-site", bs_icon("geo-alt-fill"), " This place only")),
+          div(class = "story-scroll", tabindex = "0", role = "region", `aria-label` = "The story so far",
+            uiOutput("siteInsights"))),
         card(full_screen = TRUE,
           card_head("bar-chart-steps", "This place across the network",
+            span(class = "scope-chip scope-all", bs_icon("globe-americas"), " All 42 places"),
             info_pop("Network context",
               p("Bundled sites lined up by observed woody-species count. The ", tags$span(style="color:#E0A500;font-weight:700","gold bar"), " is the current place."),
               p("This is discovery context, not a biodiversity ranking: plots, stem records, years, and detection effort differ by site."))),
@@ -170,7 +190,7 @@ ui <- bslib::page_fillable(
           div(class = "sizelab-toolbar",
             tags$button(class = "smt-snap-btn", type = "button", onclick = "smtSave('growthSizeBox','NEON-VegStructure_<site>_size-vs-growth_<date>.png')", bsicons::bs_icon("camera-fill"), " Download (with pinned cards)"),
             tags$button(class = "smt-clear-btn", type = "button", onclick = "smtClearPins('growthSizeBox')", bsicons::bs_icon("eraser-fill"), " Clear pins"),
-            tags$span(class = "sizelab-hint", bs_icon("hand-index-thumb"), " interactive · tap a dot to pin its card")),
+            tags$span(class = "sizelab-hint", title = "Tap a dot to pin its card", bs_icon("hand-index-thumb"))),
           div(class = "smt-pinnable", id = "growthSizeBox", spin(plotlyOutput("growthSize", height = "360px")))),
         card(card_head("trophy", "Greatest positive diameter changes",
             info_pop("Positive diameter change", p("Plants ranked within the active compatible channel by annualized diameter change. Changed measurement points, unalignable multi-stem basal records, and display outliers are excluded from the leaderboard but retained in downloads."), p(tags$b("Tap a row"), " to open that plant's record."))),
@@ -183,8 +203,7 @@ ui <- bslib::page_fillable(
                info_pop("Size Lab",
                  p("Each dot is a supported plant with both measurements needed for this view: ", tags$b("stem diameter"), " (x, DBH for trees, basal diameter for shrubs) and ", tags$b("height"), " (y), coloured by species. Median crosshairs split it into four shapes."),
                  p(tags$b("Tap a dot"), " to pin its card; drag, resize, and download the chart with the cards on it. Tap “Open career” for its full growth history."),
-                 p("Plants measured for diameter but not height can't sit in this 2-D space; their count is noted below the plot."))),
-            p("Each dot is a plant, size × height, by species. Tap to pin a card; open any plant's growth career.")),
+                 p("Plants measured for diameter but not height can't sit in this 2-D space; their count is noted below the plot.")))),
           div(class = "sizelab-controls",
             selectInput("labColor", tagList(bs_icon("palette"), " Colour by"),
                         choices = c("Species" = "species", "Canopy position" = "canopyPosition", "Status" = "status"),
@@ -211,7 +230,7 @@ ui <- bslib::page_fillable(
       nav_panel(title = tagList(bs_icon("bar-chart-line-fill"), " Sampled Structure"), value = "stand",
         div(class = "tab-head", div(class = "tab-head-text",
           h4("What did the supported plots measure?"),
-          p("A descriptive size distribution, measured cross-sectional area, stem density, and height profile—without turning unsupported opportunities into zeros."))),
+          p("A descriptive size distribution, measured cross-sectional area, stem density, and height profile, without turning unsupported opportunities into zeros."))),
         layout_columns(col_widths = c(7, 5),
           card(full_screen = TRUE,
             card_head("bar-chart-fill", "Size-class distribution",
@@ -226,8 +245,8 @@ ui <- bslib::page_fillable(
             spin(plotlyOutput("htPlot", height = "340px")))),
           card(card_head("calculator", "Supported sampled-plot summary",
             info_pop("Per-hectare",
-              p("Measured cross-sectional area (m²/ha) and stem density use each plot-event's exact compatible sampled area, then summarize supported plots. Every valid positive area—including small 40 m² nested areas—is retained."),
-              p("Sampled absence is zero; impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched opportunities are held. QMD is stem-weighted. Nothing here is a wall-to-wall inventory."))),
+              p("Measured cross-sectional area (m²/ha) and stem density use each plot-event's exact compatible sampled area, then summarize supported plots. Every valid positive area, including small 40 m² nested areas, is retained."),
+              p("Sampled absence is zero; impractical, dendrometer-only, invalid-area, invalid-required-diameter, and unmatched opportunities are held. QMD comes from the plot-mean basal area and density. Nothing here is a wall-to-wall inventory."))),
           uiOutput("densityBanner"))),
 
       nav_panel(title = tagList(bs_icon("trophy"), " Champions"), value = "fame",
@@ -254,7 +273,7 @@ ui <- bslib::page_fillable(
         div(class = "tab-head",
           div(class = "tab-head-text",
             h4("Plots across the site"),
-            p("Supported NEON plot summaries carry measured values. Held opportunities stay visible in grey with unavailable values—not zero.")),
+            p("Supported NEON plot summaries carry measured values. Held opportunities stay visible in grey with unavailable values, not zero.")),
           div(class = "map-controls",
             selectInput("mapMetric", "Colour by", width = "180px",
                         choices = c("Measured area index (m²/ha)" = "ba_ha", "Stem density (/ha)" = "density_ha", "Recorded taxa" = "n_taxa")),
@@ -265,9 +284,9 @@ ui <- bslib::page_fillable(
           card_head("clipboard-check", "Data-quality scan",
             info_pop("Data quality",
               p("Automated ", tags$b("verify-not-wrong"), " checks across this site's remeasured plants: status reversals incompatible with the mortality contract, large diameter changes, and moved measurement points."),
-              p("Tap a flag to inspect the exact plants and download them; nothing here is deleted. Flags are for review."),
-              div(class = "evo-dl-row", downloadButton("vegQcReport", tagList(bs_icon("download"), " Full QC report (CSV)"), class = "btn-outline-dark btn-sm")))),
-          uiOutput("vegQcFlags"))),
+              p("Tap a flag to inspect the exact plants and download them; nothing here is deleted. Flags are for review."))),
+          uiOutput("vegQcFlags"),
+          div(class = "evo-dl-row", downloadButton("vegQcReport", tagList(bs_icon("download"), " Full QC report (CSV)"), icon = NULL, class = "btn-outline-dark btn-sm")))),
 
       nav_panel(title = tagList(bs_icon("search"), " Search"), value = "search",
         div(class = "tab-head", div(class = "tab-head-text",
@@ -281,9 +300,10 @@ ui <- bslib::page_fillable(
         conditionalPanel("input.searchMode == 'taxon'",
           card(
             card_head("tree", "Find a species across the network",
+              span(class = "scope-chip scope-all", bs_icon("globe-americas"), " All 42 places"),
               info_pop("Find a species",
                 p("Pick a recorded woody species. Each row shows its supported sampled-plot measurement, live stem records, and the years of the latest supported plot events represented."),
-                p("Tree DBH area and shrub basal-cover area are different physical channels. Rows are grouped by channel and site—not ranked across unlike measurements."))),
+                p("Tree DBH area and shrub basal-cover area are different physical channels. Rows are grouped by channel and site, not ranked across unlike measurements."))),
             div(class = "search-pick",
               selectizeInput("taxonPick", "Woody species", choices = NULL, width = "100%",
                 options = list(placeholder = "Start typing a scientific name, e.g. Quercus..."))),
@@ -295,6 +315,7 @@ ui <- bslib::page_fillable(
         conditionalPanel("input.searchMode == 'threshold'",
           card(
             card_head("rulers", "Sites by size threshold",
+              span(class = "scope-chip scope-all", bs_icon("globe-americas"), " All 42 places"),
               info_pop("Sites by size",
                 p("Filter supported sampled summaries by measured area, biggest stem, or tallest measured plant. Every supported site × physical channel appears independently."),
                 p("For area or diameter, first choose Tree DBH or Shrub & sapling basal. Those measurements are not one comparable scale."))),
@@ -307,7 +328,7 @@ ui <- bslib::page_fillable(
             uiOutput("threshCount"),
             div(style = "width:100%", DT::DTOutput("threshHits")),
             div(class = "search-cap", bs_icon("info-circle"),
-              " Each row is one supported site × physical channel—not a whole-site classification. Record sizes and observed richness also vary with sampling effort.")))),
+              " Each row is one supported site × physical channel, not a whole-site classification. Record sizes and observed richness also vary with sampling effort.")))),
 
       nav_panel(title = tagList(bs_icon("info-circle"), " About"), value = "about", uiOutput("aboutPanel"))
       )
@@ -322,6 +343,6 @@ ui <- bslib::page_fillable(
     p(style = "margin-top:12px",
       HTML("Built by <strong>Desert Data Labs</strong> · Tucson, AZ · get in touch →"),
       tags$a(href = "mailto:desertdatalabs@gmail.com?subject=NEON%20Vegetation%20Structure%20Explorer", "desertdatalabs@gmail.com")),
-    p(style = "font-size:12px;opacity:.85",
+    p(style = "font-size:12px",
       "Data: NEON Vegetation Structure (DP1.10098.001). Not affiliated with NEON, Battelle, or the NSF. An educational data-exploration tool."))
 )

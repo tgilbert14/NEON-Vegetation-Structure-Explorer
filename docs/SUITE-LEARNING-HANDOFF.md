@@ -118,6 +118,11 @@ publication remains in the Pass 4 closeout workflow.
 | scientific-contract | 49 measurement-only events / 4,365 rows at 11 sites | `HOLD` from scaling and derived summaries; preserve and expose |
 | Driver-impacting | Vegetation channel/support evidence | `HOLD / CONTEXT ONLY / NO DRIVER DATA BYTE CHANGE` |
 | complementary | Vegetation as slow standing-structure lens | `COMPLEMENT` Plant Diversity and Phenology |
+| suite-platform | reviewed curation CSVs that pin the source uid and a remark SHA-256 (v3 partial events, disturbance labels) | `ADOPT`; the build stops on a missing, stale or orphan row, so a NEON re-publication cannot change support silently |
+| scientific-contract | legacy-schema events (pre-2020-03-10, blank sampling fields) admitted to change history only | `ADOPT` in v3; never a snapshot value, index row or zero |
+| scientific-contract | status-only rows carry no growthForm; channel filters drop their deaths | `ADOPT` the fill-forward fix; check every NEON product whose status rows omit the form |
+| scientific-contract | parent-tag plant identity for multi-bole trees | `ADOPT` in v3 for counts, status and mortality; growth stays per bole |
+| suite-platform | independent oracle for headline extremes in the release gate | `ADOPT`; verify_bundle recomputes tallest and biggest without the shared screen code |
 
 ## Pattern for the next app
 

@@ -34,8 +34,8 @@ rather than generated marks.
 | `www/assets/vegetation-living-poster.webp` | 1672×941 RGB WebP | in-app high-resolution delivery | `12c1e64ec8e344ea392a706bb5e5cf3dd2eff7c8b0cf2085fc6b8e141dc03ed5` |
 | `docs/assets/vegetation-living-poster-840.webp` | 840×473 RGB WebP | Pages compact delivery | `d488674510867d0ec781ba9a5c9043324ae127ff038dd9dbd42ea81233997d83` |
 | `www/assets/vegetation-living-poster-840.webp` | 840×473 RGB WebP | in-app compact delivery | `d488674510867d0ec781ba9a5c9043324ae127ff038dd9dbd42ea81233997d83` |
-| `docs/social-card.html` | 1200×630 composition viewport | code-native social source | `5815e16f29122fb7f82758761150974121c3977338b143ea4d1425f98f2db9dd` |
-| `docs/og-image.png` | 1200×630 RGB PNG | Open Graph/Twitter image | `4c572308daaa8c60e9c51658772b2b4adf996bf8d9c9bce0f405cf9326c87cae` |
+| `docs/social-card.html` | 1200×630 composition viewport | code-native social source | `aef6b47b5cd91ee06857b620693e5ea80f320adc8726e02e47c651de95b3740e` |
+| `docs/og-image.png` | 1200×630 RGB PNG | Open Graph/Twitter image | `ae0a3c58d91a0ae3566febf9832532cd406065d252b32e5ea589fe9c378f0b5b` |
 
 The social card is a separate local HTML/CSS composition rendered at exactly
 1200×630; it is not a crop pretending to be the cover. Nonblank pixel variance

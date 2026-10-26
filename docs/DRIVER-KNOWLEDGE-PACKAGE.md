@@ -20,7 +20,25 @@ published `vst_perplotperyear` source row. The app preserves those records under
 structure summaries, longitudinal metrics, or Driver features. This is context
 for coverage/QC, not a new cascade edge.
 
-## Potential Driver adapter fields — not current Driver schema
+## Contract v3 changes a Driver or Atlas adapter must accept (2026-10-26)
+
+Still HOLD / CONTEXT ONLY; v3 changes no Driver byte. An adapter that reads a
+v3 family must:
+
+- treat `supported_legacy_schema` as history only: `tree_supported` and
+  `shrub_supported` stay FALSE for it, so joins on supported plot-events do not
+  move; admit it only for change between censuses, and say so;
+- read the reviewed partial events (`partial_event_rule_id`,
+  `tree_channel_complete`, `shrub_channel_complete`), which lift JERC tree
+  plots from 10 to 20 and OSBS from 20 to 30;
+- count plants by `plotID` + `plant_id` and skip rows with
+  `superseded_in_event` TRUE or a non-missing `duplicate_of_uid`;
+- read `disturbance_classes` as a label, never as support;
+- expect the audit schema `NEON-VST-data-quality-audit-v3` with the new
+  `n_supported_legacy_schema` column, and the tree-first default channel
+  (31 tree / 6 shrub / 5 unavailable).
+
+## Potential Driver adapter fields (not current Driver schema)
 
 | Field | Meaning | Mandatory support | Driver role |
 |---|---|---|---|

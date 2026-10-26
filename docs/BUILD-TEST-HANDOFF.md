@@ -1055,3 +1055,63 @@ BYTES PENDING / NO SCIENCE OR DRIVER DATA BYTE CHANGE.**
   bundled index (TALL 85.6 m first) while the TALL hero shows 37.0 m.
 - **Next action:** Tim reviews and merges this branch after exact-head CI is green; then the stacked
   `claude/veg-contract-v3` PR, once its official v3 candidate is promoted.
+
+### 2026-10-21 MST - contract v3: multi-bole Option A, size screen in bundles, no personnel fields / [Claude]
+
+- **Scope:** branch `claude/veg-contract-v3`, stacked on #18 (`claude/veg-shell-wave2`). Contract
+  `NEON-VST-DP1.10098.001-v3`: a lettered tree-form bole whose parent tag has a bole >= 10 cm DBH in
+  the same plotID x eventID no longer holds the plot-event (independent copies in the builder,
+  `global.R`, `verify_bundle.R`, `write_data_quality_audit.R`). Option A keeps every tree-channel
+  estimand on boles >= 10 cm (basal area, density, QMD, growth, mortality cohort, status snapshot).
+  The shared size screen sets `tallest_m` / `biggest_diam_cm` per measure in the builder and
+  `derived_parity.R`; `opportunity_source` drops measuredBy/recordedBy; the demo sample is SRER; the
+  taxa index tests `is_species` row-wise (lint L13).
+- **Code only.** The committed family is still v2, so CI on this branch is red by design and it must
+  not merge before an official v3 candidate is promoted onto it (the runtime gate would HOLD production).
+- **Local smoke:** a v3 family re-derived from the committed v2 rows passes every gate except the
+  three checksum ledgers only the official build writes. Before -> after: STEI tree BA 8.18 (n=5) ->
+  17.49 (n=17), mortality 0.00 %/yr (2 plots) -> 0.44 [0, 0.90] (7 plots); GUAN held_metric_invalid
+  46 -> 1, sampled 10 -> 55, BA 2.81 -> 5.06; HARV tree mortality 1.29 %/yr (2 plots) -> 3.70
+  [0.50, 6.89] (5 plots); TALL tallest 85.6 -> 37.2 m, network top WREF 60.5 m; tree_supported
+  plot-events 1163 -> 1580.
+- **Review:** independent review on Opus 5.5 at max (Fable limit reached); its findings are applied
+  here and in #18.
+- **Rebuild route:** owner labels the PR `build-vegetation-candidate`; run
+  `scripts/validation/inspect_vegetation_candidate.py` on the `vegetation-release-candidate-<sha>-<run>`
+  artifact; promote its allowlisted payload byte-for-byte with the CI-required review surfaces (cover,
+  social card, og-image, receipts, science docs) in one push; exact-head CI; Tim merges after #18.
+- **Owner decisions left open:** Option B (2.5-10 cm secondary boles in basal area);
+  `supported_legacy_schema` for pre-2020 events (growth and mortality only); rewriting git history to
+  remove the committed measuredBy/recordedBy values.
+- **Next action:** label this PR, inspect and promote the validated v3 candidate, merge after #18.
+
+### 2026-10-26 MST - contract v3 complete: cedar's rulings, official candidate promoted / [Claude]
+
+- **Scope:** PR #19 (`claude/veg-contract-v3` to `main`, rebased after #18 merged). Adds cedar's
+  2026-10-26 rulings to v3: `supported_legacy_schema` (pre-2020-03-10 blank-field events, change
+  history only), 57 reviewed partial events and 47 reviewed disturbance remarks
+  (`scripts/curation/`, build stops on a missing, stale or orphan row), superseded and duplicate rows
+  skipped by every estimate, `plant_id` parent-tag plant identity, the 5 cm measuring-point rule, the
+  tree-first default channel, held-plot and cacti disclosures, and growthForm carried forward to
+  status-only rows. Independent copies: `global.R`, `verify_bundle.R` (also plant_id, S4, curation
+  cross-checks and a size-extremes oracle), the audit (schema v3, `n_supported_legacy_schema`), the
+  inspector (re-pinned) and `derived_parity.R`.
+- **Candidate:** refresh run `40360523712` on `99fd0a2` (probe_token, fetch_raw and build_candidate green;
+  the two isolated candidates byte-identical). Artifact
+  `vegetation-release-candidate-99fd0a29b18a4db9e2908257e66e9a0fc374a919-40360523712` passed
+  `inspect_vegetation_candidate.py` (55 files, 54 payload paths, audit schema v3, manifest R 4.5.2 with
+  91 packages and 71 runtime files, terra 1.8-50). Its 54 payload paths are promoted byte for byte:
+  bundle family SHA-256 `6e538d472b43e949911d5775a665f4fc1993dfd82a2f06f0da3db83167462fa1`, raw
+  digest `e8d78dd7...3e29` unchanged.
+- **Numbers (official family):** default channels 31 tree / 6 shrub / 5 unavailable (v2: 19 / 18 / 5);
+  supported tree plot-events 1,621 (v2: 1,163); legacy-schema events 2,071 tree and 2,454 shrub; TALL
+  tallest 37.2 m (network top WREF 60.5 m); GUAN tree BA 5.06 ± 0.58 m²/ha (38 plots); STEI 17.49 ± 3.07
+  (17 plots); HARV tree mortality 2.47 %/yr (95% interval 1.79 to 3.31, 40 plots); SRER shrub mortality
+  0.69 %/yr (0.05 to 2.86, 11 plots); JERC tree plots 10 to 20, OSBS 20 to 30; SJER 111 to 51 plants.
+- **Review:** one final review on Opus 5.5 at max (Fable limit); nine findings, all applied in `648bc66`: mortality back to every-row-dead,
+  reviewed partial events never legacy, cacti counted at each plot's latest visit, held-plot copy and
+  visit-conflict wording, species plants per taxon, plant-card chips, the verifier's empty-CSV crash,
+  and two codebook rows. JERC shrub mortality reads 9.6 %/yr after the first fix (36.96 before).
+- **Merge order:** after the Atlas adds v3 adapter support (note left for cass); normal merge commit.
+- **Next action:** Tim merges #19 after the Atlas v3 support lands; then confirm the post-deploy
+  revision check and the SRER, TALL and HARV live numbers.

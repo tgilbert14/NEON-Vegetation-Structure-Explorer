@@ -1,0 +1,101 @@
+name: Post-deploy revision check
+
+# After a merge to main, Posit Connect Cloud redeploys the app from the
+# merged commit. This read-only job proves the live page runs that commit:
+# the app prints <meta name="ddl-build-digest"> (R/build_receipt.R), a sha256
+# over sorted "<path>:<md5>" lines for every deployed file, and this job
+# recomputes the same digest from the merged commit's manifest.json.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy-revision-check
+  cancel-in-progress: true
+
+env:
+  LIVE_URL: https://019ee110-8fd3-abae-aee3-02ea8e4274c8.share.connect.posit.cloud/
+
+jobs:
+  live_revision:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout merged commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: '4.5.2'
+          use-public-rspm: false
+
+      - name: Compute the expected digest from manifest.json
+        id: expected
+        run: |
+          set -euo pipefail
+          # veg_app_files() is base R; the digest itself is not needed here.
+          Rscript --vanilla -e 'source("R/build_receipt.R"); writeLines(sort(veg_app_files(), method = "radix"), "app-files.txt")'
+          # Fails when a manifest checksum is not md5 or the manifest file set
+          # differs from veg_app_files().
+          expected=$(python3 scripts/check_build_digest.py manifest.json --files app-files.txt)
+          [[ "$expected" =~ ^[0-9a-f]{64}$ ]]
+          echo "digest=$expected" >> "$GITHUB_OUTPUT"
+          echo "Expected ddl-build-digest for ${GITHUB_SHA}: $expected"
+
+      - name: Poll the live app until it serves the merged revision
+        env:
+          EXPECTED: ${{ steps.expected.outputs.digest }}
+        run: |
+          set -uo pipefail
+          deadline=$(( $(date +%s) + 20 * 60 ))
+          seen="none"
+          state="no response"
+          page=$(mktemp)
+          while :; do
+            code=$(curl -sS -L --max-time 60 -H 'Cache-Control: no-cache' \
+              -o "$page" -w '%{http_code}' "$LIVE_URL") || code=000
+            if [[ "$code" == "200" ]] &&
+               grep -q '<title>NEON Vegetation Structure Explorer</title>' "$page" &&
+               grep -q 'lang="en"' "$page"; then
+              seen=$(python3 - "$page" <<'PY'
+          import re, sys
+          html = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          for tag in re.findall(r"<meta\b[^>]*>", html, flags=re.I):
+              if re.search(r'name="ddl-build-digest"', tag):
+                  match = re.search(r'content="([^"]*)"', tag)
+                  print(match.group(1) if match else "")
+                  break
+          else:
+              print("missing")
+          PY
+              )
+              state="app page with digest $seen"
+              if [[ "$seen" == "$EXPECTED" ]]; then
+                echo "Live app serves ${GITHUB_SHA}: ddl-build-digest $seen."
+                echo "Post-deploy check passed: the live app serves ${GITHUB_SHA} (ddl-build-digest \`$seen\`)." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+            elif grep -q '<title>Posit Connect Cloud</title>' "$page" 2>/dev/null; then
+              state="Connect boot shell (HTTP $code)"
+            else
+              state="HTTP $code, not the app page"
+            fi
+            echo "$(date -u +%H:%M:%S) $state; waiting for $EXPECTED"
+            if (( $(date +%s) >= deadline )); then
+              break
+            fi
+            sleep 30
+          done
+          echo "::error title=Live app is not the merged revision::expected ddl-build-digest $EXPECTED, last seen $seen ($state) after 20 minutes at $LIVE_URL"
+          echo "Post-deploy check FAILED: expected ddl-build-digest \`$EXPECTED\` for ${GITHUB_SHA}; last seen \`$seen\` ($state) after 20 minutes." >> "$GITHUB_STEP_SUMMARY"
+          exit 1

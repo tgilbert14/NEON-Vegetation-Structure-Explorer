@@ -24,3 +24,6 @@ Thumbs.db
 !.env.example
 .Renviron
 .Renviron.*
+
+# Claude Code session worktrees (local only)
+.claude/worktrees/

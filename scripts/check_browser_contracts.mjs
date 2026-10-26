@@ -79,13 +79,13 @@ requireText(server, 'tags$button(class = paste0("qc-flag qc-flag-", f$level), ty
 requireText(app, 'if (e.key !== "Enter" && e.key !== " ") return;',
   "role=button triggers need the delegated Enter/Space handler");
 requireText(app, "closest('[role=\"button\"]')", "the Enter/Space handler must delegate from role=button");
-// In-app suite registry: every sibling, with the Response Atlas as the hub.
-for (const token of [".SIBLINGS <- list(", '"Response Atlas"', "NEON-Plant-Diversity", "NEON-My-Little-Inverts"]) {
+// In-app suite registry: every sibling, with the Cross-Product Response Atlas as the hub.
+for (const token of [".SIBLINGS <- list(", '"Cross-Product Response Atlas"', "NEON-Plant-Diversity", "NEON-My-Little-Inverts"]) {
   requireText(globalR, token, `in-app suite registry is missing ${token}`);
 }
 requireText(server, 'div(class = "sib-grid", lapply(.SIBLINGS', "About must render the suite registry");
 requireText(vegStyles, ".sib-grid", "the suite registry needs layout styling");
-const resetStart = server.indexOf("reset_to_places <- function()");
+const resetStart = server.indexOf("reset_to_places <- function(");
 const resetEnd = server.indexOf("observeEvent(input$changeSite", resetStart);
 const resetBlock = resetStart >= 0 && resetEnd > resetStart
   ? server.slice(resetStart, resetEnd)

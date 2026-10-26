@@ -1,4 +1,4 @@
-# Vegetation structure — critical expert review
+# Vegetation structure: critical expert review
 
 _Pass 4 production re-review · 2026-07-19 MST / 2026-07-20 UTC · supersedes the June 2026 “Cedar” certification_
 
@@ -103,8 +103,25 @@ of measurement. Basal multi-stem records whose temporary stem labels cannot be a
 are held rather than collapsed into an apparently precise whole-plant trajectory.
 
 Mortality first reduces every event to one plant state: any live stem means live; death requires all
-observed stems to be dead. Lost/removed/unknown fates are censored. Cohorts use `plotID × individualID`,
-event order, and cluster-aware uncertainty. Row order must not change the result.
+observed stems to be dead. Lost/removed/unknown fates are censored. Under contract v3 cohorts use
+`plotID × plant_id` (a lettered secondary bole counts with its parent tag), event order, and
+cluster-aware uncertainty. Row order must not change the result.
+
+Contract v3 review notes (cedar, 2026-10-26):
+
+- Pre-2020-03-10 events with blank `samplingImpractical` or `dataCollected` are
+  `supported_legacy_schema`: they feed growth, mortality and plant careers, never the snapshot, the
+  indexes or a zero. Events with no records stay held, so the legacy rule never creates an absence.
+- Rows superseded inside an event and identical tree-form copies are skipped by every estimate but kept
+  in the bundle; without that rule the legacy history would read GUAN tree growth as -0.70 cm/yr.
+- Status-only rows carry no growthForm, so their deaths were dropped by the channel filter; the last
+  published form is carried forward to them.
+- TALL shrub mortality (35.8 %/yr, 26.4 to 46.1) rests mostly on NEON "Standing dead" rows in the 2015 to 2018
+  legacy-schema censuses. A plant is dead only when every observed row is dead, and plants recorded
+  alive again leave the cohort, so it is tagged-plant mortality, not a stand-wide die-off. Where a burn
+  or storm is recorded, read the rate with the event's `disturbance_classes`.
+- Withheld: a woody "below 10% cover" state (no woody field records it) and a separate small-tree DBH
+  channel (spec ready; waits for the owner).
 
 Diameter decreases are not automatically “usually real” or “wrong.” They can reflect biology, damage,
 or measurement differences; retain them, disclose them, and apply explicit QC rules.

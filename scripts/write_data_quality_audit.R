@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Write a deterministic, human-inspectable quality audit for the exact v2
+# Write a deterministic, human-inspectable quality audit for the exact v3
 # Vegetation Structure release candidate. This script reports published
 # qualifiers; it does not use dataQF, tagStatus, or changedMeasurementLocation
 # as blanket row-exclusion rules.
@@ -8,8 +8,8 @@
 suppressPackageStartupMessages(library(jsonlite))
 source("scripts/vegetation_inventory.R", local = TRUE)
 
-VST_DQA_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v2"
-VST_DQA_SCHEMA <- "NEON-VST-data-quality-audit-v2"
+VST_DQA_CONTRACT_ID <- "NEON-VST-DP1.10098.001-v3"
+VST_DQA_SCHEMA <- "NEON-VST-data-quality-audit-v3"
 VST_DQA_PRODUCT <- "DP1.10098.001"
 VST_DQA_RELEASE <- "RELEASE-2026"
 VST_DQA_RELEASE_DOI <- "https://doi.org/10.48443/pypa-qf12"
@@ -19,13 +19,18 @@ VST_DQA_HELD <- c(
   "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
   "held_opportunity_unknown", "held_presence_record_conflict",
   "held_metric_invalid", "held_identity_conflict",
-  "held_opportunity_source_missing"
+  "held_opportunity_source_missing", "supported_legacy_schema"
 )
 VST_DQA_STATUS <- c(VST_DQA_SUPPORTED, VST_DQA_HELD)
+# Contract v3 legacy-schema state (history only), recomputed independently.
+VST_DQA_LEGACY_END <- as.Date("2020-03-10")
+VST_DQA_LEGACY_REASON <-
+  "legacy schema before 2020-03-10: sampling opportunity assumed (NEON changelog 16306)"
 VST_DQA_CHANNELS <- list(
   tree_dbh = list(
     forms = c("single bole tree", "multi-bole tree"),
     support = "tree_support",
+    complete = "tree_channel_complete",
     reason = "tree_support_reason",
     supported = "tree_supported",
     records = "tree_records",
@@ -39,6 +44,7 @@ VST_DQA_CHANNELS <- list(
   shrub_sapling_basal = list(
     forms = c("single shrub", "small shrub", "sapling"),
     support = "shrub_support",
+    complete = "shrub_channel_complete",
     reason = "shrub_support_reason",
     supported = "shrub_supported",
     records = "shrub_records",
@@ -221,13 +227,22 @@ vst_dqa_identity_counts <- function(trees, plots, keep) {
 vst_dqa_support_decision <- function(area, sampling_impractical, data_collected,
                                      presence, records, invalid_metric,
                                      identity_conflicts, opportunity_conflict,
-                                     opportunity_source_missing) {
+                                     opportunity_source_missing, event_date,
+                                     curation_note) {
   sampling <- gsub(
     "[^a-z]", "", tolower(trimws(as.character(sampling_impractical)))
   )
   collected <- gsub(
     "[^a-z]", "", tolower(trimws(as.character(data_collected)))
   )
+  blank_sampling <- is.na(sampling) | !nzchar(sampling)
+  blank_collected <- is.na(collected) | !nzchar(collected)
+  event_day <- vst_dqa_date_number(event_date)
+  legacy <- is.finite(event_day) & event_day <= as.numeric(VST_DQA_LEGACY_END) &
+    (blank_sampling | sampling %in% "ok") &
+    (blank_collected | collected %in% "allgrowthforms") &
+    (blank_sampling | blank_collected) &
+    is.na(as.character(curation_note))  # reviewed partial events keep today's path
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
     if (isTRUE(opportunity_source_missing[[i]])) {
@@ -240,6 +255,40 @@ vst_dqa_support_decision <- function(area, sampling_impractical, data_collected,
       status[[i]] <- "held_identity_conflict"
       reason[[i]] <-
         "multiple published vst_perplotperyear rows share this plot-event key"
+    } else if (legacy[[i]] && records[[i]] > 0L &&
+               is.finite(area[[i]]) && area[[i]] > 0 &&
+               !identical(presence[[i]], "absent") &&
+               !(is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) &&
+               invalid_metric[[i]] == 0L) {
+      status[[i]] <- "supported_legacy_schema"
+      reason[[i]] <- VST_DQA_LEGACY_REASON
+    } else if (legacy[[i]] && records[[i]] > 0L &&
+               (!is.finite(area[[i]]) || area[[i]] <= 0)) {
+      status[[i]] <- "held_missing_area"
+      reason[[i]] <- "event-specific total sampled area is missing or non-positive"
+    } else if (legacy[[i]] && records[[i]] > 0L &&
+               identical(presence[[i]], "absent")) {
+      status[[i]] <- "held_presence_record_conflict"
+      reason[[i]] <- "presence says absent but measurement records exist"
+    } else if (legacy[[i]] && records[[i]] > 0L &&
+               is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
+      status[[i]] <- "held_identity_conflict"
+      reason[[i]] <- sprintf(
+        paste0(
+          "%d channel stem locator%s violate%s plotID + eventID + ",
+          "individualID + tempStemID uniqueness"
+        ),
+        identity_conflicts[[i]],
+        if (identity_conflicts[[i]] == 1L) "" else "s",
+        if (identity_conflicts[[i]] == 1L) "s" else ""
+      )
+    } else if (legacy[[i]] && records[[i]] > 0L) {
+      status[[i]] <- "held_metric_invalid"
+      reason[[i]] <- sprintf(
+        "%d live channel record%s lack%s a finite positive threshold-compatible diameter",
+        invalid_metric[[i]], if (invalid_metric[[i]] == 1L) "" else "s",
+        if (invalid_metric[[i]] == 1L) "s" else ""
+      )
     } else if (is.na(sampling[[i]]) || !nzchar(sampling[[i]])) {
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "samplingImpractical is missing"
@@ -297,6 +346,8 @@ vst_dqa_support_decision <- function(area, sampling_impractical, data_collected,
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "no records and presence does not establish sampled absence"
     }
+    note <- as.character(curation_note[[i]])
+    if (!is.na(note)) reason[[i]] <- paste0(reason[[i]], "; ", note)
   }
   list(status = status, reason = reason)
 }
@@ -312,7 +363,9 @@ VST_DQA_CONTEXT_DERIVED_FIELDS <- c(
   "shrub_invalid_metric_records", "tree_identity_conflict_keys",
   "shrub_identity_conflict_keys", "tree_support", "tree_support_reason",
   "shrub_support", "shrub_support_reason", "tree_supported",
-  "shrub_supported", "event_key"
+  "shrub_supported", "event_key", "partial_event_rule_id",
+  "tree_channel_complete", "shrub_channel_complete", "disturbance_classes",
+  "disturbance_curation_id", "n_status_lost_burned", "n_status_removed"
 )
 
 vst_dqa_byte_order <- function(...) {
@@ -372,13 +425,13 @@ vst_dqa_validate_receipt <- function(bundle, site) {
   contract_id <- vst_dqa_scalar(bundle$meta$contract_id %||% NULL,
                                 paste0(site, " meta contract_id"))
   if (!identical(contract_id, VST_DQA_CONTRACT_ID)) {
-    stop(site, " is not an exact v2 bundle", call. = FALSE)
+    stop(site, " is not an exact v3 bundle", call. = FALSE)
   }
   contract <- bundle$contract %||% NULL
   if (!is.list(contract) ||
       !identical(as.character(contract$id %||% ""), VST_DQA_CONTRACT_ID) ||
-      !identical(as.integer(contract$version %||% NA_integer_), 2L)) {
-    stop(site, " lacks the exact embedded v2 contract", call. = FALSE)
+      !identical(as.integer(contract$version %||% NA_integer_), 3L)) {
+    stop(site, " lacks the exact embedded v3 contract", call. = FALSE)
   }
   if (!identical(as.character(contract$source_record_key %||% ""),
                  "source_uid") ||
@@ -390,7 +443,7 @@ vst_dqa_validate_receipt <- function(bundle, site) {
                  "source_record_key") ||
       !setequal(as.character(contract$support_status$held %||% character()),
                 VST_DQA_HELD)) {
-    stop(site, " embedded identity or held-status contract differs from v2",
+    stop(site, " embedded identity or held-status contract differs from v3",
          call. = FALSE)
   }
   receipt <- bundle$meta$source_receipt %||% NULL
@@ -423,7 +476,7 @@ vst_dqa_validate_receipt <- function(bundle, site) {
 vst_dqa_site_rows <- function(bundle, site) {
   if (!is.list(bundle) || !all(c("trees", "plots", "opportunity_source", "meta", "contract") %in%
                                names(bundle))) {
-    stop(site, " is not a complete v2 bundle", call. = FALSE)
+    stop(site, " is not a complete v3 bundle", call. = FALSE)
   }
   if (!is.data.frame(bundle$trees) || !is.data.frame(bundle$plots) ||
       !is.data.frame(bundle$opportunity_source) ||
@@ -440,7 +493,8 @@ vst_dqa_site_rows <- function(bundle, site) {
     "tagStatus", "changedMeasurementLocation", "source_uid",
     "plotID", "eventID", "individualID", "tempStemID",
     "protocol_stem_key", "protocol_key_group_n", "protocol_key_conflict",
-    "opportunity_source_missing", "plant_key", "event_key",
+    "opportunity_source_missing", "plant_key", "event_key", "plant_id",
+    "superseded_in_event", "duplicate_of_uid",
     "mapping_source_uid", "mappingMatched", "scientificName", "taxonID",
     "taxonRank", "is_species", "taxon_label", "taxon_resolution"
   )
@@ -456,7 +510,9 @@ vst_dqa_site_rows <- function(bundle, site) {
     "opportunity_source_uids", "opportunity_source_missing",
     "measurement_record_count_all", "measurement_date_min",
     "measurement_date_max", "measurement_date_distinct_n",
-    "samplingImpractical", "dataCollected", "treesPresent", "shrubsPresent"
+    "samplingImpractical", "dataCollected", "treesPresent", "shrubsPresent",
+    "date", "partial_event_rule_id", "tree_channel_complete",
+    "shrub_channel_complete"
   ))
   missing_tree <- setdiff(required_tree, names(trees))
   missing_plot <- setdiff(required_plot, names(plots))
@@ -739,6 +795,24 @@ vst_dqa_site_rows <- function(bundle, site) {
     metric_all <- suppressWarnings(as.numeric(trees[[spec$metric]]))
     valid_metric_all <- is.finite(metric_all) & metric_all > 0 &
       metric_all >= spec$minimum
+    if (identical(channel, "tree_dbh")) {
+      # Contract v3 multi-bole rule (NEON.DOC.000987 Table 8), recomputed
+      # independently: a lettered tree-form bole is valid at any positive DBH
+      # when its parent tag has a tree-form bole >= 10 cm in the same
+      # plotID x eventID.
+      bole_id <- as.character(trees$individualID)
+      bole_plot_event <- paste(as.character(trees$plotID),
+                               as.character(trees$eventID), sep = "\r")
+      bole_parents <- unique(paste(bole_plot_event, bole_id, sep = "\r")[
+        channel_keep & is.finite(metric_all) & metric_all >= 10
+      ])
+      secondary_ok <- channel_keep & !is.na(bole_id) &
+        grepl("[A-Za-z]$", bole_id) &
+        paste(bole_plot_event, sub("[A-Za-z]$", "", bole_id), sep = "\r") %in%
+          bole_parents
+      valid_metric_all <- valid_metric_all |
+        (secondary_ok & is.finite(metric_all) & metric_all > 0)
+    }
     expected_records <- vst_dqa_event_counts(trees, plots, channel_keep)
     expected_invalid <- vst_dqa_event_counts(
       trees, plots, channel_keep & live_all & !valid_metric_all
@@ -760,11 +834,29 @@ vst_dqa_site_rows <- function(bundle, site) {
     } else {
       vst_dqa_shrub_presence_state(plots$treesPresent, plots$shrubsPresent)
     }
+    # S1 (contract v3): a reviewed partial event reads as all-growth-forms
+    # for a channel marked complete; the rule id is carried into the reason.
+    complete <- plots[[spec$complete]]
+    rule_id <- as.character(plots$partial_event_rule_id)
+    partial <- tolower(trimws(as.character(plots$dataCollected))) %in% "partial"
+    if (!is.logical(complete) || anyNA(complete) ||
+        any(complete & is.na(rule_id)) || any(!is.na(rule_id) & !partial)) {
+      stop(site, " ", channel, " partial-event curation flags are inconsistent",
+           call. = FALSE)
+    }
+    effective_collected <- ifelse(complete, "allGrowthForms",
+                                  as.character(plots$dataCollected))
+    curation_note <- ifelse(
+      is.na(rule_id), NA_character_,
+      sprintf("dataCollected=partial reviewed as %s for this channel (%s)",
+              ifelse(complete, "complete", "incomplete"), rule_id)
+    )
     expected_decision <- vst_dqa_support_decision(
       suppressWarnings(as.numeric(plots[[spec$area]])),
-      plots$samplingImpractical, plots$dataCollected, expected_presence,
+      plots$samplingImpractical, effective_collected, expected_presence,
       expected_records, expected_invalid, expected_identity,
-      as.logical(plots$opportunity_key_conflict), source_missing
+      as.logical(plots$opportunity_key_conflict), source_missing,
+      plots$date, curation_note
     )
     support_mismatch <-
       !identical(as.character(plots[[spec$presence]]), expected_presence) ||
@@ -827,7 +919,7 @@ vst_dqa_site_rows <- function(bundle, site) {
       channel = channel,
       audit_schema = VST_DQA_SCHEMA,
       contract_id = VST_DQA_CONTRACT_ID,
-      contract_version = 2L,
+      contract_version = 3L,
       product = VST_DQA_PRODUCT,
       source_release = as.character(receipt$neon_release),
       release_doi = as.character(receipt$release_doi),
@@ -857,6 +949,7 @@ vst_dqa_site_rows <- function(bundle, site) {
       n_held_opportunity_source_missing = as.integer(
         status_counts[["held_opportunity_source_missing"]]
       ),
+      n_supported_legacy_schema = as.integer(status_counts[["supported_legacy_schema"]]),
       held_reason_counts = vst_dqa_held_reasons_json(status, reason),
       n_measurement_records = as.integer(nrow(channel_rows)),
       n_live_measurement_records = as.integer(sum(live)),
