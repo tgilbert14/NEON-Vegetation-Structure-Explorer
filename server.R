@@ -98,18 +98,18 @@ server <- function(input, output, session) {
       tags$a(href = "#siteSourceGap", "Review the exact evidence path"))
   }
 
-  # Cacti, yuccas and ocotillos are recorded in NEON's separate non-woody table,
-  # so a plot that reports them present gets a one-line scope note.
-  separate_table_note <- function(plots) {
-    cols <- intersect(c("cactiPresent", "yuccasPresent", "ocotillosPresent"), names(plots %||% list()))
-    if (!length(cols)) return(NULL)
-    present <- vapply(cols, function(cl) {
-      v <- trimws(as.character(plots[[cl]]))
-      any(v %in% c("Y", "Present - sampled"), na.rm = TRUE)
-    }, logical(1))
-    if (!any(present)) return(NULL)
-    div(class = "separate-table-note", role = "note", bs_icon("info-circle"),
-      " Cacti, yuccas and ocotillos are measured in a separate NEON table and are not counted here.")
+  # Cacti, yuccas and ocotillos are recorded in NEON's separate non-woody table;
+  # a site where any plot records them gets one line with the plot counts (C6).
+  separate_table_note <- function(plots, site = NULL) {
+    line <- separate_table_line(plots, site)
+    if (!nzchar(line)) return(NULL)
+    div(class = "separate-table-note", role = "note", bs_icon("info-circle"), paste0(" ", line))
+  }
+  # Held-plot disclosure (C5) for the density banner; NULL when nothing is held.
+  held_disclosure_tag <- function(sp) {
+    line <- held_plot_disclosure(rv$snap, rv$plots, sp, rv$site)
+    if (!nzchar(line)) return(NULL)
+    div(class = "separate-table-note held-plot-note", role = "note", bs_icon("info-circle"), paste0(" ", line))
   }
 
   supported_channels <- function(bundle) {
@@ -561,7 +561,7 @@ server <- function(input, output, session) {
         downloadLink("reportPdf", tagList(bs_icon("file-earmark-arrow-down"), " report (PDF)"),
                      class = "hero-report")),
       source_gap_notice(),
-      separate_table_note(rv$plots),
+      separate_table_note(rv$plots, rv$site),
       div(class = "hero-grid",
         hero(if (supported) nrow(one) else "–", paste0("live ", sp$nouns), icon = if (shrub) "flower2" else "tree", tone = "pine",
              ttl = sprintf("Live tagged %s %s, one count per individual.", sp$nouns, thresh)),
@@ -762,7 +762,7 @@ server <- function(input, output, session) {
           "<b>Plot estimate held.</b> The bundled record does not contain a matched, supported ",
           if (identical(sp$type, "shrubland")) "shrub/sapling" else "tree",
           " sampling opportunity with a valid area denominator. That is an unknown/unsupported state, not evidence of zero woody vegetation."))),
-        source_gap_inline()))
+        held_disclosure_tag(sp), source_gap_inline()))
     }
     pre  <- if (st$n_plots < 3) "Preliminary (few plots): " else ""
     se_ba <- if (is.finite(st$ba_se)) sprintf(" ±%s SE", fmt_num(st$ba_se)) else ""
@@ -798,13 +798,13 @@ server <- function(input, output, session) {
     insight_banner("calculator", tone = "gold",
       HTML(sprintf("%sAcross <b>%d supported sampled plots</b> (%s): <span class='ci-hero'>%s m²/ha</span>%s measured cross-sectional area, <b>%s stems/ha</b>%s, quadratic mean %s from those means <b>%s cm</b>.%s <span class='dim'>Mean ± plot SE. %s This is not a wall-to-wall inventory.</span>",
         pre, st$n_plots, scope, fmt_num(st$ba_ha), se_ba, fmt_count(st$density_ha), se_d, sp$size_lab, fmt_num(st$qmd), dom_txt, support_txt)),
-      design_pop, source_gap_inline(), veg_issue_chips(issue_notes))
+      design_pop, held_disclosure_tag(sp), source_gap_inline(), veg_issue_chips(issue_notes))
   })
 
   # NEON issue-log entries that cover the supported history behind growth and
   # mortality (change between censuses) at this site.
   change_issue_notes <- reactive({
-    h <- .supported_history(rv$trees, rv$plots, SP())
+    h <- .supported_history(rv$trees, rv$plots, SP(), allow_legacy = TRUE)
     veg_issue_notes(rv$site, if (is.null(h)) NULL else h$date, "change")
   })
 
@@ -1112,7 +1112,7 @@ server <- function(input, output, session) {
     n_visits <- if (is.null(hist) || !nrow(hist)) 0L else
       if ("eventID" %in% names(hist)) dplyr::n_distinct(hist$eventID) else dplyr::n_distinct(hist$date)
     trajectory <- tree_trajectory(career, id, dcol, rv$plots)
-    supported_career <- .supported_history(career, rv$plots, SZ)
+    supported_career <- .supported_history(career, rv$plots, SZ, allow_legacy = TRUE)
     basal_unaligned <- FALSE
     if (identical(SZ$channel, "shrub_sapling_basal") &&
         !is.null(supported_career) && nrow(supported_career)) {
@@ -1144,7 +1144,8 @@ server <- function(input, output, session) {
       } else {
         rep(FALSE, nrow(hist))
       }
-      comparable <- !is.na(support) & support == "sampled_with_records"
+      legacy <- !is.na(support) & support == VEG_LEGACY_SCHEMA_STATUS
+      comparable <- !is.na(support) & support %in% c("sampled_with_records", VEG_LEGACY_SCHEMA_STATUS)
       held_label <- function(value) {
         labels <- c(
           held_sampling_impractical = "Not used · sampling could not be completed",
@@ -1167,10 +1168,12 @@ server <- function(input, output, session) {
           comparable & basal_unaligned, "Measured · stems not aligned for change",
           ifelse(
             comparable & measurement_unaligned, "Measured · measurement point changed",
+          ifelse(comparable & legacy, "Comparable for change · pre-2020 schema (NEON changelog 16306)",
           ifelse(comparable, "Comparable for change",
           ifelse(
             is.na(support) | !nzchar(support), "Not used · sampling context unclear",
             held_label(support)
+          )
           )
           )
           )

@@ -48,3 +48,8 @@
   K >= 5 plot clusters and n0 >= 30, put a Korn-Graubard cluster beta interval on every printed rate (a plot
   jackknife printed 0.00 lower bounds beside observed deaths), end time at risk at the first dead census, and
   count only NEON's three dead states as deaths ("Lost, presumed dead" is censored).
+- [2026-10-26] cedar · gap · status-only DP1.10098 rows carry no growthForm; a growthForm channel filter drops deaths.
+  Carry the last form forward.
+- [2026-10-26] lead · confirmed · reviewed curation (partial events, disturbance remarks) belongs in a committed CSV
+  that pins the source uid and a SHA-256 of the remark, so a NEON re-publication stops the build instead of
+  silently changing support.

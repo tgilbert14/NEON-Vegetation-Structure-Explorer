@@ -45,7 +45,7 @@ PRODUCT = "DP1.10098.001"
 RELEASE = "RELEASE-2026"
 RELEASE_DOI = "https://doi.org/10.48443/pypa-qf12"
 CONTRACT_ID = "NEON-VST-DP1.10098.001-v3"
-AUDIT_SCHEMA = "NEON-VST-data-quality-audit-v2"
+AUDIT_SCHEMA = "NEON-VST-data-quality-audit-v3"
 SOURCE_NORMALIZATION = "portable-vectors+published-uid-byte-order-v1"
 PINNED_REPOSITORY = (
     "https://packagemanager.posit.co/cran/__linux__/jammy/2026-07-15"
@@ -154,6 +154,8 @@ HELD_COUNT_FIELDS: Tuple[str, ...] = (
     "n_held_metric_invalid",
     "n_held_identity_conflict",
     "n_held_opportunity_source_missing",
+    # Contract v3 legacy-schema state: history only, never a supported context.
+    "n_supported_legacy_schema",
 )
 HELD_STATUS_TO_FIELD: Mapping[str, str] = {
     field.removeprefix("n_"): field for field in HELD_COUNT_FIELDS
@@ -217,6 +219,7 @@ AUDIT_HEADER: Tuple[str, ...] = (
     "n_held_metric_invalid",
     "n_held_identity_conflict",
     "n_held_opportunity_source_missing",
+    "n_supported_legacy_schema",
     "held_reason_counts",
     "n_measurement_records",
     "n_live_measurement_records",
@@ -685,7 +688,7 @@ def parse_audit(path: Path, receipt: Mapping[str, str]) -> Tuple[List[Dict[str, 
     header = rows_raw[0]
     require(len(header) == len(set(header)), "data-quality audit has duplicate header names")
     require(tuple(header) == AUDIT_HEADER,
-            "data-quality audit header/order differs from the registered v2 schema")
+            "data-quality audit header/order differs from the registered v3 schema")
     data_rows = rows_raw[1:]
     require(len(data_rows) == len(SITES) * len(CHANNELS),
             f"data-quality audit must contain exactly 84 rows, found {len(data_rows)}")

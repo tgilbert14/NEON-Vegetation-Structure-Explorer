@@ -101,7 +101,7 @@ if (nrow(audit) != expected_audit_rows ||
            "raw_source_digest", "source_normalization") %in% names(audit)) ||
     anyDuplicated(actual_audit_keys) ||
     !identical(actual_audit_keys, expected_audit_keys) ||
-    any(audit$audit_schema != "NEON-VST-data-quality-audit-v2") ||
+    any(audit$audit_schema != "NEON-VST-data-quality-audit-v3") ||
     any(audit$contract_id != "NEON-VST-DP1.10098.001-v3") ||
     any(audit$raw_source_digest != receipt$raw_source_digest) ||
     any(audit$source_normalization != receipt$source_normalization)) {

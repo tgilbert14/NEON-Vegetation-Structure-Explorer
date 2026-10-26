@@ -928,4 +928,162 @@ assert_true(!any(VST_PERSONNEL_FIELDS %in% names(pii_bundle$opportunity_source))
               "remarks" %in% names(pii_bundle$opportunity_source),
             "v3 bundles drop measuredBy/recordedBy and keep every other source column")
 
+# --- Contract v3 rulings (cedar, 2026-10-26) --------------------------------
+v3_site <- function(apparent_rows, perplot_rows, curation = vst_empty_curation()) {
+  apparent_rows$uid <- sprintf("v3-apparent-%02d", seq_len(nrow(apparent_rows)))
+  if (is.null(perplot_rows$uid)) perplot_rows$uid <- sprintf("v3-opportunity-%02d", seq_len(nrow(perplot_rows)))
+  vst_build_site_from_tables("TEST", list(
+    vst_mappingandtagging = mapping,
+    vst_apparentindividual = apparent_rows,
+    vst_perplotperyear = perplot_rows
+  ), curation = curation)
+}
+v3_tree <- function(plot, event, id, date, dbh, form = "single bole tree",
+                    status = "Live", stem = "1", height = 10, basal = NA_real_) {
+  data.frame(eventID = event, plotID = plot, individualID = id, tempStemID = stem,
+             date = as.Date(date), growthForm = form, plantStatus = status,
+             stemDiameter = dbh, basalStemDiameter = basal, height = height,
+             stringsAsFactors = FALSE)
+}
+v3_event <- function(plot, event, date, sampling = "OK", collected = "allGrowthForms",
+                     trees = "Y", shrubs = "N", remarks = NA_character_) {
+  data.frame(eventID = event, plotID = plot, date = as.Date(date),
+             samplingImpractical = sampling, dataCollected = collected,
+             treesPresent = trees, shrubsPresent = shrubs,
+             totalSampledAreaTrees = 400, totalSampledAreaShrubSapling = 100,
+             remarks = remarks, stringsAsFactors = FALSE)
+}
+
+# A: legacy schema, history only. Boundary day included; one day later is not.
+legacy <- v3_site(
+  rbind(v3_tree("L1", "E19", "T1", "2019-06-01", 20),
+        v3_tree("L2", "E20", "T2", "2020-03-10", 20),
+        v3_tree("L3", "E20b", "T3", "2020-03-11", 20),
+        v3_tree("L5", "E19c", "T5", "2019-06-01", 20, stem = "1"),
+        v3_tree("L5", "E19c", "T5", "2019-06-01", 21, stem = "1")),
+  rbind(v3_event("L1", "E19", "2019-06-01", sampling = NA, collected = NA),
+        v3_event("L2", "E20", "2020-03-10", sampling = "OK", collected = NA),
+        v3_event("L3", "E20b", "2020-03-11", sampling = NA, collected = NA),
+        v3_event("L4", "E19b", "2019-06-01", sampling = NA, collected = NA),
+        v3_event("L5", "E19c", "2019-06-01", sampling = NA, collected = NA))
+)
+lp <- legacy$plots[order(legacy$plots$plotID), ]
+assert_equal(lp$tree_support, c("supported_legacy_schema", "supported_legacy_schema",
+                                "held_opportunity_unknown", "held_opportunity_unknown",
+                                "held_identity_conflict"),
+             "legacy schema: records + blank fields on or before 2020-03-10 only; no-record and conflict events keep their hold")
+assert_equal(lp$tree_support_reason[[1L]], VST_LEGACY_REASON, "legacy reason cites changelog 16306")
+assert_equal(lp$tree_support_reason[[4L]], "samplingImpractical is missing",
+             "a legacy event without records keeps today's reason")
+assert_true(!any(lp$tree_supported) && legacy$contract$index$site$primary_channel == "unavailable",
+            "legacy events never enter the snapshot, the index or the default channel")
+assert_true("supported_legacy_schema" %in% legacy$contract$support_status$held &&
+              identical(legacy$contract$support_status$history_only, "supported_legacy_schema"),
+            "contract lists the legacy state as history only")
+
+# S1: reviewed partial events.
+partial_events <- rbind(
+  v3_event("S1", "EP", "2023-06-01", collected = "partial", shrubs = "Y",
+           remarks = "incomplete sampling due to snow, shrubs and saplings not measured"))
+partial_events$uid <- "v3-opportunity-partial"
+partial_trees <- rbind(v3_tree("S1", "EP", "T9", "2023-06-01", 30),
+                       v3_tree("S1", "EP", "B9", "2023-06-01", NA, form = "single shrub",
+                               height = 1, basal = 3))
+curated <- vst_empty_curation()
+curated$partial <- data.frame(
+  site = "TEST", plotID = "S1", eventID = "EP", opportunity_source_uid = "v3-opportunity-partial",
+  dataCollected = "partial", remarks_sha256 = vst_remarks_sha256(partial_events$remarks),
+  rule_id = "VST-PARTIAL-02", tree_complete = TRUE, shrub_complete = FALSE,
+  reviewed_by = "fixture", reviewed_on = "2026-10-26", stringsAsFactors = FALSE)
+s1 <- v3_site(partial_trees, partial_events, curated)
+assert_equal(c(s1$plots$tree_support, s1$plots$shrub_support),
+             c("sampled_with_records", "held_opportunity_unknown"),
+             "S1: a channel reviewed complete is supported; the other stays held")
+assert_equal(s1$plots$tree_support_reason,
+             "supported all-growth-forms event with measurement records; dataCollected=partial reviewed as complete for this channel (VST-PARTIAL-02)",
+             "S1 reason cites the rule")
+assert_true(isTRUE(s1$plots$tree_channel_complete) && isFALSE(s1$plots$shrub_channel_complete) &&
+              identical(s1$plots$partial_event_rule_id, "VST-PARTIAL-02"),
+            "S1 flags are carried on plots")
+assert_error(v3_site(partial_trees, partial_events), "has no reviewed row",
+             "S1: an unreviewed partial event stops the build")
+stale <- curated
+stale$partial$remarks_sha256 <- vst_remarks_sha256("edited remark")
+assert_error(v3_site(partial_trees, partial_events, stale), "is stale",
+             "S1: an edited remark stops the build")
+orphan <- curated
+orphan$partial$eventID <- "ELSEWHERE"
+assert_error(v3_site(partial_trees, partial_events, orphan), "match no dataCollected=partial event",
+             "S1: a reviewed row with no partial event stops the build")
+
+# S2: disturbance labels never change support.
+burn_events <- rbind(v3_event("D1", "EB", "2023-06-01", remarks = "Controlled burn 20230301"),
+                     v3_event("D2", "EB", "2023-06-01", remarks = "plot hazardous due to wildfire activity"),
+                     v3_event("D3", "EB", "2023-06-01", remarks = "Plot burned"))
+burn_events$uid <- c("v3-burn-1", "v3-burn-2", "v3-burn-3")
+burn_trees <- rbind(v3_tree("D1", "EB", "T1", "2023-06-01", 20, status = "Lost, burned"),
+                    v3_tree("D1", "EB", "T2", "2023-06-01", 20),
+                    v3_tree("D2", "EB", "T3", "2023-06-01", 20, status = "Removed"),
+                    v3_tree("D3", "EB", "T4", "2023-06-01", 20))
+labelled <- vst_empty_curation()
+labelled$disturbance <- data.frame(
+  site = "TEST", plotID = c("D1", "D2"), eventID = "EB", source_uid = c("v3-burn-1", "v3-burn-2"),
+  remarks_sha256 = vst_remarks_sha256(burn_events$remarks[1:2]),
+  classes = c("burn_prescribed", "none"), timing = c("before", "unstated"),
+  reviewed_by = "fixture", reviewed_on = "2026-10-26", stringsAsFactors = FALSE)
+s2 <- withCallingHandlers(v3_site(burn_trees, burn_events, labelled), warning = function(w) {
+  assert_true(grepl("D3 EB", conditionMessage(w), fixed = TRUE), "S2 warns on an unreviewed hit")
+  invokeRestart("muffleWarning")
+})
+s2p <- s2$plots[order(s2$plots$plotID), ]
+assert_equal(s2p$disturbance_classes, c("burn_prescribed", NA, NA), "S2 labels; 'none' and unreviewed stay blank")
+assert_equal(s2p$disturbance_curation_id, c("vst-event-disturbance-v1", "vst-event-disturbance-v1", NA),
+             "S2 curation id marks reviewed events, including reviewed exclusions")
+assert_equal(c(s2p$n_status_lost_burned, s2p$n_status_removed), c(1L, 0L, 0L, 0L, 1L, 0L),
+             "S2 status counts come from the rows")
+assert_equal(s2p$tree_support, rep("sampled_with_records", 3), "S2 never changes support")
+
+# S4 and C1: superseded rows, split visits, duplicates, and parent tags.
+s4 <- v3_site(
+  rbind(v3_tree("R1", "ER", "T1", "2023-06-01", 20, stem = "1"),
+        v3_tree("R1", "ER", "T1", "2023-06-05", 21, stem = "2"),
+        v3_tree("R1", "ER", "S1", "2023-06-01", NA, form = "small shrub", stem = "1", basal = 2, height = 1),
+        v3_tree("R1", "ER", "S1", "2023-06-03", NA, form = "small shrub", stem = "2", basal = 2, height = 1),
+        v3_tree("R1", "ER", "S1", "2023-06-01", NA, form = "small shrub", stem = "3", basal = 2, height = 1),
+        v3_tree("R1", "ER", "S1", "2023-06-03", NA, form = "small shrub", stem = "3", basal = 2, height = 1),
+        v3_tree("R1", "ER", "T2", "2016-06-01", 30, stem = "1"),
+        v3_tree("R1", "ER", "T2", "2016-06-01", 30, stem = "2"),
+        v3_tree("R1", "ER", "M7", "2023-06-01", 40, form = "multi-bole tree"),
+        v3_tree("R1", "ER", "M7a", "2023-06-01", 12, form = "multi-bole tree"),
+        v3_tree("R1", "ER", "X5b", "2023-06-01", 15, form = "multi-bole tree")),
+  rbind(v3_event("R1", "ER", "2023-06-05", shrubs = "Y"))
+)
+st <- s4$trees
+assert_equal(st$superseded_in_event, c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE),
+             "S4a: an earlier same-event row is superseded; a split-visit shrub stem is kept; a remeasured stem is not")
+assert_equal(st$duplicate_of_uid, c(rep(NA, 7), "v3-apparent-07", NA, NA, NA),
+             "S4b: an identical tree-form copy points at the kept uid")
+assert_equal(st$plant_id, c("T1", "T1", "S1", "S1", "S1", "S1", "T2", "T2", "M7", "M7", "X5b"),
+             "C1: a lettered bole with its parent in the plot counts with the parent; an orphan letter does not")
+tree_summary <- s4$contract$channel_summary$tree_dbh
+assert_equal(c(tree_summary$n_stems, tree_summary$n_individuals), c(5L, 4L),
+             "snapshot skips superseded and duplicate rows and counts plants by plant_id")
+
+# C4: tree DBH is the default when trees are recorded in >= 5 plots and in at
+# least half of the supported tree plots, even when shrubs are in more plots.
+c4_site <- function(n_tree_plots) {
+  plots_n <- 10L
+  ids <- sprintf("C%02d", seq_len(plots_n))
+  events <- do.call(rbind, lapply(seq_len(plots_n), function(i)
+    v3_event(ids[[i]], "EC", "2023-06-01", trees = if (i <= n_tree_plots) "Y" else "N", shrubs = "Y")))
+  rows <- do.call(rbind, c(
+    lapply(seq_len(n_tree_plots), function(i) v3_tree(ids[[i]], "EC", paste0("T", i), "2023-06-01", 25)),
+    lapply(seq_len(plots_n), function(i) v3_tree(ids[[i]], "EC", paste0("S", i), "2023-06-01", NA,
+                                                  form = "single shrub", basal = 3, height = 1))
+  ))
+  v3_site(rows, events)$contract$index$site$primary_channel
+}
+assert_equal(c(c4_site(5L), c4_site(4L)), c("tree_dbh", "shrub_sapling_basal"),
+             "C4: five tree plots and half the supported tree plots make tree DBH the default")
+
 cat("PASS: event-keyed bundle contract fixtures\n")

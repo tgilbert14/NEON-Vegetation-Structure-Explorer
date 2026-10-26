@@ -60,10 +60,11 @@ v3 changes the rules below. Every other rule in this contract is unchanged.
    identities, about 430 unique values) are dropped from `opportunity_source`
    and from the app's zip export. The app never used them.
 4. **Mortality copy.** When annual mortality is unavailable the banner states
-   the plot count and the real reason: how many plots have one supported
-   census, how many record-bearing plot-censuses predate NEON's 2020-03-10
-   `samplingImpractical` field (changelog 16306) and are held, not zero, and
-   how many are held for other reasons ("mostly" only for a true majority).
+   the plot count and the real reason: how many plots have one usable census
+   and how many are held for other reasons ("mostly" only for a true
+   majority). Under item 7 it also says how many pre-March-2020 plot-censuses
+   with records feed change under NEON's legacy-schema assumption (changelog
+   16306) and how many without records stay held.
 5. **Statistics (hk, 2026-10-21).** Mortality, growth, size classes, QMD and
    the compare highlight follow the rules in "Snapshot and sampled-plot
    estimator" and "Change and status" below: explicit dead states, time at risk
@@ -76,11 +77,89 @@ v3 changes the rules below. Every other rule in this contract is unchanged.
    curated NEON issue-log entries (`R/neon_issue_log.R`) appear beside the
    estimates they qualify and in the plot export (`issue_ids`).
 
-**Follow-up, not in v3:** a `supported_legacy_schema` state for pre-2020
-events (trigger: `samplingImpractical` missing and event date before
-2020-03-10), admitted only by `tree_growth` and `stand_mortality` and labelled
-"legacy schema: sampling opportunity assumed"; stand snapshots stay held.
-cedar endorses it; the owner decides.
+### Contract v3 additions (cedar's rulings, 2026-10-26)
+
+7. **Legacy schema, change history only.** An event on or before 2020-03-10
+   (the end of NEON changelog 16306's range, inclusive) whose
+   `samplingImpractical` is blank or OK, whose `dataCollected` is blank or
+   `allGrowthForms`, and where at least one of the two is blank, keeps the
+   area, presence-record, identity and metric checks in that order. If it has
+   records and passes them it becomes `supported_legacy_schema`, reason
+   "legacy schema before 2020-03-10: sampling opportunity assumed (NEON
+   changelog 16306)". An event with no records keeps today's
+   `held_opportunity_unknown` state and reason: no legacy absences. The state
+   is not in the supported set. Only `.supported_history(allow_legacy = TRUE)`
+   admits it, in growth, mortality, plant careers and the QC checks; the
+   snapshot, stand, size classes, species, exports, `status_summary`, the
+   indexes and the default channel never do. The audit counts it in
+   `n_supported_legacy_schema` (audit schema v3).
+8. **Reviewed partial events (S1).** `scripts/curation/vst_partial_event_completeness.csv`
+   holds one reviewed row for each of the 57 `dataCollected = partial` events,
+   with a per-channel verdict read from the event remark (rules
+   `VST-PARTIAL-01` to `-04` in `scripts/curation/vst_curation.R`): 50
+   JERC/OSBS events that skipped only ferns, palms, cacti or yucca are complete
+   for both woody channels; YELL_045/046/047 (snow) for trees only; UNDE_050
+   for shrubs only; HEAL_045, TREE_043 and WREF_010 for neither. A complete
+   channel reads the event as all-growth-forms and its reason cites the rule.
+   Plots carry `partial_event_rule_id`, `tree_channel_complete` and
+   `shrub_channel_complete`. Each row pins the source uid and a SHA-256 of the
+   remark; the build stops on a missing, stale or orphan row.
+9. **Disturbance labels (S2).** `scripts/curation/vst_event_disturbance.csv`
+   labels 40 of the 47 events whose remark matches the disturbance regex; the
+   other 7 are reviewed exclusions (`none`: six SOAP access remarks and
+   JERC_048 2020, "not yet burned"). Classes: `fire_wild`, `burn_prescribed`,
+   `fire_unspecified` (a fire with no word on whether it was prescribed, a
+   lead addition to cedar's six), `wind_hurricane`, `flood`,
+   `harvest_logging`, `brush_mowing`. Plots carry `disturbance_classes`,
+   `disturbance_curation_id`, `n_status_lost_burned` and `n_status_removed`.
+   A label never changes support; an unreviewed regex hit only warns.
+10. **Row exclusions (S4).** `superseded_in_event`: within plotID x eventID x
+    individualID, a row dated before the individual's latest date in the event
+    (per individual, because tempStemIDs are reassigned each visit), except a
+    small-tree, sapling or shrub row whose tempStemID is absent from the latest
+    date and is at most 3 days earlier (one measurement spread over days).
+    `duplicate_of_uid`: tree-form copies of one individual, event and date that
+    repeat growthForm, plantStatus, stemDiameter and height (missing equals
+    missing) point at the copy first in uid byte order. The rows stay in the
+    bundle and exports and in every support count; the snapshot and the change
+    history skip them.
+11. **Plant identity (C1).** `plant_id` is the parent tag of a lettered
+    individual that has a tree-form row and whose parent tag exists in the
+    same plot; otherwise the individualID. Plant counts (`n_individuals`,
+    `n_trees`, taxon individuals, live plants), status and mortality use
+    plotID + `plant_id`; growth stays per bole (`plant_key`). For mortality a
+    plant is live at an event if any of its rows is live, and dead if none is
+    live and at least one is an explicit dead state.
+12. **Measuring point (C2).** For each consecutive pair of a bole's events the
+    point moved if the later row's `changedMeasurementLocation` is present and
+    not `noChange`; with no code, if the measurement height changed by more
+    than 5 cm. The shrub channel uses `basalStemDiameterMsrmntHeight` the same
+    way. Moved pairs stay out of growth.
+13. **Default channel (C4).** Tree DBH is the presentation default whenever
+    trees are recorded in at least 5 latest supported plots and in at least
+    half of the supported tree plots; otherwise the earlier rule applies. The
+    builder and the parity mirror apply the same rule; channels stay separate.
+14. **Held plots and cacti (C5, C6).** The density banner says how many of the
+    site's plots feed the number and why the rest are held, for example
+    "Basal cover is from 17 of SRER's 38 plots; the other 21 are held because
+    NEON published two different records for one stem, at 47 stems. Held
+    plots are not zeros." Sites whose plots record cacti, yuccas or ocotillos
+    get one line with those plot counts and the note that NEON measures them
+    in a table this app does not load.
+15. **Status-only rows (C7).** Rows that carry only a status have no
+    growthForm (about 90% of `Downed` rows), so a channel filter dropped those
+    deaths. Change history and the snapshot fill a blank growthForm from the
+    same bole's most recent earlier row; never from a later one.
+
+**Deferred, with the unblocker.** S3 (a woody "below 10% cover" state): no
+woody field records it, `targetTaxaPresent = N` events are already held, and
+the app never reads that field; it waits for NEON to publish a woody "criteria
+not met" option or the SVY cover-survey records (NEON.DOC.005023). S5 (a
+`small_tree_dbh` channel: form "small tree", `stemDiameter` > 0, area
+`totalSampledAreaShrubSapling`, the shrub channel's joint presence rule,
+records from `small_tree_records`): the spec is ready and waits for the owner
+to approve a third channel in the picker, the search grid (126 rows) and the
+Atlas.
 
 This is the exact Pass 4 implementation contract. Candidate artifact
 `vegetation-release-candidate-a8ccb56e95f643ba9343ca13d176782ebc050017-29715249829`

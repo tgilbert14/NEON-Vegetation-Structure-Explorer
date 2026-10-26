@@ -11,7 +11,18 @@
 
 ## Science contract status
 
-Filled in by the lead.
+- Contract `NEON-VST-DP1.10098.001-v3` (PR #19): multi-bole secondary boles
+  under Option A, the shared size screen, no personnel fields, the hk
+  statistics rules, QC evidence and the NEON issue log, and cedar's
+  2026-10-26 rulings (legacy-schema history state, reviewed partial events,
+  disturbance labels, superseded and duplicate rows, parent-tag plant
+  identity, the 5 cm measuring-point rule, the tree-first default channel,
+  held-plot and cacti disclosures, status-only rows). Every rule and its
+  numbers: [SCIENCE-CONTRACT.md](SCIENCE-CONTRACT.md) items 1 to 15.
+- The family on `main` stays v2 until #19 merges with its promoted official
+  v3 candidate.
+- Deferred with a named unblocker: S3 (a woody "below 10% cover" state) and
+  S5 (a `small_tree_dbh` channel); see the contract's "Deferred" paragraph.
 
 ## Deliberately deferred
 
@@ -54,7 +65,23 @@ Filled in by the lead.
 
 ## Owner decisions
 
-- (to be added by the lead)
+- **Option B for multi-bole trees.** v3 ships Option A (secondary boles of
+  2.5 to 10 cm lift the hold but stay out of basal area, density and QMD).
+  Option B would count them, change every forest basal area, and need the
+  Atlas bundle regenerated.
+- **A third `small_tree_dbh` channel (S5).** Spec ready; needs the picker, the
+  search grid (126 rows) and the Atlas to accept a third channel.
+- **Curation sign-off (S1, S2).** `scripts/curation/*.csv` rows were reviewed
+  by the cedar and lead agents (`reviewed_by = agent:cedar+lead`). A person
+  should confirm the 57 partial-event verdicts and the 47 disturbance labels,
+  in particular the 9 `fire_unspecified` rows.
+- **measuredBy / recordedBy in git history.** v3 stops publishing them; they
+  remain in earlier commits of `data/sites/*.rds`. Rewriting history is the
+  owner's call.
+- **Atlas adapter.** The Atlas Veg adapter must accept
+  `supported_legacy_schema`, the curated partial events, `plant_id` and the
+  row exclusions before it reads a v3 family (note left for cass).
+- **Branch protection and the CARTO key** stay owner settings.
 
 ## Post-merge steps
 

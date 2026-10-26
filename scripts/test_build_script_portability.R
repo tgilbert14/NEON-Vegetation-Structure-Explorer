@@ -48,7 +48,7 @@ required <- list(
   ),
   "scripts/write_data_quality_audit.R" = c(
     "VST_SITE_DIR", "VST_DATA_QUALITY_AUDIT_OUT",
-    "vegetation-data-quality-audit.csv", "NEON-VST-data-quality-audit-v2",
+    "vegetation-data-quality-audit.csv", "NEON-VST-data-quality-audit-v3",
     "held_reason_counts", "dataQF",
     "held_identity_conflict", "protocol_key_conflict",
     "held_opportunity_source_missing", "opportunity_source_missing",

@@ -17,9 +17,12 @@ VST_HELD <- c(
   "held_sampling_impractical", "held_dendrometer_only", "held_missing_area",
   "held_opportunity_unknown", "held_presence_record_conflict",
   "held_metric_invalid", "held_identity_conflict",
-  "held_opportunity_source_missing"
+  "held_opportunity_source_missing", "supported_legacy_schema"
 )
 VST_STATUS <- c(VST_SUPPORTED, VST_HELD)
+VST_LEGACY_END <- as.Date("2020-03-10")
+VST_LEGACY_REASON <-
+  "legacy schema before 2020-03-10: sampling opportunity assumed (NEON changelog 16306)"
 VST_CONTEXT_DERIVED_FIELDS <- c(
   "plotID", "eventID", "opportunity_source_uid",
   "opportunity_source_record_count", "opportunity_key_conflict",
@@ -31,7 +34,9 @@ VST_CONTEXT_DERIVED_FIELDS <- c(
   "shrub_invalid_metric_records", "tree_identity_conflict_keys",
   "shrub_identity_conflict_keys", "tree_support", "tree_support_reason",
   "shrub_support", "shrub_support_reason", "tree_supported",
-  "shrub_supported", "event_key"
+  "shrub_supported", "event_key", "partial_event_rule_id",
+  "tree_channel_complete", "shrub_channel_complete", "disturbance_classes",
+  "disturbance_curation_id", "n_status_lost_burned", "n_status_removed"
 )
 
 problems <- character(0)
@@ -206,12 +211,49 @@ expected_support_decision <- function(area, sampling_impractical, data_collected
                                       presence, records, invalid_metric,
                                       identity_conflicts,
                                       opportunity_conflict,
-                                      opportunity_source_missing) {
+                                      opportunity_source_missing,
+                                      event_date, curation_note) {
   sampling <- gsub("[^a-z]", "", tolower(trimws(as.character(sampling_impractical))))
   collected <- gsub("[^a-z]", "", tolower(trimws(as.character(data_collected))))
+  sampling_blank <- is.na(sampling) | sampling == ""
+  collected_blank <- is.na(collected) | collected == ""
+  legacy_event <- date_number(event_date) <= as.numeric(VST_LEGACY_END) &
+    (sampling_blank | sampling %in% "ok") &
+    (collected_blank | collected %in% "allgrowthforms") &
+    (sampling_blank | collected_blank)
+  legacy_event[is.na(legacy_event)] <- FALSE
   status <- reason <- rep(NA_character_, length(area))
   for (i in seq_along(area)) {
-    if (isTRUE(opportunity_source_missing[[i]])) {
+    if (!isTRUE(opportunity_source_missing[[i]]) &&
+        !isTRUE(opportunity_conflict[[i]]) &&
+        legacy_event[[i]] && records[[i]] > 0L) {
+      # Legacy schema (contract v3): area, presence, identity and metric
+      # checks still hold the event; otherwise it is history-only.
+      if (!is.finite(area[[i]]) || area[[i]] <= 0) {
+        status[[i]] <- "held_missing_area"
+        reason[[i]] <- "event-specific total sampled area is missing or non-positive"
+      } else if (identical(presence[[i]], "absent")) {
+        status[[i]] <- "held_presence_record_conflict"
+        reason[[i]] <- "presence says absent but measurement records exist"
+      } else if (is.finite(identity_conflicts[[i]]) && identity_conflicts[[i]] > 0L) {
+        status[[i]] <- "held_identity_conflict"
+        reason[[i]] <- sprintf(
+          "%d channel stem locator%s violate%s plotID + eventID + individualID + tempStemID uniqueness",
+          identity_conflicts[[i]], if (identity_conflicts[[i]] == 1L) "" else "s",
+          if (identity_conflicts[[i]] == 1L) "s" else ""
+        )
+      } else if (invalid_metric[[i]] > 0L) {
+        status[[i]] <- "held_metric_invalid"
+        reason[[i]] <- sprintf(
+          "%d live channel record%s lack%s a finite positive threshold-compatible diameter",
+          invalid_metric[[i]], if (invalid_metric[[i]] == 1L) "" else "s",
+          if (invalid_metric[[i]] == 1L) "s" else ""
+        )
+      } else {
+        status[[i]] <- "supported_legacy_schema"
+        reason[[i]] <- VST_LEGACY_REASON
+      }
+    } else if (isTRUE(opportunity_source_missing[[i]])) {
       status[[i]] <- "held_opportunity_source_missing"
       reason[[i]] <- paste(
         "no published vst_perplotperyear row for this plotID + eventID;",
@@ -273,6 +315,9 @@ expected_support_decision <- function(area, sampling_impractical, data_collected
       status[[i]] <- "held_opportunity_unknown"
       reason[[i]] <- "no records and presence does not establish sampled absence"
     }
+    if (!is.na(curation_note[[i]])) {
+      reason[[i]] <- paste0(reason[[i]], "; ", curation_note[[i]])
+    }
   }
   data.frame(status = status, reason = reason, stringsAsFactors = FALSE)
 }
@@ -310,6 +355,162 @@ read_file_bytes <- function(path) {
   readBin(path, what = "raw", n = size)
 }
 
+# --- Contract v3 independent recomputes (cedar's 2026-10-26 rulings) --------
+# These restate each rule from its prose, in a different shape from the
+# builder, so a builder bug cannot pass by agreeing with itself.
+tree_forms <- c("single bole tree", "multi-bole tree")
+split_visit_forms <- c("small tree", "sapling", "single shrub", "small shrub")
+
+# C1: per plot, a lettered individual with a tree-form row whose parent tag is
+# also an individual in that plot counts with the parent.
+expected_plant_id <- function(trees) {
+  id <- as.character(trees$individualID)
+  out <- id
+  form <- tolower(trimws(as.character(trees$growthForm)))
+  for (rows in split(seq_len(nrow(trees)), as.character(trees$plotID))) {
+    ids <- unique(id[rows])
+    with_tree_form <- unique(id[rows][form[rows] %in% tree_forms])
+    for (candidate in with_tree_form[grepl("[A-Za-z]$", with_tree_form)]) {
+      parent <- substr(candidate, 1L, nchar(candidate) - 1L)
+      if (parent %in% ids) out[rows][id[rows] == candidate] <- parent
+    }
+  }
+  out
+}
+
+# S4 (a): per individual and event, rows dated before the latest date are
+# superseded, unless a small-tree/sapling/shrub stem absent from the latest
+# date sits at most 3 days earlier.
+expected_superseded <- function(trees) {
+  out <- rep(FALSE, nrow(trees))
+  day <- date_number(trees$date)
+  form <- tolower(trimws(as.character(trees$growthForm)))
+  stem <- as.character(trees$tempStemID)
+  groups <- split(seq_len(nrow(trees)),
+                  release_key(trees, c("plotID", "eventID", "individualID")))
+  for (rows in groups[lengths(groups) > 1L]) {
+    d <- day[rows]
+    if (!any(is.finite(d))) next
+    last <- max(d[is.finite(d)])
+    last_stems <- stem[rows][is.finite(d) & d == last]
+    for (j in which(is.finite(d) & d < last)) {
+      split_visit <- form[rows[j]] %in% split_visit_forms &&
+        !(stem[rows[j]] %in% last_stems) && last - d[j] <= 3
+      out[rows[j]] <- !split_visit
+    }
+  }
+  out
+}
+
+# S4 (b): tree-form copies of one individual, event and date with identical
+# growthForm, plantStatus, stemDiameter and height point at the copy first in
+# source_uid byte order.
+expected_duplicate_of <- function(trees) {
+  out <- rep(NA_character_, nrow(trees))
+  form <- tolower(trimws(as.character(trees$growthForm)))
+  rows <- which(form %in% tree_forms)
+  if (!length(rows)) return(out)
+  key <- release_key(trees[rows, , drop = FALSE], c(
+    "plotID", "eventID", "individualID", "date", "growthForm", "plantStatus",
+    "stemDiameter", "height"
+  ))
+  for (group in split(rows, key)) {
+    if (length(group) < 2L) next
+    uid <- as.character(trees$source_uid[group])
+    keep <- uid[order(vst_utf8_byte_key(uid), method = "radix")][[1L]]
+    out[group[uid != keep]] <- keep
+  }
+  out
+}
+
+# Reviewed curation files, read without the builder's reader.
+read_curation_csv <- function(name, fields) {
+  path <- file.path("scripts/curation", name)
+  if (!file.exists(path)) {
+    note(sprintf("curation file %s is missing", path))
+    return(NULL)
+  }
+  table <- utils::read.csv(path, colClasses = "character", na.strings = character(),
+                           check.names = FALSE, stringsAsFactors = FALSE)
+  if (!identical(names(table), fields)) {
+    note(sprintf("curation file %s has unexpected columns", path))
+    return(NULL)
+  }
+  table$sha_file <- digest::digest(path, algo = "sha256", file = TRUE)
+  table
+}
+partial_curation <- read_curation_csv("vst_partial_event_completeness.csv", c(
+  "site", "plotID", "eventID", "opportunity_source_uid", "dataCollected",
+  "remarks_sha256", "rule_id", "tree_complete", "shrub_complete", "reviewed_by",
+  "reviewed_on"
+))
+disturbance_curation <- read_curation_csv("vst_event_disturbance.csv", c(
+  "site", "plotID", "eventID", "source_uid", "remarks_sha256", "classes",
+  "timing", "reviewed_by", "reviewed_on"
+))
+remark_sha <- function(remarks) {
+  remarks <- as.character(remarks)
+  remarks[is.na(remarks)] <- ""
+  vapply(remarks, digest::digest, character(1), algo = "sha256",
+         serialize = FALSE, USE.NAMES = FALSE)
+}
+
+# Independent tallest/biggest oracle: rows of the latest supported event per
+# plot, screened one candidate at a time from the largest down with the size
+# rules restated from R/size_plausibility.R (spike against the plant's other
+# events, height-to-DBH ratio, tall thin shrub, 100 m cap).
+oracle_extreme <- function(trees, plots, channel, measure) {
+  forms <- if (channel == "tree") tree_forms else c("single shrub", "small shrub", "sapling")
+  status <- as.character(plots[[paste0(channel, "_support")]])
+  supported <- plots[status %in% VST_SUPPORTED, , drop = FALSE]
+  if (!nrow(supported)) return(NA_real_)
+  supported <- supported[order(as.character(supported$plotID),
+                               -date_number(supported$date),
+                               -xtfrm(as.character(supported$eventID))), , drop = FALSE]
+  latest <- supported[!duplicated(as.character(supported$plotID)), , drop = FALSE]
+  form <- tolower(trimws(as.character(trees$growthForm)))
+  family <- ifelse(form %in% tree_forms, "tree",
+                   ifelse(form %in% c("single shrub", "small shrub", "sapling"), "shrub", "other"))
+  height <- suppressWarnings(as.numeric(trees$height))
+  dbh <- suppressWarnings(as.numeric(trees$stemDiameter))
+  basal <- suppressWarnings(as.numeric(trees$basalStemDiameter))
+  own_diameter <- ifelse(family == "tree", dbh, ifelse(family == "shrub", basal, NA_real_))
+  minimum <- if (channel == "tree") 10 else 0
+  in_snapshot <- release_key(trees, c("plotID", "eventID")) %in%
+    release_key(latest, c("plotID", "eventID")) & form %in% forms &
+    trees$live %in% TRUE & is.finite(own_diameter) & own_diameter > 0 &
+    own_diameter >= minimum & !(trees$superseded_in_event %in% TRUE) &
+    is.na(trees$duplicate_of_uid)
+  value <- if (measure == "height") height else own_diameter
+  candidates <- which(in_snapshot & is.finite(value))
+  if (!length(candidates)) return(NA_real_)
+  intact <- trees$live %in% TRUE &
+    !grepl("broken|physically damaged", as.character(trees$plantStatus), ignore.case = TRUE)
+  plant <- paste(trees$plotID, trees$individualID, family, sep = "\r")
+  spikes <- function(i) {
+    eligible <- if (measure == "height") family != "other" & intact else family != "other"
+    if (!eligible[[i]] || !(value[[i]] > 0)) return(FALSE)
+    others <- which(plant == plant[[i]] & trees$eventID != trees$eventID[[i]] &
+                      eligible & is.finite(value) & value > 0)
+    if (!length(others)) return(FALSE)
+    reference <- stats::median(tapply(value[others], as.character(trees$eventID[others]), max))
+    gap <- 5
+    value[[i]] > 3 * reference && value[[i]] - reference > gap
+  }
+  for (i in candidates[order(-value[candidates])]) {
+    ratio <- family[[i]] == "tree" && is.finite(height[[i]]) && is.finite(dbh[[i]]) &&
+      dbh[[i]] >= 10 && height[[i]] / dbh[[i]] > 2.5
+    fails <- ratio || spikes(i)
+    if (measure == "height") {
+      fails <- fails || (family[[i]] == "shrub" && height[[i]] > 10 &&
+                           (!is.finite(basal[[i]]) || basal[[i]] < 5)) ||
+        height[[i]] > 100
+    }
+    if (!fails) return(value[[i]])
+  }
+  NA_real_
+}
+
 expected <- sort(VST_EXPECTED_SITES)
 site_files <- list.files("data/sites", pattern = "[.]rds$", full.names = TRUE)
 site_codes <- sort(sub("[.]rds$", "", basename(site_files)))
@@ -335,7 +536,8 @@ v2_tree_required <- c(
   "source_uid", "protocol_stem_key", "protocol_key_group_n",
   "protocol_key_conflict", "opportunity_source_missing", "plant_key", "event_key",
   "mapping_source_uid", "mappingMatched", "taxonID", "scientificName",
-  "taxon_label", "taxon_resolution"
+  "taxon_label", "taxon_resolution", "plant_id", "superseded_in_event",
+  "duplicate_of_uid", "height"
 )
 v2_plot_required <- c(
   "opportunity_source_uid", "opportunity_source_record_count",
@@ -350,7 +552,9 @@ v2_plot_required <- c(
   "shrub_invalid_metric_records", "tree_identity_conflict_keys",
   "shrub_identity_conflict_keys", "tree_support", "tree_support_reason",
   "shrub_support", "shrub_support_reason", "tree_supported",
-  "shrub_supported", "event_key"
+  "shrub_supported", "event_key", "partial_event_rule_id",
+  "tree_channel_complete", "shrub_channel_complete", "disturbance_classes",
+  "disturbance_curation_id", "n_status_lost_burned", "n_status_removed"
 )
 
 bundles <- list()
@@ -427,8 +631,20 @@ for (path in site_files) {
       if (!identical(as.character(contract$event_key), c("plotID", "eventID")))
         note(sprintf("%s contract changes the opportunity-event key", site))
       if (!setequal(as.character(contract$support_status$supported), VST_SUPPORTED) ||
-          !setequal(as.character(contract$support_status$held), VST_HELD))
+          !setequal(as.character(contract$support_status$held), VST_HELD) ||
+          !identical(as.character(contract$support_status$history_only),
+                     "supported_legacy_schema"))
         note(sprintf("%s contract support vocabulary differs from v3", site))
+      if (!identical(as.character(contract$plant_id_key), c("plotID", "plant_id")) ||
+          !identical(as.character(contract$legacy_schema$on_or_before), "2020-03-10") ||
+          !identical(as.character(contract$legacy_schema$reason), VST_LEGACY_REASON))
+        note(sprintf("%s contract plant key or legacy-schema terms differ from v3", site))
+      if (is.null(partial_curation) || is.null(disturbance_curation) ||
+          !identical(as.character(contract$curation$partial_event_completeness$sha256),
+                     partial_curation$sha_file[[1L]]) ||
+          !identical(as.character(contract$curation$event_disturbance$sha256),
+                     disturbance_curation$sha_file[[1L]]))
+        note(sprintf("%s was not built from the committed curation files", site))
       embedded_site <- contract$index$site %||% NULL
       if (!is.data.frame(embedded_site) || nrow(embedded_site) != 1L ||
           !identical(as.character(embedded_site$site), site) ||
@@ -473,6 +689,12 @@ for (path in site_files) {
           site, paste(derivation_problems, collapse = ", ")
         ))
       }
+      if (!identical(as.character(trees$plant_id), expected_plant_id(trees)))
+        note(sprintf("%s plant_id differs from the parent-tag rule", site))
+      if (!identical(as.logical(trees$superseded_in_event), expected_superseded(trees)))
+        note(sprintf("%s superseded_in_event differs from the latest-date rule", site))
+      if (!identical(as.character(trees$duplicate_of_uid), expected_duplicate_of(trees)))
+        note(sprintf("%s duplicate_of_uid differs from the identical-row rule", site))
     }
     if (any(!nonblank(opportunity_source$uid)) ||
         anyDuplicated(as.character(opportunity_source$uid)) ||
@@ -694,6 +916,58 @@ for (path in site_files) {
                    recomputed$shrub$presence))
       note(sprintf("%s shrub presence state differs from published opportunity fields", site))
 
+    # S1 and S2 cross-checks against the committed curation files.
+    event_id <- paste(plots$plotID, plots$eventID, sep = "\r")
+    source_rows <- !(plots$opportunity_source_missing %in% TRUE)
+    selected_remarks <- if ("remarks" %in% names(opportunity_source)) {
+      as.character(opportunity_source$remarks)[
+        match(as.character(plots$opportunity_source_uid),
+              as.character(opportunity_source$uid))
+      ]
+    } else rep(NA_character_, nrow(plots))
+    expected_rule <- rep(NA_character_, nrow(plots))
+    expected_tree_complete <- expected_shrub_complete <- rep(FALSE, nrow(plots))
+    if (!is.null(partial_curation)) {
+      rows <- partial_curation[partial_curation$site == site, , drop = FALSE]
+      at <- match(paste(rows$plotID, rows$eventID, sep = "\r"), event_id)
+      partial_events <- source_rows &
+        tolower(trimws(as.character(plots$dataCollected))) %in% "partial"
+      if (anyNA(at) || !setequal(at, which(partial_events)) ||
+          !identical(rows$opportunity_source_uid, as.character(plots$opportunity_source_uid[at])) ||
+          !identical(rows$remarks_sha256, remark_sha(selected_remarks[at])))
+        note(sprintf("%s partial-event curation rows are missing, stale or orphaned", site))
+      ok_at <- !is.na(at)
+      expected_rule[at[ok_at]] <- rows$rule_id[ok_at]
+      expected_tree_complete[at[ok_at]] <- rows$tree_complete[ok_at] == "TRUE"
+      expected_shrub_complete[at[ok_at]] <- rows$shrub_complete[ok_at] == "TRUE"
+    }
+    if (!identical(as.character(plots$partial_event_rule_id), expected_rule) ||
+        !identical(as.logical(plots$tree_channel_complete), expected_tree_complete) ||
+        !identical(as.logical(plots$shrub_channel_complete), expected_shrub_complete))
+      note(sprintf("%s partial-event curation columns differ from the committed file", site))
+    expected_classes <- expected_curation <- rep(NA_character_, nrow(plots))
+    if (!is.null(disturbance_curation)) {
+      rows <- disturbance_curation[disturbance_curation$site == site, , drop = FALSE]
+      at <- match(paste(rows$plotID, rows$eventID, sep = "\r"), event_id)
+      if (anyNA(at) ||
+          !identical(rows$source_uid, as.character(plots$opportunity_source_uid[at])) ||
+          !identical(rows$remarks_sha256, remark_sha(selected_remarks[at])))
+        note(sprintf("%s disturbance curation rows are stale or orphaned", site))
+      ok_at <- !is.na(at)
+      expected_curation[at[ok_at]] <- "vst-event-disturbance-v1"
+      expected_classes[at[ok_at]] <- ifelse(rows$classes[ok_at] == "none", NA_character_,
+                                            rows$classes[ok_at])
+    }
+    if (!identical(as.character(plots$disturbance_classes), expected_classes) ||
+        !identical(as.character(plots$disturbance_curation_id), expected_curation))
+      note(sprintf("%s disturbance labels differ from the committed file", site))
+    status_text <- tolower(trimws(as.character(trees$plantStatus)))
+    if (!identical(as.integer(plots$n_status_lost_burned),
+                   event_counts(trees, plots, status_text == "lost, burned")) ||
+        !identical(as.integer(plots$n_status_removed),
+                   event_counts(trees, plots, status_text == "removed")))
+      note(sprintf("%s lost-burned or removed status counts differ from preserved rows", site))
+
     for (channel in c("tree", "shrub")) {
       status <- plots[[paste0(channel, "_support")]]
       reason <- plots[[paste0(channel, "_support_reason")]]
@@ -725,13 +999,20 @@ for (path in site_files) {
       if (!identical(as.integer(identity_conflicts),
                      recomputed[[channel]]$identity_conflicts))
         note(sprintf("%s %s identity-conflict counts differ from preserved source rows", site, channel))
+      complete <- if (channel == "tree") expected_tree_complete else expected_shrub_complete
       expected_decision <- expected_support_decision(
-        area, plots$samplingImpractical, plots$dataCollected,
+        area, plots$samplingImpractical,
+        ifelse(complete, "allGrowthForms", as.character(plots$dataCollected)),
         recomputed[[channel]]$presence, recomputed[[channel]]$records,
         recomputed[[channel]]$invalid,
         recomputed[[channel]]$identity_conflicts,
         plots$opportunity_key_conflict,
-        plots$opportunity_source_missing
+        plots$opportunity_source_missing,
+        plots$date,
+        ifelse(is.na(expected_rule), NA_character_, sprintf(
+          "dataCollected=partial reviewed as %s for this channel (%s)",
+          ifelse(complete, "complete", "incomplete"), expected_rule
+        ))
       )
       if (!identical(as.character(status), expected_decision$status))
         note(sprintf("%s %s support states violate fail-closed precedence", site, channel))
@@ -752,6 +1033,22 @@ for (path in site_files) {
         note(sprintf("%s %s sampled_absence rows contain records", site, channel))
       if (any(status == "sampled_with_records" & records <= 0L, na.rm = TRUE))
         note(sprintf("%s %s sampled_with_records rows contain no records", site, channel))
+    }
+    # Independent size-extremes oracle against the embedded channel summaries.
+    channel_summary <- bundle$contract$channel_summary %||% list()
+    for (channel in c("tree", "shrub")) {
+      summary_name <- if (channel == "tree") "tree_dbh" else "shrub_sapling_basal"
+      stored <- channel_summary[[summary_name]] %||% list()
+      for (measure in c("height", "diameter")) {
+        field <- if (measure == "height") "tallest_m" else "biggest_diam_cm"
+        expected_value <- oracle_extreme(trees, plots, channel, measure)
+        stored_value <- suppressWarnings(as.numeric(stored[[field]] %||% NA_real_))
+        if (length(stored_value) != 1L ||
+            !isTRUE(all.equal(stored_value, expected_value, tolerance = 1e-9)) &&
+            !(is.na(stored_value) && is.na(expected_value)))
+          note(sprintf("%s %s %s differs from the independent size oracle (stored %s, oracle %s)",
+                       site, summary_name, field, format(stored_value), format(expected_value)))
+      }
     }
   } else if (!length(missing_trees) && !length(missing_plots)) {
     # Keep the known legacy mismatch visible without normalizing it into a zero.

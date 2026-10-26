@@ -218,21 +218,30 @@ check(all(c("size_plausible", "size_screen_reason") %in% names(export_fx)) && su
 # the real hold reason; the false "needs 2 censuses" line is gone.
 # ---------------------------------------------------------------------------
 cat("\n################  REGRESSION: mortality reason copy  ################\n")
+# Contract v3: pre-2020 events with records are supported_legacy_schema and
+# feed change; a pre-2020 event without records stays held.
 mort_plots <- data.frame(
-  plotID = c("SRER_001", "SRER_001", "SRER_002", "SRER_003"),
-  eventID = c("e2016", "e2021", "e2019", "e2024"),
-  date = as.Date(c("2016-05-01", "2021-05-01", "2019-05-01", "2024-05-01")),
-  year = c(2016L, 2021L, 2019L, 2024L),
-  shrub_records = c(12L, 10L, 8L, 9L),
-  shrub_support = c("held_opportunity_unknown", "sampled_with_records", "held_opportunity_unknown", "held_identity_conflict"),
-  shrub_support_reason = c("samplingImpractical is missing", "supported", "samplingImpractical is missing", "conflict"),
+  plotID = c("SRER_001", "SRER_002", "SRER_004", "SRER_003", "SRER_005"),
+  eventID = c("e2021", "e2019", "e2017", "e2024", "e2018"),
+  date = as.Date(c("2021-05-01", "2019-05-01", "2017-05-01", "2024-05-01", "2018-05-01")),
+  year = c(2021L, 2019L, 2017L, 2024L, 2018L),
+  shrub_records = c(10L, 8L, 0L, 9L, 6L),
+  shrub_support = c("sampled_with_records", "supported_legacy_schema", "held_opportunity_unknown",
+                    "held_identity_conflict", "supported_legacy_schema"),
+  shrub_support_reason = c("supported", "legacy", "samplingImpractical is missing", "conflict", "legacy"),
   stringsAsFactors = FALSE)
 why <- mortality_unavailable_reason(NULL, SIZE_SHRUB, mort_plots, "SRER")
 cat("  ", why, "\n")
-check(grepl("no plot at SRER has two or more supported censuses in this channel \\(1 plot has one\\)", why),
-      "mortality reason states the supported plot count")
-check(grepl("2 earlier record-bearing plot-censuses \\(2016-2019\\) are held, not zero, because samplingImpractical is blank on these pre-March-2020 records \\(NEON added the field on 2020-03-10\\)", why),
-      "mortality reason names the pre-2020 samplingImpractical hold and its years")
+check(grepl("no plot at SRER has two or more supported censuses in this channel \\(3 plots have one\\)", why),
+      "mortality reason states the supported plot count, legacy events included")
+check(grepl("2 pre-March-2020 plot-censuses with records \\(2018-2019\\) are used for growth and mortality under NEON's legacy-schema assumption \\(changelog 16306\\); 1 without records stays held\\.", why),
+      "mortality reason says legacy events feed change, with their years, and counts the held pre-2020 event")
+legacy_k2 <- mortality_context(rbind(mort_plots, transform(mort_plots[2, ], eventID = "e2023",
+  date = as.Date("2023-05-01"), year = 2023L, shrub_support = "sampled_with_records")), SIZE_SHRUB)
+check(legacy_k2$k2 == 1L, "a legacy census plus a later supported census makes a plot with two censuses")
+check(identical(.pre2020_sentence(list(n_legacy = 0L, pre2020_held = 2L)),
+                " 2 pre-March-2020 plot-censuses without records stay held."),
+      "with no legacy events, only the held pre-2020 count is stated")
 check(grepl("1 other record-bearing plot-census is held \\(identity conflict\\)", why),
       "mortality reason counts a single other hold without 'mostly'")
 check(!grepl("needs ≥2 censuses|—", why), "no false 'needs 2 censuses' line and no em dash")
@@ -352,5 +361,114 @@ check(identical(.option_a_tree_rows(oa, SIZE_SHRUB), oa), "the shrub channel is 
 oa_status <- status_summary(oa[oa$eventID == "E23", ], SIZE_FOREST)
 check(sum(oa_status$n) == 2L,
       "the status snapshot counts the parent and its 10.6 cm bole, not the dead 8.7 cm or live 9.1 cm boles")
+
+# ---------------------------------------------------------------------------
+# REGRESSION (contract v3 specialist rulings): legacy history admission,
+# superseded/duplicate rows, growthForm fill-forward, plant_id plants, the C2
+# measurement-point rule, the held-plot disclosure and the cacti line.
+# ---------------------------------------------------------------------------
+cat("\n################  REGRESSION: contract v3 rulings  ################\n")
+v3row <- function(id, ev, date, status = "Live", form = "single bole tree", dbh = 20, mh = 130,
+                  cml = NA_character_, plant_id = id, superseded = FALSE, dup = NA_character_, plot = "P1")
+  data.frame(plotID = plot, eventID = ev, date = as.Date(date), individualID = id, plant_id = plant_id,
+             growthForm = form, plantStatus = status, stemDiameter = dbh, height = 15, measurementHeight = mh,
+             changedMeasurementLocation = cml, permanent = TRUE, live = grepl("^Live", status),
+             superseded_in_event = superseded, duplicate_of_uid = dup, scientificName = "Quercus alba",
+             stringsAsFactors = FALSE)
+v3 <- rbind(
+  v3row("NEON.A", "L17", "2017-06-01", dbh = 20), v3row("NEON.A", "E21", "2021-06-01", dbh = 21),
+  v3row("NEON.A", "E21", "2021-05-01", dbh = 99, superseded = TRUE),
+  v3row("NEON.B", "L17", "2017-06-01"), v3row("NEON.B", "E21", "2021-06-01", dbh = 21, cml = "boleChange"),
+  v3row("NEON.C", "L17", "2017-06-01"), v3row("NEON.C", "E21", "2021-06-01", dbh = 21, mh = 136),
+  v3row("NEON.D", "L17", "2017-06-01"), v3row("NEON.D", "E21", "2021-06-01", dbh = 21, mh = 133),
+  v3row("NEON.E", "L17", "2017-06-01"), v3row("NEON.E", "E21", "2021-06-01", dbh = 21, mh = 140, cml = "no Change"),
+  v3row("NEON.G", "L17", "2017-06-01"), v3row("NEON.G", "E21", "2021-06-01", status = "Downed", form = NA, dbh = NA),
+  v3row("NEON.G", "E21", "2021-06-01", dbh = 21, dup = "uid-g"),
+  v3row("NEON.H", "L17", "2017-06-01", form = "multi-bole tree"), v3row("NEON.HA", "L17", "2017-06-01", form = "multi-bole tree", plant_id = "NEON.H", dbh = 12),
+  v3row("NEON.H", "E21", "2021-06-01", status = "Standing dead", form = "multi-bole tree"),
+  v3row("NEON.HA", "E21", "2021-06-01", form = "multi-bole tree", plant_id = "NEON.H", dbh = 12.5),
+  v3row("NEON.Z", "L18", "2018-06-01", plot = "P2"))
+v3$source_uid <- paste0("uid-", seq_len(nrow(v3)))
+v3_plots <- data.frame(plotID = c("P1", "P1", "P2"), eventID = c("L17", "E21", "L18"),
+  date = as.Date(c("2017-06-01", "2021-06-01", "2018-06-01")), year = c(2017L, 2021L, 2018L),
+  tree_support = c("supported_legacy_schema", "sampled_with_records", "supported_legacy_schema"),
+  tree_support_reason = c("legacy schema before 2020-03-10: sampling opportunity assumed (NEON changelog 16306)", "supported",
+                          "legacy schema before 2020-03-10: sampling opportunity assumed (NEON changelog 16306)"),
+  area_trees = 400, tree_records = c(8L, 9L, 1L), plotType = "distributed",
+  tree_channel_complete = c(NA, TRUE, NA), shrub_channel_complete = NA,
+  disturbance_classes = c(NA, "fire_unspecified", NA), disturbance_curation_id = c(NA, "cur-1", NA),
+  n_status_lost_burned = 0L, n_status_removed = c(0L, 1L, 0L), stringsAsFactors = FALSE)
+check(is.null(.supported_history(v3[v3$plotID == "P2", ], v3_plots, SIZE_FOREST)) &&
+        nrow(.supported_history(v3[v3$plotID == "P2", ], v3_plots, SIZE_FOREST, allow_legacy = TRUE)) == 1L,
+      "legacy events enter history only with allow_legacy = TRUE")
+v3_snap <- tree_snapshot(v3, v3_plots, SIZE_FOREST)
+check(all(v3_snap$eventID == "E21") && !any(v3_snap$plotID == "P2"),
+      "the snapshot never admits a legacy event")
+check(!any(v3_snap$superseded_in_event) && all(is.na(v3_snap$duplicate_of_uid)) && !any(v3_snap$stemDiameter %in% 99),
+      "the snapshot drops superseded and duplicate rows")
+v3_g <- tree_growth(v3, SIZE_FOREST, v3_plots)
+ga <- v3_g[v3_g$individualID == "NEON.A", ]
+check(nrow(ga) == 1L && ga$event0 == "L17" && ga$d1 == 21,
+      "a legacy event is admitted to growth, and the superseded 99 cm row is not")
+check(identical(sort(v3_g$individualID[v3_g$mh_change]), c("NEON.B", "NEON.C")),
+      "a changedMeasurementLocation code and a 6 cm height change move the point; 3 cm and noChange do not")
+check(isTRUE(v3_g$mh_change[v3_g$individualID == "NEON.B"]) && !isTRUE(v3_g$mh_change[v3_g$individualID == "NEON.D"]),
+      "the 3 cm measurement-height change stays comparable")
+filled <- .fill_growth_form(data.frame(plotID = "P", individualID = "X", eventID = c("e1", "e2", "e3"),
+  date = as.Date(c("2019-01-01", "2020-01-01", "2018-01-01")), growthForm = c("sapling", NA, NA), stringsAsFactors = FALSE))
+check(identical(filled$growthForm, c("sapling", "sapling", NA)),
+      "growthForm fills forward from an earlier row and never back-fills")
+check(identical(v3_snap$growthForm[v3_snap$individualID == "NEON.G"], "single bole tree"),
+      "the Downed status-only row takes its bole's earlier growthForm")
+v3_m <- stand_mortality(v3, SIZE_FOREST, v3_plots)
+check(v3_m$n0 == 7L && v3_m$deaths == 1L,
+      "the Downed status-only row counts as a death, the duplicate Live row is dropped, and NEON.H with its live bole is one live plant")
+v3_ss <- status_summary(v3_snap, SIZE_FOREST)
+check(sum(v3_ss$n) == 7L && sum(v3_ss$n[v3_ss$cls == "Dead / standing dead"]) == 1L,
+      "status_summary counts plants: the lettered bole and its parent are one plant")
+check(nrow(one_per_tree(v3_snap[v3_snap$plant_id == "NEON.H", ], SIZE_FOREST)) == 1L,
+      "one_per_tree keeps one row per plant_id")
+v3_tl <- tidy_trees_export(v3, NULL)
+check(all(c("plant_id", "superseded_in_event", "duplicate_of_uid") %in% names(v3_tl)),
+      "trees_long carries plant_id, superseded_in_event and duplicate_of_uid")
+v3_pl <- plots_export(v3_snap, v3_plots, SIZE_FOREST, NULL)
+check(all(c("tree_channel_complete", "shrub_channel_complete", "disturbance_classes", "n_status_lost_burned", "n_status_removed") %in% names(v3_pl)) &&
+        identical(v3_pl$disturbance_classes[v3_pl$plotID == "P1"], "fire_unspecified"),
+      "plot_summary_latest carries the curation and disturbance columns")
+v3_exports <- list(trees_long = v3_tl, plot_summary_latest = v3_pl,
+                   plot_event_contexts_all = with_export_receipt(v3_plots, NULL))
+v3_cb <- veg_codebook()
+check(all(c("plant_id", "superseded_in_event", "duplicate_of_uid", "tree_channel_complete", "disturbance_classes",
+            "n_status_lost_burned", "n_status_removed", "disturbance_curation_id") %in% v3_cb$column) &&
+        isTRUE(assert_veg_codebook(complete_veg_codebook(v3_cb, v3_exports), v3_exports)),
+      "every new export column has a codebook row")
+check("supported_legacy_schema" %in% VEG_CONTRACT$held_status &&
+        grepl("supported_legacy_schema", v3_cb$allowed_values[v3_cb$column == "tree_support"]),
+      "the legacy-schema state is registered and documented")
+
+held_fx <- function(states, keys = 0L) data.frame(plotID = sprintf("SRER_%03d", seq_along(states)), eventID = "e2024",
+  date = as.Date("2024-05-01"), year = 2024L, shrub_support = states, shrub_support_reason = "x",
+  area_shrub = 100, shrub_identity_conflict_keys = keys, stringsAsFactors = FALSE)
+srer_states <- c(rep("sampled_absence", 17), rep("held_identity_conflict", 21))
+srer_keys <- c(rep(0L, 17), rep(2L, 20), 7L)
+held_line <- held_plot_disclosure(NULL, held_fx(srer_states, srer_keys), SIZE_SHRUB, "SRER")
+cat("  ", held_line, "\n")
+check(identical(held_line, "Basal cover is from 17 of SRER's 38 plots; the other 21 are held because NEON published two different records for one stem, at 47 stems. Held plots are not zeros."),
+      "the SRER-style held-plot disclosure")
+mixed <- srer_states; mixed[33:38] <- "held_missing_area"
+check(identical(held_plot_disclosure(NULL, held_fx(mixed, srer_keys), SIZE_SHRUB, "SRER"),
+  "Basal cover is from 17 of SRER's 38 plots; the other 21 are held: 15 because NEON published two different records for one stem, at 30 stems, 6 because the sampled area is missing. Held plots are not zeros."),
+      "several held states are listed with their counts")
+check(identical(held_plot_disclosure(NULL, held_fx(rep("sampled_absence", 4)), SIZE_SHRUB, "SRER"), ""),
+      "no held plots, no disclosure")
+
+cacti_fx <- data.frame(plotID = rep(sprintf("SRER_%03d", 1:38), 2), eventID = rep(c("e2019", "e2024"), each = 38),
+  cactiPresent = c(rep("Y", 38), rep("Present - sampled", 38)), yuccasPresent = "N",
+  ocotillosPresent = c(rep("N", 38), rep("Present - sampling criteria not met", 3), rep(NA, 35)), stringsAsFactors = FALSE)
+check(identical(separate_table_line(cacti_fx, "SRER"),
+                "Cacti recorded in 38 of 38 SRER plots, ocotillo in 3, measured in a NEON table this app does not load."),
+      "the cacti line counts plots per group and skips groups never recorded")
+check(identical(separate_table_line(transform(cacti_fx, cactiPresent = "N", ocotillosPresent = "N"), "SRER"), ""),
+      "no recorded cacti, yucca or ocotillo, no line")
 
 cat("\nALL TESTS PASSED\n")

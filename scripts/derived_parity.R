@@ -160,8 +160,9 @@ vst_parity_taxa_projection <- function(records, per_plot, spec, site) {
   records$.taxon_label <- vst_parity_expected_taxon_label(
     records$scientificName, records$taxonID
   )
+  # Contract v3 C1: plants (plotID + plant_id), not boles.
   records$.plant_key <- paste(
-    as.character(records$plotID), as.character(records$individualID), sep = "\r"
+    as.character(records$plotID), as.character(records$plant_id), sep = "\r"
   )
   records$.diameter_cm <- suppressWarnings(as.numeric(records[[spec$col]]))
   records$.basal_m2 <- pi * (records$.diameter_cm / 200)^2
@@ -263,7 +264,7 @@ vst_parity_channel_projection <- function(bundle, spec, site) {
     0L
   }
   plant_keys <- if (nrow(records)) paste(
-    as.character(records$plotID), as.character(records$individualID), sep = "\r"
+    as.character(records$plotID), as.character(records$plant_id), sep = "\r"
   ) else character()
   scientific_name <- vst_parity_column(records, "scientificName", NA_character_)
   is_species <- if (nrow(records)) {
@@ -349,8 +350,14 @@ vst_parity_bundle_projection <- function(bundle, expected_site = NULL) {
   summaries <- lapply(channels, `[[`, "summary")
   record_plots <- vapply(summaries, `[[`, integer(1), "n_record_plots")
   supported_plots <- vapply(summaries, `[[`, integer(1), "n_supported_plots")
+  # Contract v3 C4: tree DBH whenever trees are recorded in at least 5 latest
+  # supported plots and in at least half of the supported tree plots.
+  tree_default <- record_plots[["tree_dbh"]] >= 5L &&
+    record_plots[["tree_dbh"]] >= 0.5 * supported_plots[["tree_dbh"]]
   primary <- if (all(record_plots == 0L) && all(supported_plots == 0L)) {
     "unavailable"
+  } else if (tree_default) {
+    "tree_dbh"
   } else if (all(record_plots == 0L) &&
              supported_plots[["shrub_sapling_basal"]] >
                supported_plots[["tree_dbh"]]) {
